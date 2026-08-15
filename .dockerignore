@@ -1,0 +1,14 @@
+node_modules
+.next
+.git
+data
+backups
+*.db
+*.db-wal
+*.db-shm
+.env
+.env.*
+!.env.example
+CLAUDE.md
+.claude
+README.md

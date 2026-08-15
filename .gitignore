@@ -1,0 +1,35 @@
+# dependencies
+/node_modules
+
+# next.js
+/.next/
+/out/
+next-env.d.ts
+
+# production
+/build
+
+# database — never in git: it holds users, tokens and host layout
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+/prisma/*.db
+/data
+/backups
+
+# env — every host-specific address, token and password lives here
+.env
+.env*.local
+
+# local assistant notes, not part of the project
+CLAUDE.md
+.claude/
+
+# misc
+.DS_Store
+*.pem
+npm-debug.log*
+.vscode/
+.idea/
+*.tsbuildinfo

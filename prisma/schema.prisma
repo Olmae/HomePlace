@@ -1,0 +1,189 @@
+// HomePlace — data model.
+//
+// The database holds *what the user arranged*: accounts, dashboards, tiles,
+// widget settings, and a short history of availability. It deliberately does
+// NOT hold addresses of hosts or any credential — those live in .env, because
+// this repository is public and a database file gets copied around.
+//
+// Metric history (CPU, RAM, disk over time) is not stored here either: that is
+// what Prometheus is for. HomePlace keeps only its own uptime checks, which
+// must work even when no Prometheus is configured.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────── Accounts ───────────────────────────────
+
+model User {
+  id           String   @id @default(cuid())
+  // Local login name. Unique when present; absent for accounts that exist only
+  // through an external identity provider.
+  login        String?  @unique
+  email        String?  @unique
+  name         String
+  // Absent for SSO-only accounts — they never have a password here.
+  passwordHash String?
+  // Identity from the external provider (FriendPlace), when linked.
+  fpUserId     String?  @unique
+  avatarUrl    String?
+
+  // owner — the account created by the setup wizard: cannot be demoted or
+  // deleted, so the panel can never lock everyone out.
+  // admin  — may edit dashboards and control containers.
+  // viewer — read-only.
+  role     String  @default("viewer")
+  disabled Boolean @default(false)
+
+  locale String @default("en")
+  // light | dark | system
+  theme  String @default("system")
+  accent String @default("default")
+
+  createdAt   DateTime  @default(now())
+  lastLoginAt DateTime?
+
+  dashboards Dashboard[]
+}
+
+// ─────────────────────────────── Dashboards ─────────────────────────────
+
+// A dashboard is one tab of the home page.
+model Dashboard {
+  id     String  @id @default(cuid())
+  name   String
+  icon   String?
+  order  Int     @default(0)
+  // Private dashboards are visible only to their owner; the rest are shared
+  // with everyone who can log in.
+  shared Boolean @default(true)
+
+  ownerId String?
+  owner   User?   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  items     Item[]
+  createdAt DateTime @default(now())
+
+  @@index([ownerId])
+}
+
+// Everything placed on a dashboard is an Item. One table instead of four,
+// because tiles are dragged, reordered and nested as a single list — splitting
+// them by kind would mean merging the lists back together on every render.
+model Item {
+  id          String    @id @default(cuid())
+  dashboardId String
+  dashboard   Dashboard @relation(fields: [dashboardId], references: [id], onDelete: Cascade)
+
+  // Folders contain other items; parentId is null at the top level.
+  parentId String?
+  parent   Item?   @relation("ItemChildren", fields: [parentId], references: [id], onDelete: Cascade)
+  children Item[]  @relation("ItemChildren")
+
+  // service | link | folder | widget
+  kind String
+
+  title    String
+  subtitle String?
+  // Icon: an emoji, a URL, or a built-in name. Rendered as-is when it is not a URL.
+  icon     String?
+  color    String?
+
+  // Where clicking the tile takes you. `url` is what the browser opens;
+  // `internalUrl` is an optional LAN address used when the public one is
+  // unreachable (or for the availability check).
+  url         String?
+  internalUrl String?
+  // Open in a new tab.
+  newTab      Boolean @default(true)
+
+  // Docker link: the container this tile represents, on the host named below.
+  containerName String?
+  hostKey       String?
+
+  // Availability check: none | http | tcp | docker | ping
+  checkKind     String  @default("none")
+  // Overrides url/internalUrl for the check when the tile links somewhere else
+  // than the health endpoint.
+  checkUrl      String?
+  checkInterval Int     @default(60) // seconds
+  // HTTP status codes considered healthy, as "200-299,401" (empty = 200-399).
+  expectStatus  String?
+
+  // Widget kind for kind = "widget": system | disks | chart | uptime | clock |
+  // search | notes | containers | proxmox. Free-form so a new widget does not
+  // need a migration.
+  widget String?
+  // Widget settings as JSON (PromQL query, unit, thresholds, …).
+  config String?
+
+  // Grid placement. Column span in a 12-column grid; height in row units.
+  order Int @default(0)
+  w     Int @default(3)
+  h     Int @default(1)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  checks UptimeCheck[]
+  events Event[]
+
+  @@index([dashboardId, parentId, order])
+  @@index([containerName])
+}
+
+// ──────────────────────────── Uptime & events ───────────────────────────
+
+// One row per probe. Rows are pruned by age (see UPTIME_RETENTION_DAYS) —
+// this table is a rolling window, not an archive.
+model UptimeCheck {
+  id     String   @id @default(cuid())
+  itemId String
+  item   Item     @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  at     DateTime @default(now())
+  ok     Boolean
+  // Round-trip time in milliseconds; null when the probe never connected.
+  latency Int?
+  status  Int?
+  error   String?
+
+  @@index([itemId, at])
+}
+
+// A change worth remembering: a service went down, came back, a container was
+// restarted, someone logged in. The feed on the dashboard reads this table.
+model Event {
+  id     String  @id @default(cuid())
+  itemId String?
+  item   Item?   @relation(fields: [itemId], references: [id], onDelete: SetNull)
+
+  // down | up | restart | login | auth-fail | discovery | system
+  type     String
+  // info | warn | error
+  severity String @default("info")
+  title    String
+  detail   String?
+  // Who caused it, when it was a person.
+  actor    String?
+
+  at DateTime @default(now())
+
+  @@index([at])
+  @@index([itemId, at])
+}
+
+// ───────────────────────────── Miscellaneous ────────────────────────────
+
+// Small key/value store for panel-wide settings that are not secrets:
+// default locale, whether discovery is enabled, containers the user chose to
+// hide, and so on. Values are JSON.
+model Setting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}

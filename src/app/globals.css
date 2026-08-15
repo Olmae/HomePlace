@@ -1,0 +1,158 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+  Theming contract
+  ────────────────
+  Every colour in the app is one of the variables below. A theme is therefore a
+  list of variable values, nothing else — which is what lets a user swap light,
+  dark or an accent without touching a single component.
+
+  Resolution order:
+    1. `<html data-theme="light|dark">` — an explicit choice, always wins.
+    2. no attribute → follow the OS via prefers-color-scheme.
+  The accent is a separate variable so it can be changed independently of
+  light/dark.
+*/
+
+:root {
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+
+  --radius-card: 14px;
+  --radius-control: 9px;
+
+  /* Light theme (the default). Channels only — Tailwind adds the alpha. */
+  --bg: 244 245 247;
+  --surface: 255 255 255;
+  --raised: 249 250 251;
+  --line: 225 228 232;
+  --text: 24 27 32;
+  --muted: 98 105 117;
+  --faint: 148 155 166;
+
+  --accent: 50 109 255;
+  --accent-fg: 255 255 255;
+
+  --ok: 22 148 91;
+  --warn: 190 132 12;
+  --danger: 207 55 55;
+
+  --shadow-card: 0 1px 2px rgb(16 22 34 / 0.05), 0 4px 16px rgb(16 22 34 / 0.04);
+  --shadow-pop: 0 8px 32px rgb(16 22 34 / 0.14);
+}
+
+/* Dark values, applied when the OS asks for dark and the user has not pinned
+   light explicitly. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: 13 15 19;
+    --surface: 22 25 31;
+    --raised: 29 33 40;
+    --line: 44 49 58;
+    --text: 231 234 240;
+    --muted: 148 156 170;
+    --faint: 104 112 126;
+
+    --accent: 96 145 255;
+    --accent-fg: 12 16 24;
+
+    --ok: 56 186 121;
+    --warn: 224 166 47;
+    --danger: 240 106 106;
+
+    --shadow-card: 0 1px 2px rgb(0 0 0 / 0.5), 0 4px 16px rgb(0 0 0 / 0.28);
+    --shadow-pop: 0 10px 40px rgb(0 0 0 / 0.55);
+  }
+}
+
+/* The same dark values under an explicit choice, so the toggle wins in both
+   directions regardless of what the OS says. */
+:root[data-theme="dark"] {
+  --bg: 13 15 19;
+  --surface: 22 25 31;
+  --raised: 29 33 40;
+  --line: 44 49 58;
+  --text: 231 234 240;
+  --muted: 148 156 170;
+  --faint: 104 112 126;
+
+  --accent: 96 145 255;
+  --accent-fg: 12 16 24;
+
+  --ok: 56 186 121;
+  --warn: 224 166 47;
+  --danger: 240 106 106;
+
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.5), 0 4px 16px rgb(0 0 0 / 0.28);
+  --shadow-pop: 0 10px 40px rgb(0 0 0 / 0.55);
+}
+
+/* Accent presets. Set with `<html data-accent="…">`; the default needs no
+   attribute. Only the accent pair is redefined — everything else is inherited
+   from the light/dark block above, so accents work in both themes. */
+:root[data-accent="green"] { --accent: 26 155 100; --accent-fg: 255 255 255; }
+:root[data-accent="amber"] { --accent: 194 128 14; --accent-fg: 255 255 255; }
+:root[data-accent="violet"] { --accent: 124 92 245; --accent-fg: 255 255 255; }
+:root[data-accent="rose"] { --accent: 214 62 108; --accent-fg: 255 255 255; }
+:root[data-accent="slate"] { --accent: 82 94 112; --accent-fg: 255 255 255; }
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"])[data-accent="green"] { --accent: 52 190 126; --accent-fg: 10 24 17; }
+  :root:not([data-theme="light"])[data-accent="amber"] { --accent: 226 168 52; --accent-fg: 28 20 4; }
+  :root:not([data-theme="light"])[data-accent="violet"] { --accent: 154 129 255; --accent-fg: 18 14 32; }
+  :root:not([data-theme="light"])[data-accent="rose"] { --accent: 240 106 146; --accent-fg: 32 12 20; }
+  :root:not([data-theme="light"])[data-accent="slate"] { --accent: 142 155 176; --accent-fg: 16 20 26; }
+}
+:root[data-theme="dark"][data-accent="green"] { --accent: 52 190 126; --accent-fg: 10 24 17; }
+:root[data-theme="dark"][data-accent="amber"] { --accent: 226 168 52; --accent-fg: 28 20 4; }
+:root[data-theme="dark"][data-accent="violet"] { --accent: 154 129 255; --accent-fg: 18 14 32; }
+:root[data-theme="dark"][data-accent="rose"] { --accent: 240 106 146; --accent-fg: 32 12 20; }
+:root[data-theme="dark"][data-accent="slate"] { --accent: 142 155 176; --accent-fg: 16 20 26; }
+
+html {
+  color-scheme: light;
+}
+:root[data-theme="dark"] { color-scheme: dark; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { color-scheme: dark; }
+}
+
+body {
+  background-color: rgb(var(--bg));
+  color: rgb(var(--text));
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Focus is always visible — this panel is meant to be usable from the keyboard. */
+:focus-visible {
+  outline: 2px solid rgb(var(--accent));
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+::selection {
+  background: rgb(var(--accent) / 0.28);
+}
+
+/* Scrollbars follow the theme instead of punching a bright hole in dark mode. */
+* {
+  scrollbar-color: rgb(var(--line)) transparent;
+  scrollbar-width: thin;
+}
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-thumb {
+  background: rgb(var(--line));
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -1,0 +1,114 @@
+# HomePlace — deployment.
+#
+# Two containers: the panel, and a proxy in front of the Docker socket.
+#
+# The proxy is not optional decoration. Anything that can write to
+# /var/run/docker.sock can start a privileged container and take over the host,
+# so a web application must never be given it directly. docker-socket-proxy
+# publishes only the endpoints allowlisted below, and everything else answers
+# 403 — including the ones that would let someone build an escape.
+
+services:
+  app:
+    build:
+      context: .
+    image: homeplace
+    container_name: homeplace
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-3200}:3200"
+    environment:
+      # ── Storage ───────────────────────────────────────────────────────
+      DATA_DIR: "${DATA_DIR:-/data}"
+      DATABASE_URL: "${DATABASE_URL:-}"
+      # Ownership the data directory is given at start, so a bind mount works
+      # without anyone having to chown it first. `id -u` on the host.
+      PUID: "${PUID:-1000}"
+      PGID: "${PGID:-1000}"
+
+      # ── Identity ──────────────────────────────────────────────────────
+      APP_URL: "${APP_URL:-http://localhost:3200}"
+      AUTH_SECRET: "${AUTH_SECRET:-}"
+      SECURE_COOKIES: "${SECURE_COOKIES:-}"
+      SESSION_DAYS: "${SESSION_DAYS:-30}"
+
+      # ── Docker ────────────────────────────────────────────────────────
+      # Points at the proxy below, not at the socket.
+      DOCKER_API_URL: "${DOCKER_API_URL:-http://docker-socket-proxy:2375}"
+      DOCKER_HOST_LABEL: "${DOCKER_HOST_LABEL:-Server}"
+      DOCKER_HOSTS: "${DOCKER_HOSTS:-}"
+      ALLOW_CONTAINER_CONTROL: "${ALLOW_CONTAINER_CONTROL:-true}"
+
+      # ── Metrics (optional) ────────────────────────────────────────────
+      PROMETHEUS_URL: "${PROMETHEUS_URL:-}"
+      PROMETHEUS_USERNAME: "${PROMETHEUS_USERNAME:-}"
+      PROMETHEUS_PASSWORD: "${PROMETHEUS_PASSWORD:-}"
+
+      # ── Proxmox (optional) ────────────────────────────────────────────
+      PROXMOX_URL: "${PROXMOX_URL:-}"
+      PROXMOX_TOKEN_ID: "${PROXMOX_TOKEN_ID:-}"
+      PROXMOX_TOKEN_SECRET: "${PROXMOX_TOKEN_SECRET:-}"
+      PROXMOX_VERIFY_TLS: "${PROXMOX_VERIFY_TLS:-false}"
+
+      # ── FriendPlace SSO (optional) ────────────────────────────────────
+      # Leave empty and the whole integration disappears from the login page.
+      FRIENDPLACE_URL: "${FRIENDPLACE_URL:-}"
+      FRIENDPLACE_CLIENT_ID: "${FRIENDPLACE_CLIENT_ID:-}"
+      FRIENDPLACE_CLIENT_SECRET: "${FRIENDPLACE_CLIENT_SECRET:-}"
+      FRIENDPLACE_ADMINS_ONLY: "${FRIENDPLACE_ADMINS_ONLY:-true}"
+
+      # ── Behaviour ─────────────────────────────────────────────────────
+      DEFAULT_LOCALE: "${DEFAULT_LOCALE:-en}"
+      MONITOR_ENABLED: "${MONITOR_ENABLED:-true}"
+      MIN_CHECK_INTERVAL: "${MIN_CHECK_INTERVAL:-15}"
+      UPTIME_RETENTION_DAYS: "${UPTIME_RETENTION_DAYS:-30}"
+    volumes:
+      # The database. Keep it on fast local storage — SQLite does many small
+      # writes, and a network filesystem is the classic way to corrupt one.
+      - "${HOST_DATA_DIR:-./data}:/data"
+    depends_on:
+      - docker-socket-proxy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3200/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  docker-socket-proxy:
+    image: tecnativa/docker-socket-proxy:0.1.2
+    container_name: homeplace-docker-proxy
+    restart: unless-stopped
+    environment:
+      # 1 = allowed, absent = denied. HomePlace needs to list containers and
+      # read their logs; POST is what makes start/stop/restart possible.
+      CONTAINERS: 1
+      INFO: 1
+      PING: 1
+      POST: "${ALLOW_CONTAINER_CONTROL:-1}"
+      # Everything below stays off on purpose. EXEC and the socket-adjacent
+      # endpoints are the ones that turn container access into host access.
+      EXEC: 0
+      IMAGES: 0
+      VOLUMES: 0
+      NETWORKS: 0
+      SERVICES: 0
+      TASKS: 0
+      SECRETS: 0
+      CONFIGS: 0
+      NODES: 0
+      SWARM: 0
+      SYSTEM: 0
+      PLUGINS: 0
+      BUILD: 0
+      COMMIT: 0
+      AUTH: 0
+      DISTRIBUTION: 0
+    volumes:
+      # Read-only mount: the proxy itself never needs to write to the socket
+      # file, only to talk through it.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    # Not published to the host: only the app container can reach it, over the
+    # compose network.
+    expose:
+      - "2375"

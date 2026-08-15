@@ -1,0 +1,122 @@
+"use server";
+
+import { redirect } from "next/navigation";
+import { z } from "zod";
+import { prisma } from "@/lib/db";
+import { hashPassword, verifyPassword, needsSetup } from "@/lib/auth";
+import { createSession, destroySession, currentUser } from "@/lib/session";
+import { settings } from "@/lib/config";
+
+export type FormState = { error?: string; ok?: boolean };
+
+const credentials = z.object({
+  login: z.string().trim().min(1).max(64),
+  password: z.string().min(1).max(200),
+});
+
+/**
+ * First-run wizard.
+ *
+ * Guarded by the user count rather than by a token in .env: the window is open
+ * only while the database has no accounts at all, and closes the moment the
+ * owner exists. Two people racing to it cannot both win, because the second
+ * insert finds a non-empty table.
+ */
+export async function setupOwner(_prev: FormState, form: FormData): Promise<FormState> {
+  if (!(await needsSetup())) return { error: "setup.alreadyDone" };
+
+  const name = String(form.get("name") ?? "").trim();
+  const login = String(form.get("login") ?? "").trim();
+  const password = String(form.get("password") ?? "");
+  const repeat = String(form.get("passwordRepeat") ?? "");
+
+  if (!name || !login) return { error: "common.error" };
+  if (password.length < 8) return { error: "setup.passwordTooShort" };
+  if (password !== repeat) return { error: "setup.passwordMismatch" };
+
+  const existing = await prisma.user.findUnique({ where: { login } });
+  if (existing) return { error: "setup.loginTaken" };
+
+  const user = await prisma.user.create({
+    data: {
+      name,
+      login,
+      passwordHash: await hashPassword(password),
+      role: "owner",
+      locale: settings.defaultLocale(),
+      lastLoginAt: new Date(),
+    },
+  });
+
+  // A brand-new panel with no dashboard has nowhere to put the first tile.
+  await prisma.dashboard.create({ data: { name: "Home", order: 0, shared: true, ownerId: user.id } });
+
+  await createSession(user.id);
+  redirect("/");
+}
+
+export async function signIn(_prev: FormState, form: FormData): Promise<FormState> {
+  const parsed = credentials.safeParse({
+    login: form.get("login"),
+    password: form.get("password"),
+  });
+  if (!parsed.success) return { error: "auth.wrongCredentials" };
+
+  const user = await prisma.user.findUnique({ where: { login: parsed.data.login } });
+
+  // Same message and roughly the same work whether the login exists or not, so
+  // the form cannot be used to enumerate accounts.
+  if (!user?.passwordHash) {
+    await hashPassword(parsed.data.password);
+    return { error: "auth.wrongCredentials" };
+  }
+  if (!(await verifyPassword(parsed.data.password, user.passwordHash))) {
+    await prisma.event.create({
+      data: { type: "auth-fail", severity: "warn", title: parsed.data.login, actor: parsed.data.login },
+    });
+    return { error: "auth.wrongCredentials" };
+  }
+  if (user.disabled) return { error: "auth.accountDisabled" };
+
+  await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
+  await prisma.event.create({ data: { type: "login", title: user.name, actor: user.name } });
+  await createSession(user.id);
+  redirect("/");
+}
+
+export async function signOut(): Promise<void> {
+  destroySession();
+  redirect("/login");
+}
+
+/** Appearance and language, stored per account. */
+export async function updatePreferences(form: FormData): Promise<void> {
+  const user = await currentUser();
+  if (!user) return;
+  const theme = String(form.get("theme") ?? user.theme);
+  const accent = String(form.get("accent") ?? user.accent);
+  const locale = String(form.get("locale") ?? user.locale);
+  await prisma.user.update({
+    where: { id: user.id },
+    data: {
+      theme: ["system", "light", "dark"].includes(theme) ? theme : user.theme,
+      accent,
+      locale: ["en", "ru"].includes(locale) ? locale : user.locale,
+    },
+  });
+}
+
+export async function changePassword(_prev: FormState, form: FormData): Promise<FormState> {
+  const user = await currentUser();
+  if (!user) return { error: "common.error" };
+  const current = String(form.get("currentPassword") ?? "");
+  const next = String(form.get("newPassword") ?? "");
+  if (next.length < 8) return { error: "setup.passwordTooShort" };
+  // An SSO-only account has no password to verify against; it also has no
+  // password to change here.
+  if (!user.passwordHash || !(await verifyPassword(current, user.passwordHash))) {
+    return { error: "auth.wrongCredentials" };
+  }
+  await prisma.user.update({ where: { id: user.id }, data: { passwordHash: await hashPassword(next) } });
+  return { ok: true };
+}
