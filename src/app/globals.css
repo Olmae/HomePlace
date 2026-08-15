@@ -150,6 +150,39 @@ body {
   background-clip: content-box;
 }
 
+/*
+  Board placement.
+
+  Grid coordinates arrive as custom properties on each cell, because inline
+  styles cannot be made conditional on a breakpoint — and below `md` the board
+  has to become a single column, where a two-dimensional layout means nothing.
+*/
+@media (min-width: 768px) {
+  .hp-cell {
+    grid-column: var(--col);
+    grid-row: var(--row);
+  }
+}
+
+/* A dashboard background photo sits behind everything and is dimmed and blurred
+   through variables, so the same picture can be readable in both themes. */
+.hp-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background-image: var(--backdrop-image);
+  background-size: cover;
+  background-position: center;
+  filter: blur(var(--backdrop-blur, 0px));
+  transform: scale(1.04); /* hides the soft edge blur leaves behind */
+}
+.hp-backdrop::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgb(var(--bg) / calc(var(--backdrop-dim, 55) / 100));
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;

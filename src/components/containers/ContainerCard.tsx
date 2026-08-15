@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useTransition } from "react";
+import Link from "next/link";
 import { Card, StatusDot, Badge, TileIcon } from "@/components/ui";
 import { Button } from "@/components/form";
-import { runContainerAction } from "@/actions/containers";
-import { createItem } from "@/actions/dashboard";
-import { hideContainer } from "@/actions/dashboard";
+import { createItem, hideContainer } from "@/actions/dashboard";
+import { ContainerControls } from "./ContainerControls";
+import { autoIcon, GLYPH } from "@/lib/icons";
 import type { Dictionary } from "@/i18n";
 
 export type ContainerView = {
@@ -42,18 +43,12 @@ export function ContainerCard({
   dashboards: { id: string; name: string }[];
 }) {
   const [pending, startTransition] = useTransition();
-  const [error, setError] = useState<string | null>(null);
 
   const running = container.state === "running";
   const published = container.ports.filter((p) => p.external);
-
-  function act(action: "start" | "stop" | "restart") {
-    setError(null);
-    startTransition(async () => {
-      const result = await runContainerAction(container.hostKey, container.id, container.name, action);
-      if (!result.ok) setError(result.error ?? d.containers.actionFailed);
-    });
-  }
+  // Falls back to a guess from the image name, so a container nobody labelled
+  // still arrives with something recognisable instead of a grey square.
+  const icon = container.icon ?? autoIcon({ name: container.name, image: container.image });
 
   function addToDashboard() {
     const target = dashboards[0];
@@ -63,7 +58,7 @@ export function ContainerCard({
         dashboardId: target.id,
         kind: "service",
         title: container.name,
-        icon: container.icon ?? null,
+        icon: icon || null,
         // The guess carries a placeholder because the server cannot know the
         // address this browser reached it by — the browser can.
         url: container.suggestedUrl?.replace("HOST_ADDRESS", window.location.hostname) ?? null,
@@ -79,7 +74,7 @@ export function ContainerCard({
   return (
     <Card className="flex h-full flex-col p-3">
       <div className="flex items-start gap-2.5">
-        <TileIcon icon={container.icon} title={container.name} />
+        <TileIcon icon={icon} title={container.name} />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
             <span className="truncate text-sm font-semibold">{container.name}</span>
@@ -92,6 +87,16 @@ export function ContainerCard({
             {container.image}
           </p>
         </div>
+        {/* The arrow into the detail view — logs, mounts, restart count, and
+            per-container metrics when Prometheus is around. */}
+        <Link
+          href={`/containers/${encodeURIComponent(container.hostKey)}/${encodeURIComponent(container.id)}`}
+          title={d.containers.details}
+          aria-label={d.containers.details}
+          className="shrink-0 rounded-control px-1.5 py-0.5 text-lg leading-none text-faint transition-colors hover:bg-raised hover:text-text"
+        >
+          {GLYPH.details}
+        </Link>
       </div>
 
       <div className="mt-2 flex flex-wrap gap-1.5">
@@ -103,8 +108,6 @@ export function ContainerCard({
           </Badge>
         ))}
       </div>
-
-      {error && <p className="mt-2 text-xs text-danger">{error}</p>}
 
       <div className="mt-auto flex flex-wrap items-center gap-1.5 pt-3">
         {container.suggestedUrl && (
@@ -118,24 +121,16 @@ export function ContainerCard({
           </a>
         )}
 
-        {canEdit && controlEnabled && (
-          <>
-            {running ? (
-              <>
-                <Button size="sm" disabled={pending} onClick={() => act("restart")}>
-                  {d.containers.restart}
-                </Button>
-                <Button size="sm" variant="danger" disabled={pending} onClick={() => act("stop")}>
-                  {d.containers.stop}
-                </Button>
-              </>
-            ) : (
-              <Button size="sm" disabled={pending} onClick={() => act("start")}>
-                {d.containers.start}
-              </Button>
-            )}
-          </>
-        )}
+        <ContainerControls
+          d={d}
+          hostKey={container.hostKey}
+          id={container.id}
+          name={container.name}
+          running={running}
+          canEdit={canEdit}
+          controlEnabled={controlEnabled}
+          size="sm"
+        />
 
         {canEdit && !container.onDashboard && (
           <Button size="sm" variant="primary" disabled={pending} onClick={addToDashboard}>

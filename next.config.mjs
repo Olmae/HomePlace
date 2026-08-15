@@ -6,9 +6,25 @@ const nextConfig = {
   output: "standalone",
   eslint: { ignoreDuringBuilds: true },
   experimental: {
-    // Lets src/instrumentation.ts run once per server process — that is where
-    // the uptime monitor is started.
-    instrumentationHook: true,
+    // Kept out of the bundle and required at runtime instead. undici reaches
+    // for node: built-ins that webpack refuses to inline, and bundling a copy
+    // of the HTTP stack into a server that already has one is pointless anyway.
+    serverComponentsExternalPackages: ["undici", "fetch-socks", "socks"],
+  },
+
+  /**
+   * Keep the HTTP stack out of the bundle.
+   *
+   * undici's entry point pulls in its mock agent, which imports `node:console`,
+   * and webpack refuses to inline `node:` URIs. Marking the packages external
+   * makes the server `require()` them at runtime — which is what should happen
+   * anyway: they are used only by server code, and Node already ships undici.
+   */
+  webpack: (config, { isServer }) => {
+    if (isServer) {
+      config.externals = [...(config.externals ?? []), "undici", "fetch-socks", "socks"];
+    }
+    return config;
   },
 };
 

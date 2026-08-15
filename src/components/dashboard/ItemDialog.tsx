@@ -5,6 +5,7 @@ import type { Item } from "@prisma/client";
 import { Dialog } from "@/components/Dialog";
 import { Field, Input, Select, Textarea, Button } from "@/components/form";
 import { createItem, updateItem, type ItemInput } from "@/actions/dashboard";
+import { autoIcon } from "@/lib/icons";
 import type { Dictionary } from "@/i18n";
 
 export type ContainerOption = {
@@ -19,7 +20,7 @@ export type ContainerOption = {
 
 type Kind = "service" | "link" | "folder" | "widget";
 
-const widgetKinds = ["system", "disks", "chart", "containers", "proxmox", "clock", "notes"] as const;
+const widgetKinds = ["system", "disks", "load", "chart", "containers", "proxmox", "clock", "notes", "slideshow", "nowplaying"] as const;
 
 /**
  * The one form that creates and edits everything on a dashboard.
@@ -72,6 +73,13 @@ export function ItemDialog({
     instance: str(config.instance),
     timeZone: str(config.timeZone),
     text: str(config.text),
+    images: Array.isArray(config.images) ? (config.images as string[]).join("\n") : str(config.images),
+    intervalSeconds: Number(config.intervalSeconds ?? 20),
+    caption: str(config.caption),
+    fit: str(config.fit) || "cover",
+    containersFilter: Array.isArray(config.containers) ? (config.containers as string[]).join("\n") : str(config.containers),
+    sortBy: str(config.sortBy) || "cpu",
+    limit: Number(config.limit ?? 6),
   });
 
   function set<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
@@ -131,6 +139,19 @@ export function ItemDialog({
         return { instance: form.instance, rangeMinutes: Number(form.rangeMinutes) };
       case "clock":
         return { timeZone: form.timeZone };
+      case "slideshow":
+        return {
+          images: form.images.split("\n").map((line) => line.trim()).filter(Boolean),
+          intervalSeconds: Number(form.intervalSeconds),
+          caption: form.caption,
+          fit: form.fit,
+        };
+      case "load":
+        return {
+          containers: form.containersFilter.split("\n").map((n) => n.trim()).filter(Boolean),
+          sortBy: form.sortBy,
+          limit: Number(form.limit),
+        };
       case "notes":
         return { text: form.text };
       default:
@@ -219,6 +240,64 @@ export function ItemDialog({
               </Field>
             )}
 
+            {form.widget === "load" && (
+              <>
+                <Field label={d.widgets.onlyContainers} hint={d.widgets.onlyContainersHint}>
+                  <Textarea
+                    rows={3}
+                    value={form.containersFilter}
+                    onChange={(e) => set("containersFilter", e.target.value)}
+                    className="font-mono text-xs"
+                    placeholder="jellyfin"
+                  />
+                </Field>
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label={d.widgets.sortBy}>
+                    <Select value={form.sortBy} onChange={(e) => set("sortBy", e.target.value)}>
+                      <option value="cpu">{d.monitoring.cpu}</option>
+                      <option value="memory">{d.monitoring.memory}</option>
+                    </Select>
+                  </Field>
+                  <Field label={d.widgets.limit}>
+                    <Input type="number" min={1} max={20} value={form.limit} onChange={(e) => set("limit", Number(e.target.value))} />
+                  </Field>
+                </div>
+              </>
+            )}
+
+            {form.widget === "slideshow" && (
+              <>
+                <Field label={d.widgets.images} hint={d.widgets.imagesHint}>
+                  <Textarea
+                    rows={4}
+                    value={form.images}
+                    onChange={(e) => set("images", e.target.value)}
+                    className="font-mono text-xs"
+                    placeholder="https://…/photo.jpg"
+                  />
+                </Field>
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label={`${d.widgets.interval}, ${d.dashboard.seconds}`}>
+                    <Input
+                      type="number"
+                      min={3}
+                      value={form.intervalSeconds}
+                      onChange={(e) => set("intervalSeconds", Number(e.target.value))}
+                    />
+                  </Field>
+                  <Field label={d.widgets.fit}>
+                    <Select value={form.fit} onChange={(e) => set("fit", e.target.value)}>
+                      <option value="cover">{d.widgets.fitCover}</option>
+                      <option value="contain">{d.widgets.fitContain}</option>
+                    </Select>
+                  </Field>
+                </div>
+                <Field label={d.widgets.caption}>
+                  <Input value={form.caption} onChange={(e) => set("caption", e.target.value)} />
+                </Field>
+              </>
+            )}
+
             {form.widget === "notes" && (
               <Field label={d.widgets.noteText}>
                 <Textarea rows={4} value={form.text} onChange={(e) => set("text", e.target.value)} />
@@ -230,7 +309,19 @@ export function ItemDialog({
         {isTile && (
           <>
             <Field label={d.dashboard.tileUrl}>
-              <Input value={form.url} onChange={(e) => set("url", e.target.value)} placeholder="http://192.168.0.10:8096" className="font-mono" />
+              <Input
+                value={form.url}
+                onChange={(e) => set("url", e.target.value)}
+                // Fill the icon in once there is an address to guess from, but
+                // never overwrite one the user chose.
+                onBlur={() => {
+                  if (form.icon) return;
+                  const guess = autoIcon({ name: form.title, url: form.url });
+                  if (guess) set("icon", guess);
+                }}
+                placeholder="http://192.168.0.10:8096"
+                className="font-mono"
+              />
             </Field>
             <Field label={d.dashboard.tileInternalUrl} hint={d.dashboard.tileInternalUrlHint}>
               <Input value={form.internalUrl} onChange={(e) => set("internalUrl", e.target.value)} className="font-mono" />

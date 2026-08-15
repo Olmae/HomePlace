@@ -5,6 +5,7 @@ import { Widget } from "@/components/widgets";
 import { ItemActions } from "./ItemActions";
 import type { TileStatus } from "@/lib/status";
 import { percent, latency } from "@/lib/format";
+import { GLYPH } from "@/lib/icons";
 import type { Dictionary } from "@/i18n";
 
 type ItemWithChildren = Item & { children?: Item[] };
@@ -44,7 +45,7 @@ export function Tile({
       <Card className="relative h-full p-3">
         {editing && canEdit && <ItemActions item={item} d={d} />}
         <div className="mb-2 flex items-center gap-2">
-          <TileIcon icon={item.icon ?? "📁"} title={item.title} color={item.color} />
+          <TileIcon icon={item.icon ?? GLYPH.folder} title={item.title} color={item.color} />
           <span className="truncate text-sm font-semibold">{item.title}</span>
         </div>
         <ul className="space-y-0.5">
@@ -100,8 +101,21 @@ export function Tile({
   );
 
   return (
-    <Card className="relative h-full transition-shadow hover:shadow-pop">
+    <Card className="group relative h-full transition-shadow hover:shadow-pop">
       {editing && canEdit && <ItemActions item={item} d={d} />}
+
+      {/* Attached to a container: an arrow into its detail view — logs, mounts,
+          restarts. Hidden until hover so the tile stays a clean link. */}
+      {!editing && item.containerName && item.hostKey && (
+        <Link
+          href={`/containers/${encodeURIComponent(item.hostKey)}/${encodeURIComponent(item.containerName)}`}
+          title={d.containers.details}
+          aria-label={`${item.title} — ${d.containers.details}`}
+          className="absolute right-1 top-1 z-10 rounded-control px-1.5 text-lg leading-none text-faint opacity-0 transition-opacity hover:bg-raised hover:text-text focus-visible:opacity-100 group-hover:opacity-100"
+        >
+          {GLYPH.details}
+        </Link>
+      )}
       {isExternal ? (
         <a
           href={href}

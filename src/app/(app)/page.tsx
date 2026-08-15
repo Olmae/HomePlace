@@ -8,20 +8,21 @@ import { statusFor } from "@/lib/status";
 import { dict } from "@/i18n";
 import { EmptyState } from "@/components/ui";
 import { AutoRefresh } from "@/components/AutoRefresh";
-import { Grid, GridCell } from "@/components/dashboard/Grid";
+import { Board } from "@/components/dashboard/Board";
 import { Tile } from "@/components/dashboard/Tile";
 import { Tabs } from "@/components/dashboard/Tabs";
 import { AddButton } from "@/components/dashboard/AddButton";
+import { BackgroundButton } from "@/components/dashboard/BackgroundButton";
 import type { ContainerOption } from "@/components/dashboard/ItemDialog";
 
 export const dynamic = "force-dynamic";
 
 /**
- * The home page: tabs of tiles.
+ * The home page: tabs of tiles on a draggable board.
  *
  * Which tab is open and whether the layout is being edited both live in the
- * URL. That keeps this a plain server component — no client-side layout state
- * to synchronise, and every view is a link someone can bookmark.
+ * URL, which keeps this a plain server component — every view is a link
+ * somebody can bookmark or set as their browser's home page.
  */
 export default async function DashboardPage({
   searchParams,
@@ -42,7 +43,7 @@ export default async function DashboardPage({
 
   const items = await prisma.item.findMany({
     where: { dashboardId: active.id, parentId: null },
-    orderBy: { order: "asc" },
+    orderBy: [{ y: "asc" }, { x: "asc" }],
     include: { children: { orderBy: { order: "asc" } } },
   });
 
@@ -70,6 +71,20 @@ export default async function DashboardPage({
     <>
       <AutoRefresh seconds={30} />
 
+      {/* The dashboard's own photo, behind everything. Set per tab, so a
+          "home" tab can look like a home and a "servers" tab like a panel. */}
+      {active.backgroundUrl && (
+        <div
+          className="hp-backdrop"
+          style={{
+            ["--backdrop-image" as string]: `url("${active.backgroundUrl.replace(/"/g, "%22")}")`,
+            ["--backdrop-dim" as string]: String(active.backgroundDim),
+            ["--backdrop-blur" as string]: `${active.backgroundBlur}px`,
+          }}
+          aria-hidden
+        />
+      )}
+
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <Tabs
           d={d}
@@ -80,6 +95,16 @@ export default async function DashboardPage({
 
         {editable && (
           <div className="flex items-center gap-2">
+            {editing && <span className="hidden text-xs text-faint sm:inline">{d.dashboard.dragHint}</span>}
+            <BackgroundButton
+              d={d}
+              dashboardId={active.id}
+              current={{
+                backgroundUrl: active.backgroundUrl ?? "",
+                backgroundDim: active.backgroundDim,
+                backgroundBlur: active.backgroundBlur,
+              }}
+            />
             <Link
               href={`/?tab=${active.id}${editing ? "" : "&edit=1"}`}
               className={`rounded-control px-3 py-1.5 text-sm font-medium transition-colors ${
@@ -96,13 +121,11 @@ export default async function DashboardPage({
       {items.length === 0 ? (
         <EmptyState title={d.dashboard.empty} hint={editable ? d.dashboard.emptyHint : undefined} />
       ) : (
-        <Grid>
+        <Board layout={items.map(({ id, x, y, w, h }) => ({ id, x, y, w, h }))} editing={editing}>
           {items.map((item) => (
-            <GridCell key={item.id} w={item.w}>
-              <Tile item={item} statuses={statuses} d={d} editing={editing} canEdit={editable} />
-            </GridCell>
+            <Tile key={item.id} item={item} statuses={statuses} d={d} editing={editing} canEdit={editable} />
           ))}
-        </Grid>
+        </Board>
       )}
     </>
   );

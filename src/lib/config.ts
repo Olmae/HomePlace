@@ -140,12 +140,6 @@ export const settings = {
   sessionDays: () => int("SESSION_DAYS", 30),
 };
 
-/** One place to ask "what can this installation actually do right now?". */
-export function integrationStatus() {
-  return {
-    docker: dockerHosts().length > 0,
-    prometheus: prometheus() !== null,
-    proxmox: proxmox() !== null,
-    friendplace: friendplace() !== null,
-  };
-}
+// "What can this installation do right now?" lives in integrations.ts, because
+// the answer now depends on the database as well as on .env — and this module
+// must not import that one, or the two would import each other.

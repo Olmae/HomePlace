@@ -108,25 +108,7 @@ export function SectionTitle({ children, hint }: { children: ReactNode; hint?: s
   );
 }
 
-/**
- * Tile icon. An emoji or a letter is drawn directly; anything that looks like a
- * URL becomes an image, which is how most self-hosted services provide a logo.
- */
-export function TileIcon({ icon, title, color }: { icon?: string | null; title: string; color?: string | null }) {
-  const isUrl = !!icon && /^(https?:\/\/|\/)/.test(icon);
-  if (isUrl) {
-    // Not next/image: these point at arbitrary LAN hosts, which the optimiser
-    // would have to be allowlisted for one by one.
-    // eslint-disable-next-line @next/next/no-img-element
-    return <img src={icon!} alt="" className="h-7 w-7 rounded object-contain" loading="lazy" />;
-  }
-  return (
-    <span
-      className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-base"
-      style={color ? { backgroundColor: `${color}22`, color } : undefined}
-      aria-hidden
-    >
-      {icon || title.slice(0, 1).toUpperCase()}
-    </span>
-  );
-}
+// The tile icon lives in its own file because it needs a load handler to fall
+// back when a favicon does not resolve — re-exported here so components keep
+// importing their building blocks from one place.
+export { TileIcon } from "./TileIcon";

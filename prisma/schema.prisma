@@ -63,6 +63,14 @@ model Dashboard {
   // with everyone who can log in.
   shared Boolean @default(true)
 
+  // Atmosphere: a photo behind the tiles. This is a home page someone looks at
+  // all day, and a wall of grey cards is a worse place to spend a day than the
+  // same cards over a picture you like. Dim and blur keep it readable —
+  // without them a busy photo makes every label harder to read.
+  backgroundUrl  String?
+  backgroundDim  Int     @default(55) // percent of dark overlay
+  backgroundBlur Int     @default(0) // pixels
+
   ownerId String?
   owner   User?   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
 
@@ -122,8 +130,15 @@ model Item {
   // Widget settings as JSON (PromQL query, unit, thresholds, …).
   config String?
 
-  // Grid placement. Column span in a 12-column grid; height in row units.
+  // Grid placement on a 12-column board. x/y are the top-left cell, w/h the
+  // size in cells. Gaps are allowed — the point of dragging a tile somewhere is
+  // that it stays where it was put.
+  //
+  // `order` survives as the reading order: it decides the single-column
+  // stacking on a phone, where a two-dimensional layout cannot be shown.
   order Int @default(0)
+  x     Int @default(0)
+  y     Int @default(0)
   w     Int @default(3)
   h     Int @default(1)
 
@@ -178,6 +193,25 @@ model Event {
 }
 
 // ───────────────────────────── Miscellaneous ────────────────────────────
+
+// One row per tile that is being watched: what state it is in and whether the
+// owner has already been told about it.
+//
+// Separate from UptimeCheck because it answers a different question. The check
+// table says what happened at a moment; this says "is there an outstanding
+// problem, and did we already send a message about it" — which is what keeps a
+// service flapping every 30 seconds from producing 120 notifications an hour.
+model AlertState {
+  itemId String   @id
+  // up | down
+  state  String
+  // When the current state began — the delay is measured from here.
+  since  DateTime @default(now())
+  // Set once a message went out for the current state; cleared on recovery.
+  notifiedAt DateTime?
+
+  updatedAt DateTime @updatedAt
+}
 
 // Small key/value store for panel-wide settings that are not secrets:
 // default locale, whether discovery is enabled, containers the user chose to

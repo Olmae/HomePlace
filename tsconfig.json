@@ -1,5 +1,9 @@
 {
   "compilerOptions": {
+    // ES2020 so downlevel iteration is not needed: spreading a Map's values is
+    // ordinary code, and compiling to ES5 for a server-rendered app nothing old
+    // will ever load would only make the output larger.
+    "target": "ES2020",
     "lib": ["dom", "dom.iterable", "esnext"],
     "allowJs": true,
     "skipLibCheck": true,

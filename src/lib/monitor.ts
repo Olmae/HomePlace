@@ -2,6 +2,7 @@ import "server-only";
 import { prisma } from "./db";
 import { settings } from "./config";
 import { listContainers } from "./docker";
+import { processAlerts } from "./alerts";
 
 /**
  * The availability prober.
@@ -19,6 +20,16 @@ const TICK_MS = 10_000;
 let timer: NodeJS.Timeout | null = null;
 let running = false;
 
+/**
+ * Started from the first server render rather than from an instrumentation
+ * hook.
+ *
+ * The hook version gets compiled for the edge runtime as well, which drags
+ * everything it can reach — Prisma, node:crypto, the HTTP stack — into a bundle
+ * that cannot contain them. Starting from a server component keeps the whole
+ * chain in the Node runtime where it belongs, and the module-level `timer`
+ * guard makes the call idempotent however many pages render.
+ */
 export function startMonitor(): void {
   if (timer || !settings.monitorEnabled()) return;
   // A first pass shortly after boot, so the dashboard is not blank on arrival.
@@ -55,6 +66,15 @@ async function probeDue(): Promise<void> {
   const needContainers = items.some((i) => i.checkKind === "docker");
   const containers = needContainers ? await listContainers() : [];
 
+  // Everything watched, seeded with what was already known. Tiles that are not
+  // due this tick still take part in alerting: an outage does not pause because
+  // the check interval is five minutes.
+  const latest = new Map<string, { id: string; title: string; ok: boolean; error: string | null }>();
+  for (const item of items) {
+    const last = item.checks[0];
+    if (last) latest.set(item.id, { id: item.id, title: item.title, ok: last.ok, error: last.error });
+  }
+
   const now = Date.now();
   const due = items.filter((item) => {
     const last = item.checks[0];
@@ -80,6 +100,8 @@ async function probeDue(): Promise<void> {
         },
       });
 
+      latest.set(item.id, { id: item.id, title: item.title, ok: result.ok, error: result.error ?? null });
+
       // Only transitions become events. Writing one row per probe would bury
       // the feed under thousands of "still fine" entries.
       if (previous !== null && previous !== result.ok) {
@@ -95,6 +117,14 @@ async function probeDue(): Promise<void> {
       }
     })
   );
+
+  // Notifications come last and never take the probe loop down with them: a
+  // Telegram outage must not stop the panel from knowing its own state.
+  try {
+    await processAlerts([...latest.values()]);
+  } catch (e) {
+    console.error("alert processing failed:", e);
+  }
 }
 
 async function probeHttp(url: string | null | undefined): Promise<ProbeResult> {

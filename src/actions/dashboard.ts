@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma, getSetting, setSetting } from "@/lib/db";
 import { requireRole } from "@/lib/auth";
 import { settings } from "@/lib/config";
+import { readingOrder, nextFreeSlot, compactVertically, resolveCollisions } from "@/lib/layout";
 
 /**
  * Everything that changes the dashboard layout.
@@ -61,9 +62,15 @@ export type ItemInput = {
 
 export async function createItem(input: ItemInput): Promise<string> {
   await requireRole("admin");
-  const siblings = await prisma.item.count({
+  const siblings = await prisma.item.findMany({
     where: { dashboardId: input.dashboardId, parentId: input.parentId ?? null },
+    select: { id: true, x: true, y: true, w: true, h: true },
   });
+  // A new tile goes into the first gap that fits it, not on top of an existing
+  // one and not always at the bottom.
+  const width = clamp(input.w ?? defaultWidth(input.kind), 1, 12);
+  const height = clamp(input.h ?? defaultHeight(input.kind), 1, 12);
+  const slot = nextFreeSlot(siblings, width, height);
   const created = await prisma.item.create({
     data: {
       dashboardId: input.dashboardId,
@@ -83,9 +90,11 @@ export async function createItem(input: ItemInput): Promise<string> {
       checkInterval: clampInterval(input.checkInterval),
       widget: input.widget || null,
       config: input.config ? JSON.stringify(input.config) : null,
-      order: siblings,
-      w: clamp(input.w ?? defaultWidth(input.kind), 1, 12),
-      h: clamp(input.h ?? 1, 1, 4),
+      order: siblings.length,
+      x: slot.x,
+      y: slot.y,
+      w: width,
+      h: height,
     },
   });
   revalidatePath("/");
@@ -109,7 +118,7 @@ export async function updateItem(id: string, input: Partial<ItemInput>): Promise
       ...(input.checkInterval !== undefined ? { checkInterval: clampInterval(input.checkInterval) } : {}),
       ...(input.config !== undefined ? { config: input.config ? JSON.stringify(input.config) : null } : {}),
       ...(input.w !== undefined ? { w: clamp(input.w, 1, 12) } : {}),
-      ...(input.h !== undefined ? { h: clamp(input.h, 1, 4) } : {}),
+      ...(input.h !== undefined ? { h: clamp(input.h, 1, 12) } : {}),
       ...(input.parentId !== undefined ? { parentId: input.parentId } : {}),
     },
   });
@@ -118,36 +127,97 @@ export async function updateItem(id: string, input: Partial<ItemInput>): Promise
 
 export async function deleteItem(id: string): Promise<void> {
   await requireRole("admin");
+  const item = await prisma.item.findUnique({ where: { id } });
+  if (!item) return;
   await prisma.item.delete({ where: { id } });
+
+  // Close the hole the tile left behind. Gaps someone made on purpose survive
+  // a drag; a gap left by a departure is just a hole.
+  const rest = await prisma.item.findMany({
+    where: { dashboardId: item.dashboardId, parentId: item.parentId },
+    select: { id: true, x: true, y: true, w: true, h: true },
+  });
+  const compacted = compactVertically(rest);
+  await prisma.$transaction(
+    compacted.map((box) => prisma.item.update({ where: { id: box.id }, data: { y: box.y } }))
+  );
   revalidatePath("/");
 }
 
 /**
- * Reordering by swapping with the neighbour.
+ * Move a tile one row up or down.
  *
- * Deliberately not drag-and-drop-with-fractional-indexes: two buttons work on a
- * phone, work from the keyboard, and cannot leave the list in a half-sorted
- * state if the request fails halfway.
+ * Dragging is the main way to arrange the board, but it needs a pointer and a
+ * screen wide enough to show the grid. These two buttons are how the same thing
+ * is done from a phone or from the keyboard, so the layout is never editable
+ * only by mouse.
  */
 export async function moveItem(id: string, direction: "up" | "down"): Promise<void> {
   await requireRole("admin");
   const item = await prisma.item.findUnique({ where: { id } });
   if (!item) return;
 
-  const neighbour = await prisma.item.findFirst({
-    where: {
-      dashboardId: item.dashboardId,
-      parentId: item.parentId,
-      order: direction === "up" ? { lt: item.order } : { gt: item.order },
-    },
-    orderBy: { order: direction === "up" ? "desc" : "asc" },
+  const siblings = await prisma.item.findMany({
+    where: { dashboardId: item.dashboardId, parentId: item.parentId },
+    select: { id: true, x: true, y: true, w: true, h: true },
   });
-  if (!neighbour) return;
 
-  await prisma.$transaction([
-    prisma.item.update({ where: { id: item.id }, data: { order: neighbour.order } }),
-    prisma.item.update({ where: { id: neighbour.id }, data: { order: item.order } }),
-  ]);
+  const target = Math.max(0, item.y + (direction === "up" ? -1 : 1));
+  const moved = siblings.map((b) => (b.id === id ? { ...b, y: target } : b));
+  const resolved = readingOrder(resolveCollisions(moved, id));
+
+  await prisma.$transaction(
+    resolved.map((box, index) =>
+      prisma.item.update({ where: { id: box.id }, data: { y: box.y, order: index } })
+    )
+  );
+  revalidatePath("/");
+}
+
+/**
+ * Persist the whole board after a drag or a resize.
+ *
+ * One statement per tile inside a transaction: the layout is only ever
+ * meaningful as a set, and a half-written board would put tiles on top of each
+ * other until the next drag.
+ */
+export async function saveLayout(boxes: { id: string; x: number; y: number; w: number; h: number }[]): Promise<void> {
+  await requireRole("admin");
+  if (boxes.length === 0) return;
+
+  await prisma.$transaction(
+    // Reading order doubles as the phone layout, so it is recomputed here from
+    // the positions rather than kept as a separate thing to drift out of sync.
+    readingOrder(boxes.map((b) => ({ ...b }))).map((box, index) =>
+      prisma.item.update({
+        where: { id: box.id },
+        data: {
+          x: clamp(box.x, 0, 11),
+          y: clamp(box.y, 0, 500),
+          w: clamp(box.w, 1, 12),
+          h: clamp(box.h, 1, 12),
+          order: index,
+        },
+      })
+    )
+  );
+  revalidatePath("/");
+}
+
+/** Background photo of one dashboard — the "home page" part of the panel. */
+export async function updateDashboardBackground(
+  id: string,
+  input: { backgroundUrl?: string | null; backgroundDim?: number; backgroundBlur?: number }
+): Promise<void> {
+  await requireRole("admin");
+  await prisma.dashboard.update({
+    where: { id },
+    data: {
+      ...(input.backgroundUrl !== undefined ? { backgroundUrl: normalizeUrl(input.backgroundUrl) } : {}),
+      ...(input.backgroundDim !== undefined ? { backgroundDim: clamp(input.backgroundDim, 0, 95) } : {}),
+      ...(input.backgroundBlur !== undefined ? { backgroundBlur: clamp(input.backgroundBlur, 0, 40) } : {}),
+    },
+  });
   revalidatePath("/");
 }
 
@@ -171,6 +241,11 @@ function clampInterval(seconds: number | undefined): number {
 /** Widgets need room to say anything; links are fine as small tiles. */
 function defaultWidth(kind: string): number {
   return kind === "widget" ? 4 : 3;
+}
+
+/** Heights in grid rows: a link is one row, a widget needs two to say anything. */
+function defaultHeight(kind: string): number {
+  return kind === "widget" ? 3 : 1;
 }
 
 /**

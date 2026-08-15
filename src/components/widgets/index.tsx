@@ -4,7 +4,10 @@ import { Clock } from "./Clock";
 import { query, queryOne, queryRange, Q } from "@/lib/prometheus";
 import { guests, storages } from "@/lib/proxmox";
 import { listContainers } from "@/lib/docker";
-import { prometheus as promConfig, proxmox as pveConfig, dockerHosts } from "@/lib/config";
+import { dockerHosts } from "@/lib/config";
+import { prometheusConfig, proxmoxConfig } from "@/lib/integrations";
+import { Slideshow } from "./Slideshow";
+import { NowPlayingWidget } from "./NowPlaying";
 import { bytes, percent, duration } from "@/lib/format";
 import type { Dictionary } from "@/i18n";
 
@@ -38,6 +41,19 @@ export async function Widget({ widget, config, title, d }: WidgetProps) {
       return <ProxmoxWidget title={title} d={d} />;
     case "clock":
       return <Clock title={title} timeZone={str(config.timeZone)} />;
+    case "slideshow":
+      return (
+        <Slideshow
+          images={lines(config.images)}
+          intervalSeconds={num(config.intervalSeconds, 20)}
+          caption={str(config.caption)}
+          fit={str(config.fit) === "contain" ? "contain" : "cover"}
+        />
+      );
+    case "nowplaying":
+      return <NowPlayingWidget title={title} d={d} />;
+    case "load":
+      return <LoadWidget config={config} title={title} d={d} />;
     case "notes":
       return <NotesWidget title={title} text={str(config.text) ?? ""} />;
     default:
@@ -51,6 +67,12 @@ export async function Widget({ widget, config, title, d }: WidgetProps) {
 
 function str(v: unknown): string | undefined {
   return typeof v === "string" && v.trim() !== "" ? v.trim() : undefined;
+}
+
+/** Multi-line textarea input as a list — how URLs are entered in the dialog. */
+function lines(v: unknown): string[] {
+  if (Array.isArray(v)) return v.map(String).filter(Boolean);
+  return typeof v === "string" ? v.split(/[\n,]/).map((s) => s.trim()).filter(Boolean) : [];
 }
 
 function num(v: unknown, fallback: number): number {
@@ -74,7 +96,7 @@ function NotConfigured({ title, message, hint }: { title: string; message: strin
 // ───────────────────────────────── System ────────────────────────────────
 
 async function SystemWidget({ config, title, d }: { config: Record<string, unknown>; title: string; d: Dictionary }) {
-  if (!promConfig()) {
+  if (!(await prometheusConfig())) {
     return <NotConfigured title={title} message={d.monitoring.noPrometheus} hint={d.monitoring.noPrometheusHint} />;
   }
   const instance = str(config.instance);
@@ -131,7 +153,7 @@ async function SystemWidget({ config, title, d }: { config: Record<string, unkno
 // ────────────────────────────────── Disks ────────────────────────────────
 
 async function DisksWidget({ config, title, d }: { config: Record<string, unknown>; title: string; d: Dictionary }) {
-  if (!promConfig()) {
+  if (!(await prometheusConfig())) {
     return <NotConfigured title={title} message={d.monitoring.noPrometheus} hint={d.monitoring.noPrometheusHint} />;
   }
   const instance = str(config.instance);
@@ -182,7 +204,7 @@ async function DisksWidget({ config, title, d }: { config: Record<string, unknow
 // ────────────────────────────────── Chart ────────────────────────────────
 
 async function ChartWidget({ config, title, d }: { config: Record<string, unknown>; title: string; d: Dictionary }) {
-  if (!promConfig()) {
+  if (!(await prometheusConfig())) {
     return <NotConfigured title={title} message={d.monitoring.noPrometheus} hint={d.monitoring.noPrometheusHint} />;
   }
   const promql = str(config.query);
@@ -255,7 +277,7 @@ async function ContainersWidget({ title, d }: { title: string; d: Dictionary }) 
 // ────────────────────────────────── Proxmox ──────────────────────────────
 
 async function ProxmoxWidget({ title, d }: { title: string; d: Dictionary }) {
-  if (!pveConfig()) {
+  if (!(await proxmoxConfig())) {
     return <NotConfigured title={title} message={d.monitoring.noProxmox} hint={d.monitoring.noProxmoxHint} />;
   }
   const [vms, stores] = await Promise.all([guests(), storages()]);
@@ -279,6 +301,60 @@ async function ProxmoxWidget({ title, d }: { title: string; d: Dictionary }) {
               <span className="shrink-0 font-mono text-xs tabular-nums text-faint">{bytes(s.avail)}</span>
             </div>
             <Meter value={s.total > 0 ? (s.used / s.total) * 100 : 0} />
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+// ────────────────────────── Container load ───────────────────────────────
+
+/**
+ * Which containers are actually using the machine.
+ *
+ * Sorted by CPU by default, because the question this answers is almost always
+ * "what is making the fans spin". A list of names in the config narrows it to
+ * the ones worth watching; empty means everything, top N.
+ */
+async function LoadWidget({ config, title, d }: { config: Record<string, unknown>; title: string; d: Dictionary }) {
+  if (!(await prometheusConfig())) {
+    return <NotConfigured title={title} message={d.monitoring.noPrometheus} hint={d.monitoring.noPrometheusHint} />;
+  }
+
+  const only = lines(config.containers);
+  const sortBy = str(config.sortBy) === "memory" ? "memory" : "cpu";
+  const limit = num(config.limit, 6);
+
+  const [cpu, mem] = await Promise.all([query(Q.allContainerCpu()), query(Q.allContainerMemory())]);
+  const memBy = new Map(mem.map((s) => [s.metric.name, s.value]));
+
+  const rows = cpu
+    .map((s) => ({ name: s.metric.name ?? "?", cpu: s.value, memory: memBy.get(s.metric.name) ?? 0 }))
+    .filter((r) => (only.length === 0 ? true : only.includes(r.name)))
+    .sort((a, b) => (sortBy === "memory" ? b.memory - a.memory : b.cpu - a.cpu))
+    .slice(0, limit);
+
+  // Bars are relative to the busiest row rather than to 100%: a host idling at
+  // 3% would otherwise draw six identical empty bars.
+  const peak = Math.max(...rows.map((r) => (sortBy === "memory" ? r.memory : r.cpu)), 0.0001);
+
+  return (
+    <Card className="h-full">
+      <CardHeader title={title} action={<span className="text-[11px] text-faint">{sortBy}</span>} />
+      <div className="space-y-2 p-4">
+        {rows.length === 0 && <p className="text-sm text-muted">{d.widgets.noData}</p>}
+        {rows.map((r) => (
+          <div key={r.name}>
+            <div className="mb-1 flex items-baseline justify-between gap-2">
+              <span className="truncate font-mono text-xs" title={r.name}>
+                {r.name}
+              </span>
+              <span className="shrink-0 font-mono text-[11px] tabular-nums text-muted">
+                {percent(r.cpu, 1)} · {bytes(r.memory)}
+              </span>
+            </div>
+            <Meter value={((sortBy === "memory" ? r.memory : r.cpu) / peak) * 100} tone="ok" />
           </div>
         ))}
       </div>

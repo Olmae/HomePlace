@@ -1,5 +1,5 @@
 import "server-only";
-import { prometheus } from "./config";
+import { prometheusConfig } from "./integrations";
 
 /**
  * Prometheus is the source of every number with a history: CPU, memory, disk
@@ -13,19 +13,18 @@ import { prometheus } from "./config";
 export type Sample = { metric: Record<string, string>; value: number; time: number };
 export type Series = { metric: Record<string, string>; points: [number, number][] };
 
-function auth(): HeadersInit {
-  const cfg = prometheus();
-  if (!cfg?.username || !cfg.password) return {};
+function auth(cfg: { username?: string; password?: string }): HeadersInit {
+  if (!cfg.username || !cfg.password) return {};
   const token = Buffer.from(`${cfg.username}:${cfg.password}`).toString("base64");
   return { authorization: `Basic ${token}` };
 }
 
 async function promFetch(path: string, params: Record<string, string>) {
-  const cfg = prometheus();
+  const cfg = await prometheusConfig();
   if (!cfg) throw new Error("prometheus is not configured");
   const qs = new URLSearchParams(params).toString();
   const res = await fetch(`${cfg.url}${path}?${qs}`, {
-    headers: auth(),
+    headers: auth(cfg),
     cache: "no-store",
     signal: AbortSignal.timeout(8000),
   });
@@ -37,7 +36,7 @@ async function promFetch(path: string, params: Record<string, string>) {
 
 /** Instant query. Returns [] rather than throwing when Prometheus is absent. */
 export async function query(promql: string): Promise<Sample[]> {
-  if (!prometheus()) return [];
+  if (!(await prometheusConfig())) return [];
   try {
     const data = await promFetch("/api/v1/query", { query: promql });
     if (data.resultType !== "vector") return [];
@@ -62,7 +61,7 @@ export async function queryOne(promql: string): Promise<number | null> {
 
 /** Range query, for charts. `minutes` back from now. */
 export async function queryRange(promql: string, minutes: number, points = 120): Promise<Series[]> {
-  if (!prometheus()) return [];
+  if (!(await prometheusConfig())) return [];
   const end = Math.floor(Date.now() / 1000);
   const start = end - minutes * 60;
   // Keep the number of points near what the chart can actually draw; a 30-day
@@ -113,6 +112,14 @@ export const Q = {
   instances: () => `up{job=~".*node.*"}`,
   containerCpu: (name: string) => `rate(container_cpu_usage_seconds_total{name="${escape(name)}"}[2m]) * 100`,
   containerMemory: (name: string) => `container_memory_working_set_bytes{name="${escape(name)}"}`,
+  /**
+   * CPU and memory for every container at once, for the load widget.
+   *
+   * `name!=""` drops cAdvisor's own aggregate series for cgroup slices, which
+   * otherwise appear as unnamed rows using more CPU than anything real.
+   */
+  allContainerCpu: () => `sum by (name) (rate(container_cpu_usage_seconds_total{name!=""}[2m])) * 100`,
+  allContainerMemory: () => `sum by (name) (container_memory_working_set_bytes{name!=""})`,
 };
 
 /** Build a label selector fragment, either appended to existing labels or alone. */
@@ -128,11 +135,11 @@ function escape(v: string): string {
 }
 
 export async function prometheusHealth(): Promise<{ ok: boolean; error?: string }> {
-  const cfg = prometheus();
+  const cfg = await prometheusConfig();
   if (!cfg) return { ok: false, error: "not configured" };
   try {
     const res = await fetch(`${cfg.url}/-/healthy`, {
-      headers: auth(),
+      headers: auth(cfg),
       cache: "no-store",
       signal: AbortSignal.timeout(5000),
     });

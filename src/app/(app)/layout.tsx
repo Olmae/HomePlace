@@ -3,6 +3,7 @@ import { needsSetup } from "@/lib/auth";
 import { currentUser } from "@/lib/session";
 import { dict } from "@/i18n";
 import { AppNav } from "@/components/AppNav";
+import { startMonitor } from "@/lib/monitor";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +16,10 @@ export const dynamic = "force-dynamic";
  * can assume a user exists.
  */
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
+  // Idempotent: the first signed-in page render of a process starts the prober,
+  // every later one is a no-op.
+  startMonitor();
+
   if (await needsSetup()) redirect("/setup");
   const user = await currentUser();
   if (!user) redirect("/login");

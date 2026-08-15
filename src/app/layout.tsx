@@ -2,11 +2,14 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { currentUser } from "@/lib/session";
 import { settings } from "@/lib/config";
+import { ServiceWorker } from "@/components/ServiceWorker";
 
 export const metadata: Metadata = {
   title: "HomePlace",
   description: "Self-hosted dashboard and monitoring panel for your home server.",
-  icons: { icon: "/favicon.svg" },
+  icons: { icon: "/favicon.svg", apple: "/icon-192.png" },
+  manifest: "/manifest.webmanifest",
+  appleWebApp: { capable: true, title: "HomePlace", statusBarStyle: "black-translucent" },
 };
 
 export const viewport: Viewport = {
@@ -42,7 +45,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       {...(accent && accent !== "default" ? { "data-accent": accent } : {})}
       suppressHydrationWarning
     >
-      <body className="min-h-screen bg-bg text-text">{children}</body>
+      <body className="min-h-screen bg-bg text-text">
+        {children}
+        <ServiceWorker />
+      </body>
     </html>
   );
 }

@@ -8,12 +8,20 @@ the machine is doing, and one click to get anywhere. Containers appear on their
 own; you decide which ones become tiles.
 
 - 🧩 **Auto-discovery** — containers on your Docker host show up by themselves,
-  one click puts one on the dashboard
+  one click puts one on the dashboard, the arrow opens logs and details
 - 🟢 **Status at a glance** — availability checks with uptime history, kept by
   HomePlace itself so it works with nothing else installed
-- 📊 **Hardware** — CPU, memory, disks, temperatures, network, from Prometheus
+- 🖱 **Arrange it yourself** — drag tiles anywhere on the grid, resize by the
+  corner, keep the gaps you want
+- 📊 **Hardware** — CPU, memory, disks, temperatures, network, plus per-container
+  CPU and memory, from Prometheus
 - 🖥 **Proxmox** — guests, physical disks and SMART, storages
-- 🗂 **Your layout** — tabs, folders, bookmarks, widgets, custom PromQL charts
+- 🔔 **Telegram alerts** — with a delay before crying wolf, quiet hours, and a
+  proxy for servers that cannot reach Telegram directly
+- 🎨 **A home page, not a NOC screen** — background photos, a slideshow widget,
+  a now-playing tile
+- ⌨️ **Ctrl+K** — search across services, containers and pages
+- 📱 **Installable** on a phone home screen
 - 🌗 **Light and dark**, five accents, **English and Russian**
 - 🔐 **Local accounts**, with optional single sign-on through FriendPlace
 
@@ -35,8 +43,11 @@ Open <http://localhost:3200> and the setup wizard asks you to create the owner
 account. That wizard is reachable only while the panel has no accounts at all —
 once the owner exists it closes for good.
 
-For anything beyond the defaults, read `.env.example`: it documents every
-setting, and each integration is optional.
+Prometheus, Proxmox and Telegram are configured **in the interface**, under
+Settings — address, token, and Save runs a real connection test. Anything you
+would rather pin in the deployment can go into `.env` instead, and then the
+settings page shows it as fixed. The `?` in the top bar has a short guide to
+everything else.
 
 ---
 
@@ -124,6 +135,7 @@ Full reference with comments: [`.env.example`](.env.example). In short:
 | `ALLOW_CONTAINER_CONTROL` | `false` makes the panel read-only |
 | `PROMETHEUS_URL` | Enables hardware metrics and charts |
 | `PROXMOX_URL` + token | Enables the hypervisor view |
+| `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` | Alerts; `TELEGRAM_PROXY_URL` for a SOCKS5/HTTP proxy |
 | `FRIENDPLACE_*` | Optional SSO |
 | `DEFAULT_LOCALE` | `en` or `ru` |
 
@@ -135,6 +147,7 @@ Full reference with comments: [`.env.example`](.env.example). In short:
 | Docker | Everything else | Auto-discovery, container control, container-state checks |
 | Proxmox | Everything else | Guests, physical disks, SMART |
 | FriendPlace | Everything else | The SSO button |
+| Telegram | Everything else | Notifications — the event feed still records everything |
 
 ---
 
@@ -154,10 +167,14 @@ src/
   app/            routes — (app) is everything behind the login
   actions/        server actions: the only place that writes
   components/     interface, widgets/ holds the dashboard cards
-  lib/            integrations: docker, prometheus, proxmox, friendplace
+  lib/            integrations: docker, prometheus, proxmox, friendplace, telegram
   i18n/           en.ts is the base dictionary; other locales are checked against it
 prisma/schema.prisma
 ```
+
+`src/lib/layout.ts` holds the grid arithmetic — collision resolution,
+compaction, reading order — as pure functions, deliberately separate from the
+pointer handling in `Board.tsx`.
 
 A few conventions worth knowing before changing things:
 
@@ -167,8 +184,9 @@ A few conventions worth knowing before changing things:
   point at every other locale until it is translated.
 - **Integrations degrade, they do not throw.** A Prometheus that stops answering
   turns one card into "no data" instead of taking the page down.
-- **Secrets only in `.env`.** Not in the database, not in the interface, never
-  in git.
+- **Secrets never in git, and never in plain text.** `.env` is the preferred
+  home for them; anything entered in the interface is encrypted with a key
+  derived from `AUTH_SECRET` before it reaches the database (`lib/secretBox.ts`).
 
 ---
 
@@ -178,18 +196,23 @@ Where this is going, roughly in order.
 
 ### Next
 
-- [ ] Drag-and-drop layout, resize by dragging the tile edge
+- [ ] Live-streaming container logs instead of the last 200 lines
 - [ ] More widget kinds: multi-series charts, gauges, an uptime strip per service
-- [ ] Container detail view: live logs, resource usage over time, inspect
-- [ ] Search across services and containers, keyboard-first navigation
-- [ ] Custom icon set, an icon picker instead of pasting URLs
+- [ ] An icon picker with a bundled set, instead of emoji and pasted URLs
 - [ ] Per-user dashboards alongside the shared ones
+- [ ] Weather widget
+- [ ] Calendar widget, and reading a Google Calendar if it can be done without
+      making everyone register an OAuth app
+- [ ] Reminders and simple recurring notes on the board
+- [ ] Uploading background and slideshow images to the panel instead of linking
 
 ### Alerts and notifications
 
-- [ ] Rules on top of the checks: "notify me when this is down for 5 minutes"
-- [ ] Delivery through Telegram, email, ntfy, webhooks
-- [ ] Quiet hours, grouping, escalation
+- [x] Telegram, with a delay before alerting, recovery messages and quiet hours
+- [ ] Rules on metrics, not only availability: "disk over 90%", "CPU pinned for
+      ten minutes"
+- [ ] More destinations: email, ntfy, webhooks
+- [ ] Grouping and escalation
 - [ ] Web push in the browser
 
 ### Service integrations
@@ -208,11 +231,14 @@ Where this is going, roughly in order.
 - [ ] Scheduled actions
 - [ ] A read-only public status page for the services you choose
 
-### Apps
+### Apps and agents
 
 - [ ] Android and iOS clients, sharing this API
 - [ ] Push notifications on the phone
 - [ ] Home-screen widgets
+- [ ] A small desktop agent, and/or a browser extension, that feeds
+      `/api/now-playing` automatically — the endpoint is already there, what is
+      missing is something on the PC to talk to it
 
 ### Housekeeping
 

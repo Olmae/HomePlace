@@ -5,6 +5,8 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { signOut } from "@/actions/auth";
 import { AppearanceMenu } from "./AppearanceMenu";
+import { CommandPalette } from "./CommandPalette";
+import { Help } from "./Help";
 import type { Dictionary } from "@/i18n";
 
 /**
@@ -58,6 +60,22 @@ export function AppNav({
         </nav>
 
         <div className="ml-auto flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => window.dispatchEvent(new Event("homeplace:palette"))}
+            title={`${d.common.search} · ${d.palette.hint}`}
+            aria-label={d.common.search}
+            className="flex items-center gap-1.5 rounded-control px-2.5 py-1.5 text-sm text-muted transition-colors hover:bg-raised hover:text-text"
+          >
+            <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden>
+              <circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" strokeWidth="1.5" />
+              <path d="M10.5 10.5L14 14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            </svg>
+            <kbd className="hidden rounded border border-line px-1 font-mono text-[10px] text-faint lg:inline">
+              {d.palette.hint}
+            </kbd>
+          </button>
+          <Help d={d} />
           <AppearanceMenu d={d} />
           <div className="relative">
             <button
@@ -110,6 +128,8 @@ export function AppNav({
           </div>
         </div>
       </div>
+
+      <CommandPalette d={d} />
     </header>
   );
 }

@@ -150,6 +150,85 @@ export async function controlContainer(
   }
 }
 
+export type ContainerDetail = Container & {
+  command: string;
+  restartCount: number;
+  startedAt: string;
+  finishedAt: string;
+  restartPolicy: string;
+  mounts: { source: string; destination: string; mode: string; type: string }[];
+  env: string[];
+  health?: { status: string; failingStreak: number };
+};
+
+/**
+ * Everything Docker knows about one container.
+ *
+ * Environment variables are deliberately reduced to names: an .env full of API
+ * keys is routinely passed to containers, and a dashboard that prints them on
+ * a page is a credential leak waiting for someone to share a screenshot.
+ */
+export async function inspectContainer(hostKey: string, id: string): Promise<ContainerDetail | null> {
+  const host = dockerHosts().find((h) => h.key === hostKey);
+  if (!host) return null;
+
+  try {
+    const res = await dockerFetch(host, `/containers/${encodeURIComponent(id)}/json`);
+    if (!res.ok) return null;
+    const raw = (await res.json()) as Record<string, any>;
+
+    const ports: Container["ports"] = [];
+    for (const [key, bindings] of Object.entries(raw.NetworkSettings?.Ports ?? {})) {
+      const [portPart, protocol] = key.split("/");
+      const external = Array.isArray(bindings) && bindings[0]?.HostPort ? Number(bindings[0].HostPort) : undefined;
+      ports.push({ internal: Number(portPart), external, protocol: protocol ?? "tcp" });
+    }
+
+    const labels: Record<string, string> = raw.Config?.Labels ?? {};
+    const name = String(raw.Name ?? id).replace(/^\//, "");
+
+    return {
+      id: raw.Id,
+      name,
+      image: raw.Config?.Image ?? "",
+      state: raw.State?.Status ?? "unknown",
+      status: raw.State?.Status ?? "",
+      createdAt: Date.parse(raw.Created ?? "") || 0,
+      ports,
+      labels,
+      networks: Object.keys(raw.NetworkSettings?.Networks ?? {}),
+      hostKey: host.key,
+      hostLabel: host.label,
+      suggestedUrl: labels["homeplace.url"] ?? guessUrl(ports),
+      declared: {
+        title: labels["homeplace.title"],
+        icon: labels["homeplace.icon"],
+        group: labels["homeplace.group"],
+        hide: labels["homeplace.hide"] === "true",
+      },
+      command: [raw.Path, ...(raw.Args ?? [])].filter(Boolean).join(" "),
+      restartCount: Number(raw.RestartCount ?? 0),
+      startedAt: raw.State?.StartedAt ?? "",
+      finishedAt: raw.State?.FinishedAt ?? "",
+      restartPolicy: raw.HostConfig?.RestartPolicy?.Name ?? "",
+      mounts: (raw.Mounts ?? []).map((m: Record<string, unknown>) => ({
+        source: String(m.Source ?? ""),
+        destination: String(m.Destination ?? ""),
+        mode: String(m.Mode ?? ""),
+        type: String(m.Type ?? ""),
+      })),
+      // Names only — see the note above.
+      env: (raw.Config?.Env ?? []).map((line: string) => line.split("=")[0]),
+      health: raw.State?.Health
+        ? { status: String(raw.State.Health.Status), failingStreak: Number(raw.State.Health.FailingStreak ?? 0) }
+        : undefined,
+    };
+  } catch (e) {
+    console.error("container inspect failed:", e);
+    return null;
+  }
+}
+
 /** Recent log lines for the container detail view. */
 export async function containerLogs(hostKey: string, id: string, tail = 200): Promise<string> {
   const host = dockerHosts().find((h) => h.key === hostKey);

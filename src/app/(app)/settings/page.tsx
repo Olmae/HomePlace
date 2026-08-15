@@ -4,12 +4,15 @@ import { atLeast } from "@/lib/auth";
 import { dockerHealth } from "@/lib/docker";
 import { prometheusHealth } from "@/lib/prometheus";
 import { proxmoxHealth } from "@/lib/proxmox";
-import { integrationStatus, settings as cfg } from "@/lib/config";
+import { settings as cfg, appUrl } from "@/lib/config";
+import { integrationStatus, integrationsForDisplay } from "@/lib/integrations";
 import { enabled as ssoEnabled } from "@/lib/friendplace";
 import { dict } from "@/i18n";
 import { Card, CardHeader, Badge, SectionTitle } from "@/components/ui";
 import { ago } from "@/lib/format";
 import { PasswordForm } from "./PasswordForm";
+import { IntegrationForms } from "./IntegrationForms";
+import { currentNowPlayingToken } from "@/actions/integrations";
 
 export const dynamic = "force-dynamic";
 
@@ -26,11 +29,13 @@ export default async function SettingsPage() {
   const d = dict(user.locale);
   const isAdmin = atLeast(user.role, "admin");
 
-  const status = integrationStatus();
-  const [docker, prom, pve] = await Promise.all([
+  const status = await integrationStatus();
+  const [docker, prom, pve, display, npToken] = await Promise.all([
     status.docker ? dockerHealth() : Promise.resolve([]),
     status.prometheus ? prometheusHealth() : Promise.resolve({ ok: false, error: "not configured" }),
     status.proxmox ? proxmoxHealth() : Promise.resolve({ ok: false, error: "not configured" }),
+    integrationsForDisplay(),
+    isAdmin ? currentNowPlayingToken() : Promise.resolve(""),
   ]);
 
   const users = isAdmin
@@ -84,6 +89,12 @@ export default async function SettingsPage() {
         </div>
         {!cfg.allowContainerControl() && (
           <p className="mt-2 text-xs text-muted">⚠ {d.containers.controlDisabled}</p>
+        )}
+
+        {isAdmin && (
+          <div className="mt-3">
+            <IntegrationForms d={d} display={display} nowPlayingToken={npToken} appUrl={appUrl()} />
+          </div>
         )}
       </section>
 

@@ -1,6 +1,6 @@
 import "server-only";
 import { Agent } from "undici";
-import { proxmox } from "./config";
+import { proxmoxConfig } from "./integrations";
 
 /**
  * Proxmox VE, read-only.
@@ -66,7 +66,7 @@ export type PveStorage = {
 const insecureAgent = new Agent({ connect: { rejectUnauthorized: false } });
 
 async function pve<T>(path: string): Promise<T | null> {
-  const cfg = proxmox();
+  const cfg = await proxmoxConfig();
   if (!cfg) return null;
   try {
     const res = await fetch(`${cfg.url}/api2/json${path}`, {
@@ -141,7 +141,7 @@ export async function storages(): Promise<PveStorage[]> {
 }
 
 export async function proxmoxHealth(): Promise<{ ok: boolean; error?: string }> {
-  const cfg = proxmox();
+  const cfg = await proxmoxConfig();
   if (!cfg) return { ok: false, error: "not configured" };
   const data = await pve<unknown>("/version");
   return data ? { ok: true } : { ok: false, error: "request failed — see server logs" };
