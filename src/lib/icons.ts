@@ -19,7 +19,7 @@
  * Ordered longest-first at match time, so "qbittorrent" is not shadowed by
  * "torrent" and "jellyseerr" is not swallowed by "jellyfin".
  */
-const KNOWN: Record<string, string> = {
+export const SERVICE_ICONS: Record<string, string> = {
   jellyfin: "🎬",
   jellyseerr: "🎟️",
   plex: "🎞️",
@@ -135,6 +135,19 @@ const KNOWN: Record<string, string> = {
 };
 
 /**
+ * A general-purpose set for tiles that are not a known service: bookmarks,
+ * folders, notes. Grouped roughly by what someone is looking for, because a
+ * flat wall of two hundred emoji is a worse picker than a short list.
+ */
+export const GENERAL_ICONS: string[] = [
+  "🏠", "🏡", "🖥️", "💻", "📱", "🗂️", "📁", "📂", "🔗", "⭐", "❤️", "🔥",
+  "🎬", "🎵", "🎧", "🎮", "📺", "📷", "🖼️", "📚", "📖", "📝", "🗒️", "📌",
+  "🛒", "💰", "💳", "📊", "📈", "🗓️", "⏰", "⏱️", "🔔", "✅", "🧩", "⚙️",
+  "🔧", "🛠️", "🔌", "🔑", "🔒", "🛡️", "🌐", "📡", "📶", "☁️", "💾", "💽",
+  "🗄️", "🖨️", "🌡️", "💡", "🔋", "🚗", "✈️", "🌤️", "🌙", "🐳", "🐧", "🚀",
+];
+
+/**
  * Which known service this looks like, or "".
  *
  * Longest key first: several keys can match one string, and the most specific
@@ -145,7 +158,7 @@ export function guessKey(input: { name?: string; image?: string; url?: string })
   const haystack = [input.name, input.image, hostOf(input.url)].filter(Boolean).join(" ").toLowerCase();
   if (!haystack) return "";
   return (
-    Object.keys(KNOWN)
+    Object.keys(SERVICE_ICONS)
       .sort((a, b) => b.length - a.length)
       .find((key) => haystack.includes(key)) ?? ""
   );
@@ -154,7 +167,7 @@ export function guessKey(input: { name?: string; image?: string; url?: string })
 /** Best guess for a tile icon, as an emoji. Works with no internet at all. */
 export function guessIcon(input: { name?: string; image?: string; url?: string }): string {
   const key = guessKey(input);
-  return key ? KNOWN[key] : "";
+  return key ? SERVICE_ICONS[key] : "";
 }
 
 /**

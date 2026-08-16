@@ -7,7 +7,6 @@ import { signOut } from "@/actions/auth";
 import { AppearanceMenu } from "./AppearanceMenu";
 import { CommandPalette } from "./CommandPalette";
 import { Help } from "./Help";
-import { MobileNav } from "./MobileNav";
 import type { Dictionary } from "@/i18n";
 
 /**
@@ -132,7 +131,6 @@ export function AppNav({
       </div>
 
       <CommandPalette d={d} />
-      <MobileNav d={d} />
     </header>
   );
 }

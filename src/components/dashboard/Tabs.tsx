@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState, useTransition } from "react";
-import { createDashboard, renameDashboard, deleteDashboard } from "@/actions/dashboard";
+import { createDashboard, renameDashboard, deleteDashboard, setDashboardShared } from "@/actions/dashboard";
 import { Dialog } from "@/components/Dialog";
 import { Field, Input, Button } from "@/components/form";
 import type { Dictionary } from "@/i18n";
@@ -21,12 +21,13 @@ export function Tabs({
   canEdit,
 }: {
   d: Dictionary;
-  dashboards: { id: string; name: string; slug: string }[];
+  dashboards: { id: string; name: string; slug: string; shared: boolean; mine: boolean }[];
   activeId: string;
   canEdit: boolean;
 }) {
   const [dialog, setDialog] = useState<null | "new" | "rename">(null);
   const [name, setName] = useState("");
+  const [shared, setShared] = useState(true);
   const [pending, startTransition] = useTransition();
 
   const active = dashboards.find((x) => x.id === activeId);
@@ -46,6 +47,9 @@ export function Tabs({
                 : "border-transparent text-muted hover:bg-raised hover:text-text"
             }`}
           >
+            {/* A private tab is marked, so it is obvious which board other
+                people in the house can see. */}
+            {!dash.shared && <span className="mr-1 text-[10px] text-faint">🔒</span>}
             {dash.name}
           </Link>
         ))}
@@ -56,6 +60,7 @@ export function Tabs({
               type="button"
               onClick={() => {
                 setName("");
+                setShared(true);
                 setDialog("new");
               }}
               title={d.dashboard.newTab}
@@ -68,6 +73,7 @@ export function Tabs({
                 type="button"
                 onClick={() => {
                   setName(active.name);
+                  setShared(active.shared);
                   setDialog("rename");
                 }}
                 title={d.common.edit}
@@ -86,6 +92,15 @@ export function Tabs({
             <Field label={d.dashboard.tabName}>
               <Input value={name} onChange={(e) => setName(e.target.value)} autoFocus />
             </Field>
+
+            {/* Only the owner sees the switch: an administrator should not be
+                able to publish a board that is not theirs. */}
+            {(dialog === "new" || active?.mine) && (
+              <label className="flex items-center gap-2 text-sm text-muted">
+                <input type="checkbox" checked={!shared} onChange={(e) => setShared(!e.target.checked)} />
+                {d.dashboard.privateTab}
+              </label>
+            )}
             <div className="flex justify-between gap-2 border-t border-line pt-3">
               {dialog === "rename" && dashboards.length > 1 ? (
                 <Button
@@ -113,8 +128,14 @@ export function Tabs({
                   disabled={pending || !name.trim()}
                   onClick={() =>
                     startTransition(async () => {
-                      if (dialog === "new") await createDashboard(name);
-                      else await renameDashboard(activeId, name);
+                      if (dialog === "new") {
+                        await createDashboard(name, shared);
+                      } else {
+                        await renameDashboard(activeId, name);
+                        if (active && active.mine && active.shared !== shared) {
+                          await setDashboardShared(activeId, shared);
+                        }
+                      }
                       setDialog(null);
                     })
                   }

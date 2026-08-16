@@ -151,6 +151,10 @@ model Item {
   y     Int @default(0)
   w     Int @default(3)
   h     Int @default(1)
+  // Pinned: cannot be dragged, and is never pushed aside to make room for a
+  // tile someone else is moving. Folders in particular want this — a folder is
+  // a landing place, and a landing place that wanders is useless.
+  locked Boolean @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -221,6 +225,59 @@ model AlertState {
   notifiedAt DateTime?
 
   updatedAt DateTime @updatedAt
+}
+
+// A condition worth being told about, beyond "is it answering".
+//
+// Availability is handled by the prober and needs no configuration; this is for
+// the questions only the person running the server can ask — "tell me before
+// the disk fills", "tell me if the CPU stays pinned". The condition is PromQL
+// because that is where the numbers already live, and inventing a small query
+// language on top would be a worse version of it.
+model AlertRule {
+  id      String  @id @default(cuid())
+  name    String
+  enabled Boolean @default(true)
+
+  // PromQL returning a number. The first sample of the result is compared.
+  query      String
+  // gt | lt
+  comparison String  @default("gt")
+  threshold  Float
+  // The condition must hold this long before anything is sent — a CPU spike is
+  // not an incident, ten minutes of one is.
+  forSeconds Int     @default(300)
+  // info | warn | error
+  severity   String  @default("warn")
+  // Optional unit for the message: percent | bytes | number
+  unit       String  @default("number")
+
+  // Evaluation state, kept here rather than in a second table: one rule has
+  // exactly one state, and a join for it would be ceremony.
+  firing     Boolean   @default(false)
+  since      DateTime?
+  notifiedAt DateTime?
+  lastValue  Float?
+  lastError  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// A linked Google account, for the calendar widget.
+//
+// Tokens are stored encrypted (lib/secretBox.ts). One row per user: a calendar
+// is personal, and two people sharing a panel should not share a mailbox.
+model GoogleAccount {
+  userId       String   @id
+  email        String
+  // Encrypted at rest.
+  accessToken  String
+  refreshToken String
+  expiresAt    DateTime
+  scope        String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }
 
 // Small key/value store for panel-wide settings that are not secrets:

@@ -8,6 +8,12 @@ import { dockerHosts } from "@/lib/config";
 import { prometheusConfig, proxmoxConfig } from "@/lib/integrations";
 import { Slideshow } from "./Slideshow";
 import { NowPlayingWidget } from "./NowPlaying";
+import { WeatherWidget } from "./Weather";
+import { CalendarWidget } from "./Calendar";
+import { Gauge } from "@/components/Gauge";
+import { Chart } from "@/components/Chart";
+import { prisma } from "@/lib/db";
+import { uptimeBuckets } from "@/lib/status";
 import { bytes, percent, duration } from "@/lib/format";
 import type { Dictionary } from "@/i18n";
 
@@ -25,9 +31,11 @@ export type WidgetProps = {
   config: Record<string, unknown>;
   title: string;
   d: Dictionary;
+  /** Who is looking — the calendar is personal to them. */
+  userId?: string;
 };
 
-export async function Widget({ widget, config, title, d }: WidgetProps) {
+export async function Widget({ widget, config, title, d, userId }: WidgetProps) {
   switch (widget) {
     case "system":
       return <SystemWidget config={config} title={title} d={d} />;
@@ -54,6 +62,20 @@ export async function Widget({ widget, config, title, d }: WidgetProps) {
       return <NowPlayingWidget title={title} d={d} />;
     case "load":
       return <LoadWidget config={config} title={title} d={d} />;
+    case "weather":
+      return <WeatherWidget config={config} title={title} d={d} />;
+    case "calendar":
+      return userId ? (
+        <CalendarWidget config={config} title={title} d={d} userId={userId} />
+      ) : (
+        <Card className="p-4">
+          <p className="text-sm text-muted">{d.widgets.noData}</p>
+        </Card>
+      );
+    case "gauge":
+      return <GaugeWidget config={config} title={title} d={d} />;
+    case "uptimestrip":
+      return <UptimeStripWidget config={config} title={title} d={d} />;
     case "notes":
       return <NotesWidget title={title} text={str(config.text) ?? ""} />;
     default:
@@ -219,26 +241,62 @@ async function ChartWidget({ config, title, d }: { config: Record<string, unknow
 
   const minutes = num(config.rangeMinutes, 180);
   const unit = str(config.unit) ?? "number";
-  const series = await queryRange(promql, minutes);
-  const first = series[0];
-  const last = first?.points.at(-1)?.[1];
+  // A query may return many series (one per device, per mount, per core), and a
+  // second query can be added to put two different metrics on one axis.
+  const queries = [promql, str(config.query2)].filter(Boolean) as string[];
+  const results = await Promise.all(queries.map((q) => queryRange(q, minutes)));
 
-  const formatted =
-    last === undefined ? "—" : unit === "percent" ? percent(last, 1) : unit === "bytes" ? bytes(last) : last.toFixed(2);
+  const format = (v: number) => (unit === "percent" ? percent(v, 1) : unit === "bytes" ? bytes(v) : v.toFixed(2));
+
+  const series = results
+    .flatMap((result, qi) =>
+      result.map((s) => ({
+        label: seriesLabel(s.metric) || (queries.length > 1 ? `#${qi + 1}` : title),
+        points: s.points,
+      }))
+    )
+    .slice(0, 5);
 
   return (
     <Card className="h-full">
-      <CardHeader title={title} action={<span className="font-mono text-xs tabular-nums text-faint">{formatted}</span>} />
+      <CardHeader
+        title={title}
+        action={
+          series[0]?.points.at(-1) ? (
+            <span className="font-mono text-xs tabular-nums text-faint">{format(series[0].points.at(-1)![1])}</span>
+          ) : null
+        }
+      />
       <div className="p-4">
-        {first ? (
-          <Sparkline points={first.points} min={unit === "percent" ? 0 : undefined} max={unit === "percent" ? 100 : undefined} />
+        {series.length > 0 ? (
+          <Chart
+            series={series}
+            min={unit === "percent" ? 0 : undefined}
+            max={unit === "percent" ? 100 : undefined}
+            format={format}
+            legend={series.length > 1}
+          />
         ) : (
           <p className="text-sm text-muted">{d.widgets.noData}</p>
         )}
-        {series.length > 1 && <p className="mt-2 text-xs text-faint">+{series.length - 1}</p>}
       </div>
     </Card>
   );
+}
+
+/**
+ * A readable name for one series out of its Prometheus labels.
+ *
+ * The interesting label is whichever one distinguishes the series — device,
+ * mount point, container — and never the metric name, which is the same for
+ * all of them and would make the legend a column of identical words.
+ */
+function seriesLabel(metric: Record<string, string>): string {
+  for (const key of ["name", "device", "mountpoint", "instance", "sensor", "chip", "cpu", "job"]) {
+    if (metric[key]) return metric[key];
+  }
+  const entries = Object.entries(metric).filter(([k]) => k !== "__name__");
+  return entries.length > 0 ? entries[0][1] : "";
 }
 
 // ──────────────────────────────── Containers ─────────────────────────────
@@ -303,6 +361,136 @@ async function ProxmoxWidget({ title, d }: { title: string; d: Dictionary }) {
             <Meter value={s.total > 0 ? (s.used / s.total) * 100 : 0} />
           </div>
         ))}
+      </div>
+    </Card>
+  );
+}
+
+// ─────────────────────────────── Gauge ───────────────────────────────────
+
+/**
+ * One number on a dial.
+ *
+ * The same data a chart would show, minus the history — for the values where
+ * "right now" is the whole question: how full is the disk, how hot is the CPU.
+ */
+async function GaugeWidget({ config, title, d }: { config: Record<string, unknown>; title: string; d: Dictionary }) {
+  if (!(await prometheusConfig())) {
+    return <NotConfigured title={title} message={d.monitoring.noPrometheus} hint={d.monitoring.noPrometheusHint} />;
+  }
+
+  const promql = str(config.query);
+  if (!promql) {
+    return (
+      <Card className="h-full">
+        <CardHeader title={title} />
+        <p className="p-4 text-sm text-muted">{d.widgets.queryHint}</p>
+      </Card>
+    );
+  }
+
+  const unit = str(config.unit) ?? "percent";
+  const value = await queryOne(promql);
+  const min = num(config.min, 0);
+  const max = num(config.max, unit === "percent" ? 100 : 0) || autoMax(value);
+
+  const label =
+    value === null ? "—" : unit === "percent" ? percent(value, 0) : unit === "bytes" ? bytes(value) : value.toFixed(1);
+
+  return (
+    <Card className="flex h-full flex-col">
+      <CardHeader title={title} />
+      <div className="flex flex-1 items-center justify-center p-3">
+        <Gauge
+          value={value}
+          min={min}
+          max={max}
+          label={label}
+          caption={str(config.caption)}
+          thresholds={{ warn: num(config.warn, max * 0.75), danger: num(config.danger, max * 0.9) }}
+        />
+      </div>
+    </Card>
+  );
+}
+
+/** A sensible ceiling when none was given: round the current value up. */
+function autoMax(value: number | null): number {
+  if (value === null || value <= 0) return 100;
+  const magnitude = 10 ** Math.floor(Math.log10(value));
+  return Math.ceil(value / magnitude) * magnitude || 100;
+}
+
+// ───────────────────────────── Uptime strip ──────────────────────────────
+
+/**
+ * A row per service, a block per slice of time, green where it answered.
+ *
+ * This is the one view that says "it has been fine all week" or "it drops out
+ * every night", which no single status dot can.
+ */
+async function UptimeStripWidget({
+  config,
+  title,
+  d,
+}: {
+  config: Record<string, unknown>;
+  title: string;
+  d: Dictionary;
+}) {
+  const hours = num(config.hours, 24);
+  const blocks = num(config.blocks, 40);
+  const only = lines(config.items);
+
+  const items = await prisma.item.findMany({
+    where: { checkKind: { not: "none" } },
+    select: { id: true, title: true },
+    orderBy: { title: "asc" },
+  });
+  const chosen = (only.length > 0 ? items.filter((i) => only.includes(i.title)) : items).slice(0, num(config.limit, 8));
+  const buckets = await uptimeBuckets(
+    chosen.map((i) => i.id),
+    hours,
+    blocks
+  );
+
+  return (
+    <Card className="h-full">
+      <CardHeader title={title} action={<span className="text-[11px] text-faint">{hours} h</span>} />
+      <div className="space-y-2 p-4">
+        {chosen.length === 0 && <p className="text-sm text-muted">{d.widgets.noData}</p>}
+        {chosen.map((item) => {
+          const strip = buckets.get(item.id) ?? [];
+          const total = strip.reduce((n, b) => n + b.total, 0);
+          const ok = strip.reduce((n, b) => n + b.ok, 0);
+          return (
+            <div key={item.id}>
+              <div className="mb-1 flex items-baseline justify-between gap-2">
+                <span className="truncate text-xs">{item.title}</span>
+                <span className="shrink-0 font-mono text-[11px] tabular-nums text-muted">
+                  {total > 0 ? percent((ok / total) * 100, 1) : "—"}
+                </span>
+              </div>
+              <div className="flex h-4 gap-[2px]">
+                {strip.map((bucket, i) => (
+                  <span
+                    key={i}
+                    title={bucket.total === 0 ? d.status.unknown : percent((bucket.ok / bucket.total) * 100, 0)}
+                    className={`flex-1 rounded-[2px] ${
+                      bucket.total === 0
+                        ? "bg-line/60"
+                        : bucket.ok === bucket.total
+                          ? "bg-ok"
+                          : bucket.ok === 0
+                            ? "bg-danger"
+                            : "bg-warn"
+                    }`}
+                  />
+                ))}
+              </div>
+            </div>
+          );
+        })}
       </div>
     </Card>
   );

@@ -3,6 +3,7 @@ import { needsSetup } from "@/lib/auth";
 import { currentUser } from "@/lib/session";
 import { dict } from "@/i18n";
 import { AppNav } from "@/components/AppNav";
+import { MobileNav } from "@/components/MobileNav";
 import { startMonitor } from "@/lib/monitor";
 
 export const dynamic = "force-dynamic";
@@ -32,6 +33,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       {/* The bottom padding is for the floating navigation on a phone: without
           it the last tile ends up underneath the pill. */}
       <main className="mx-auto w-full max-w-[1400px] flex-1 px-4 py-5 pb-28 sm:px-6 sm:pb-5">{children}</main>
+
+      {/* Deliberately a sibling of the header, not a child of it. `position:
+          fixed` is positioned against the nearest ancestor with a filter,
+          transform or backdrop-filter — and the header has backdrop-blur, which
+          is why the bar rendered stuck to the bottom of the *header* instead of
+          the bottom of the screen. */}
+      <MobileNav d={d} />
     </div>
   );
 }

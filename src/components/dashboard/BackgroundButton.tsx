@@ -2,7 +2,8 @@
 
 import { useState, useTransition } from "react";
 import { Dialog } from "@/components/Dialog";
-import { Field, Input, Button } from "@/components/form";
+import { Field, Button } from "@/components/form";
+import { ImagePicker } from "@/components/ImagePicker";
 import { updateDashboardBackground } from "@/actions/dashboard";
 import type { Dictionary } from "@/i18n";
 
@@ -47,11 +48,10 @@ export function BackgroundButton({
         <Dialog open onClose={() => setOpen(false)} title={d.dashboard.background}>
           <div className="flex flex-col gap-4">
             <Field label={d.dashboard.backgroundUrl} hint={d.dashboard.backgroundHint}>
-              <Input
+              <ImagePicker
+                d={d}
                 value={form.backgroundUrl}
-                onChange={(e) => setForm({ ...form, backgroundUrl: e.target.value })}
-                placeholder="https://…/photo.jpg"
-                className="font-mono text-xs"
+                onChange={(url) => setForm({ ...form, backgroundUrl: url })}
               />
             </Field>
 

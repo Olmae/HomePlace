@@ -7,6 +7,9 @@ import { Field, Input, Select, Textarea, Button } from "@/components/form";
 import { createItem, updateItem, type ItemInput } from "@/actions/dashboard";
 import { autoIcon, GLYPH } from "@/lib/icons";
 import { TileIcon } from "@/components/TileIcon";
+import { IconPicker } from "@/components/IconPicker";
+import { PlacePicker } from "./PlacePicker";
+import { ImagePicker } from "@/components/ImagePicker";
 import type { Dictionary } from "@/i18n";
 
 export type ContainerOption = {
@@ -24,7 +27,22 @@ export type ContainerOption = {
 
 type Kind = "service" | "link" | "folder" | "widget";
 
-const widgetKinds = ["system", "disks", "load", "chart", "containers", "proxmox", "clock", "notes", "slideshow", "nowplaying"] as const;
+const widgetKinds = [
+  "system",
+  "disks",
+  "load",
+  "chart",
+  "gauge",
+  "uptimestrip",
+  "weather",
+  "calendar",
+  "containers",
+  "proxmox",
+  "clock",
+  "notes",
+  "slideshow",
+  "nowplaying",
+] as const;
 
 /**
  * The one form that creates and edits everything on a dashboard.
@@ -84,6 +102,18 @@ export function ItemDialog({
     containersFilter: Array.isArray(config.containers) ? (config.containers as string[]).join("\n") : str(config.containers),
     sortBy: str(config.sortBy) || "cpu",
     limit: Number(config.limit ?? 6),
+    query2: str(config.query2),
+    place: str(config.place),
+    latitude: config.latitude === undefined ? "" : String(config.latitude),
+    longitude: config.longitude === undefined ? "" : String(config.longitude),
+    min: Number(config.min ?? 0),
+    max: Number(config.max ?? 100),
+    warn: Number(config.warn ?? 75),
+    danger: Number(config.danger ?? 90),
+    hours: Number(config.hours ?? 24),
+    blocks: Number(config.blocks ?? 40),
+    days: Number(config.days ?? 7),
+    services: Array.isArray(config.items) ? (config.items as string[]).join("\n") : str(config.items),
   });
 
   function set<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
@@ -169,7 +199,37 @@ export function ItemDialog({
   function widgetConfig(): Record<string, unknown> {
     switch (form.widget) {
       case "chart":
-        return { query: form.query, unit: form.unit, rangeMinutes: Number(form.rangeMinutes) };
+        return {
+          query: form.query,
+          query2: form.query2,
+          unit: form.unit,
+          rangeMinutes: Number(form.rangeMinutes),
+        };
+      case "gauge":
+        return {
+          query: form.query,
+          unit: form.unit,
+          min: Number(form.min),
+          max: Number(form.max),
+          warn: Number(form.warn),
+          danger: Number(form.danger),
+          caption: form.caption,
+        };
+      case "weather":
+        return {
+          place: form.place,
+          latitude: Number(form.latitude),
+          longitude: Number(form.longitude),
+        };
+      case "calendar":
+        return { days: Number(form.days), limit: Number(form.limit) };
+      case "uptimestrip":
+        return {
+          hours: Number(form.hours),
+          blocks: Number(form.blocks),
+          items: form.services.split("\n").map((n) => n.trim()).filter(Boolean),
+          limit: Number(form.limit),
+        };
       case "system":
       case "disks":
         return { instance: form.instance, rangeMinutes: Number(form.rangeMinutes) };
@@ -199,6 +259,9 @@ export function ItemDialog({
   // Adding a container is a one-click step: the grid and nothing else. Editing
   // one, or adding anything else, is a form.
   const containerStep = mode === "add" && kind === "service";
+  // Folders have no size field: they are resized by dragging their corner like
+  // everything else, and asking for a number up front only adds a decision.
+  const isFolder = kind === "folder";
 
   return (
     <Dialog open onClose={onClose} title={mode === "add" ? d.dashboard.addTitle : d.common.edit} wide>
@@ -245,6 +308,9 @@ export function ItemDialog({
                 <Field label={d.widgets.query} hint={d.widgets.queryHint}>
                   <Input value={form.query} onChange={(e) => set("query", e.target.value)} className="font-mono" placeholder="node_load1" />
                 </Field>
+                <Field label={d.widgets.secondQuery} hint={d.widgets.secondQueryHint}>
+                  <Input value={form.query2} onChange={(e) => set("query2", e.target.value)} className="font-mono" />
+                </Field>
                 <div className="grid grid-cols-2 gap-3">
                   <Field label={d.widgets.unit}>
                     <Select value={form.unit} onChange={(e) => set("unit", e.target.value)}>
@@ -276,6 +342,93 @@ export function ItemDialog({
               <Field label="Time zone" hint="Europe/Moscow — empty means the browser's own">
                 <Input value={form.timeZone} onChange={(e) => set("timeZone", e.target.value)} className="font-mono" />
               </Field>
+            )}
+
+            {form.widget === "gauge" && (
+              <>
+                <Field label={d.widgets.query} hint={d.widgets.queryHint}>
+                  <Input
+                    value={form.query}
+                    onChange={(e) => set("query", e.target.value)}
+                    className="font-mono text-xs"
+                    placeholder="node_load1"
+                  />
+                </Field>
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label={d.widgets.unit}>
+                    <Select value={form.unit} onChange={(e) => set("unit", e.target.value)}>
+                      <option value="percent">{d.widgets.unitPercent}</option>
+                      <option value="number">{d.widgets.unitNumber}</option>
+                      <option value="bytes">{d.widgets.unitBytes}</option>
+                    </Select>
+                  </Field>
+                  <Field label={d.widgets.caption}>
+                    <Input value={form.caption} onChange={(e) => set("caption", e.target.value)} />
+                  </Field>
+                </div>
+                <div className="grid grid-cols-4 gap-2">
+                  <Field label={d.widgets.minValue}>
+                    <Input type="number" value={form.min} onChange={(e) => set("min", Number(e.target.value))} />
+                  </Field>
+                  <Field label={d.widgets.maxValue}>
+                    <Input type="number" value={form.max} onChange={(e) => set("max", Number(e.target.value))} />
+                  </Field>
+                  <Field label={d.widgets.warnAt}>
+                    <Input type="number" value={form.warn} onChange={(e) => set("warn", Number(e.target.value))} />
+                  </Field>
+                  <Field label={d.widgets.dangerAt}>
+                    <Input type="number" value={form.danger} onChange={(e) => set("danger", Number(e.target.value))} />
+                  </Field>
+                </div>
+              </>
+            )}
+
+            {form.widget === "weather" && (
+              <Field label={d.widgets.place} hint={d.widgets.weatherPick}>
+                <PlacePicker
+                  d={d}
+                  value={form.place}
+                  onPick={(p) =>
+                    setForm((f) => ({
+                      ...f,
+                      place: p.name,
+                      latitude: String(p.latitude),
+                      longitude: String(p.longitude),
+                      title: f.title || p.name,
+                    }))
+                  }
+                />
+              </Field>
+            )}
+
+            {form.widget === "uptimestrip" && (
+              <>
+                <div className="grid grid-cols-3 gap-2">
+                  <Field label={d.widgets.hours}>
+                    <Input type="number" min={1} value={form.hours} onChange={(e) => set("hours", Number(e.target.value))} />
+                  </Field>
+                  <Field label={d.widgets.blocks}>
+                    <Input type="number" min={5} max={120} value={form.blocks} onChange={(e) => set("blocks", Number(e.target.value))} />
+                  </Field>
+                  <Field label={d.widgets.limit}>
+                    <Input type="number" min={1} max={20} value={form.limit} onChange={(e) => set("limit", Number(e.target.value))} />
+                  </Field>
+                </div>
+                <Field label={d.widgets.onlyServices} hint={d.widgets.onlyServicesHint}>
+                  <Textarea rows={3} value={form.services} onChange={(e) => set("services", e.target.value)} className="text-xs" />
+                </Field>
+              </>
+            )}
+
+            {form.widget === "calendar" && (
+              <div className="grid grid-cols-2 gap-3">
+                <Field label={d.widgets.calendarDays}>
+                  <Input type="number" min={1} max={60} value={form.days} onChange={(e) => set("days", Number(e.target.value))} />
+                </Field>
+                <Field label={d.widgets.limit}>
+                  <Input type="number" min={1} max={30} value={form.limit} onChange={(e) => set("limit", Number(e.target.value))} />
+                </Field>
+              </div>
             )}
 
             {form.widget === "load" && (
@@ -314,6 +467,13 @@ export function ItemDialog({
                     placeholder="https://…/photo.jpg"
                   />
                 </Field>
+                {/* Uploading appends to the list rather than replacing it, so a
+                    slideshow can be built one picture at a time. */}
+                <ImagePicker
+                  d={d}
+                  value=""
+                  onChange={(url) => set("images", form.images ? `${form.images}\n${url}` : url)}
+                />
                 <div className="grid grid-cols-2 gap-3">
                   <Field label={`${d.widgets.interval}, ${d.dashboard.seconds}`}>
                     <Input
@@ -371,8 +531,13 @@ export function ItemDialog({
         )}
 
         {kind !== "widget" && !containerStep && (
-          <Field label={d.dashboard.tileIcon} hint={d.dashboard.tileIconHint}>
-            <Input value={form.icon} onChange={(e) => set("icon", e.target.value)} placeholder="🎬" />
+          <Field label={d.dashboard.tileIcon}>
+            <IconPicker
+              d={d}
+              value={form.icon}
+              onChange={(icon) => set("icon", icon)}
+              hintName={form.containerName || form.title}
+            />
           </Field>
         )}
 
@@ -396,7 +561,7 @@ export function ItemDialog({
           </div>
         )}
 
-        {!containerStep && (
+        {!containerStep && !isFolder && (
         <div className="grid grid-cols-2 gap-3">
           <Field label={d.dashboard.tileWidth}>
             <Select value={String(form.w)} onChange={(e) => set("w", Number(e.target.value))}>
@@ -407,7 +572,8 @@ export function ItemDialog({
               ))}
             </Select>
           </Field>
-          {kind !== "folder" && folders.length > 0 && (
+          {/* `kind` is already known not to be a folder in this branch. */}
+          {folders.length > 0 && (
             <Field label={d.dashboard.addFolder}>
               <Select value={form.parentId} onChange={(e) => set("parentId", e.target.value)}>
                 <option value="">—</option>

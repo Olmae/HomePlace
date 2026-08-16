@@ -12,6 +12,7 @@ import { Card, CardHeader, Badge, SectionTitle } from "@/components/ui";
 import { ago } from "@/lib/format";
 import { PasswordForm } from "./PasswordForm";
 import { IntegrationForms } from "./IntegrationForms";
+import { RuleForms } from "./RuleForms";
 import { currentNowPlayingToken } from "@/actions/integrations";
 
 export const dynamic = "force-dynamic";
@@ -34,10 +35,11 @@ export default async function SettingsPage() {
     status.docker ? dockerHealth() : Promise.resolve([]),
     status.prometheus ? prometheusHealth() : Promise.resolve({ ok: false, error: "not configured" }),
     status.proxmox ? proxmoxHealth() : Promise.resolve({ ok: false, error: "not configured" }),
-    integrationsForDisplay(),
+    integrationsForDisplay(user.id),
     isAdmin ? currentNowPlayingToken() : Promise.resolve(""),
   ]);
   const iconPack = await getSetting<boolean>("icons.pack", false);
+  const rules = isAdmin ? await prisma.alertRule.findMany({ orderBy: { createdAt: "asc" } }) : [];
 
   const users = isAdmin
     ? await prisma.user.findMany({ orderBy: { createdAt: "asc" } })
@@ -98,6 +100,13 @@ export default async function SettingsPage() {
           </div>
         )}
       </section>
+
+      {isAdmin && (
+        <section>
+          <SectionTitle>{d.settings.alerts}</SectionTitle>
+          <RuleForms d={d} rules={rules} />
+        </section>
+      )}
 
       <section>
         <SectionTitle>{d.settings.account}</SectionTitle>

@@ -24,7 +24,10 @@ export const dynamic = "force-dynamic";
  * findable among twenty other tabs.
  */
 export async function generateMetadata({ searchParams }: { searchParams: { tab?: string } }) {
-  const dashboards = await prisma.dashboard.findMany({ orderBy: { order: "asc" }, select: { id: true, name: true, slug: true } });
+  const dashboards = await prisma.dashboard.findMany({
+    orderBy: { order: "asc" },
+    select: { id: true, name: true, slug: true },
+  });
   const active =
     dashboards.find((x) => x.slug === searchParams.tab) ??
     dashboards.find((x) => x.id === searchParams.tab) ??
@@ -53,7 +56,11 @@ export default async function DashboardPage({
   // no-ops after the first run.
   await ensureSlugs();
 
-  const dashboards = await prisma.dashboard.findMany({ orderBy: { order: "asc" } });
+  const dashboards = await prisma.dashboard.findMany({
+    // Shared boards, plus the private ones belonging to whoever is looking.
+    where: { OR: [{ shared: true }, { ownerId: user.id }] },
+    orderBy: { order: "asc" },
+  });
   // The tab is addressed by its slug; ids still resolve so old bookmarks and
   // links from elsewhere keep working.
   const active =
@@ -128,7 +135,13 @@ export default async function DashboardPage({
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <Tabs
           d={d}
-          dashboards={dashboards.map((x) => ({ id: x.id, name: x.name, slug: x.slug ?? x.id }))}
+          dashboards={dashboards.map((x) => ({
+            id: x.id,
+            name: x.name,
+            slug: x.slug ?? x.id,
+            shared: x.shared,
+            mine: x.ownerId === user.id,
+          }))}
           activeId={active.id}
           canEdit={editable}
         />
@@ -161,7 +174,12 @@ export default async function DashboardPage({
       {items.length === 0 ? (
         <EmptyState title={d.dashboard.empty} hint={editable ? d.dashboard.emptyHint : undefined} />
       ) : (
-        <Board layout={items.map(({ id, x, y, w, h }) => ({ id, x, y, w, h }))} editing={editing}>
+        <Board
+          layout={items.map(({ id, x, y, w, h }) => ({ id, x, y, w, h }))}
+          editing={editing}
+          folderIds={items.filter((i) => i.kind === "folder").map((i) => i.id)}
+          lockedIds={items.filter((i) => i.locked).map((i) => i.id)}
+        >
           {items.map((item) => (
             <Tile
               key={item.id}
@@ -171,6 +189,7 @@ export default async function DashboardPage({
               editing={editing}
               canEdit={editable}
               iconPack={iconPack}
+              userId={user.id}
             />
           ))}
         </Board>

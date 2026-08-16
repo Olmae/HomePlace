@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import type { Item } from "@prisma/client";
-import { deleteItem } from "@/actions/dashboard";
+import { deleteItem, toggleLock } from "@/actions/dashboard";
 import { ItemDialog } from "./ItemDialog";
 import type { Dictionary } from "@/i18n";
 
@@ -24,6 +24,14 @@ export function ItemActions({ item, d }: { item: Item; d: Dictionary }) {
   return (
     <>
       <div className="pointer-events-auto absolute right-1.5 top-1.5 z-20 flex gap-0.5 rounded-control border border-line bg-surface/95 p-0.5 shadow-card">
+        <IconButton
+          label={item.locked ? d.dashboard.unpin : d.dashboard.pin}
+          active={item.locked}
+          disabled={pending}
+          onClick={() => startTransition(() => void toggleLock(item.id))}
+        >
+          {item.locked ? "🔒" : "🔓"}
+        </IconButton>
         <IconButton label={d.common.edit} disabled={pending} onClick={() => setEditing(true)}>
           ✎
         </IconButton>
@@ -53,12 +61,14 @@ function IconButton({
   onClick,
   disabled,
   danger,
+  active,
 }: {
   children: React.ReactNode;
   label: string;
   onClick: () => void;
   disabled?: boolean;
   danger?: boolean;
+  active?: boolean;
 }) {
   return (
     <button
@@ -71,7 +81,11 @@ function IconButton({
       title={label}
       aria-label={label}
       className={`h-7 w-7 rounded text-xs transition-colors disabled:opacity-40 ${
-        danger ? "text-danger hover:bg-danger/10" : "text-muted hover:bg-raised hover:text-text"
+        danger
+          ? "text-danger hover:bg-danger/10"
+          : active
+            ? "bg-warn/15 text-warn"
+            : "text-muted hover:bg-raised hover:text-text"
       }`}
     >
       {children}

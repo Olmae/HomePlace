@@ -3,6 +3,7 @@ import { prisma } from "./db";
 import { settings } from "./config";
 import { listContainers } from "./docker";
 import { processAlerts } from "./alerts";
+import { evaluateRules } from "./rules";
 
 /**
  * The availability prober.
@@ -45,6 +46,9 @@ async function tick(): Promise<void> {
   running = true;
   try {
     await probeDue();
+    // Metric rules are evaluated on the same tick as the probes: one clock for
+    // everything the panel watches, and nothing to schedule separately.
+    await evaluateRules();
     await pruneOldChecks();
   } catch (e) {
     console.error("monitor tick failed:", e);

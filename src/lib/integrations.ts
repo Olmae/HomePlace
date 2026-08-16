@@ -1,5 +1,6 @@
 import "server-only";
 import { getSetting, setSetting } from "./db";
+import { googleConfig, linkedAccount, redirectUri as googleRedirectUri } from "./google";
 import { decrypt, encrypt } from "./secretBox";
 import {
   prometheus as prometheusEnv,
@@ -190,9 +191,22 @@ export async function integrationStatus() {
 }
 
 /** Settings as the form should show them: secrets masked, never sent raw. */
-export async function integrationsForDisplay() {
-  const [prom, pve, tg] = await Promise.all([prometheusConfig(), proxmoxConfig(), telegramConfig()]);
+export async function integrationsForDisplay(userId?: string) {
+  const [prom, pve, tg, google, linked] = await Promise.all([
+    prometheusConfig(),
+    proxmoxConfig(),
+    telegramConfig(),
+    googleConfig(),
+    userId ? linkedAccount(userId) : Promise.resolve(null),
+  ]);
   return {
+    google: {
+      clientId: google?.clientId ?? "",
+      hasSecret: !!google?.clientSecret,
+      source: (google?.source ?? "none") as Source,
+      linkedEmail: linked?.email ?? null,
+      redirectUri: googleRedirectUri(),
+    },
     prometheus: prom
       ? { url: prom.url, username: prom.username ?? "", hasPassword: !!prom.password, source: prom.source }
       : { url: "", username: "", hasPassword: false, source: "none" as Source },

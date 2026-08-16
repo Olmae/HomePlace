@@ -11,6 +11,7 @@ import { Card, CardHeader, Badge, StatusDot } from "@/components/ui";
 import { TileIcon } from "@/components/TileIcon";
 import { Sparkline } from "@/components/Sparkline";
 import { ContainerControls } from "@/components/containers/ContainerControls";
+import { LiveLogs } from "@/components/containers/LiveLogs";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import { autoIcon } from "@/lib/icons";
 import { bytes, ago } from "@/lib/format";
@@ -162,14 +163,11 @@ export default async function ContainerDetailPage({ params }: { params: { host: 
           </>
         )}
 
-        <Card className="lg:col-span-3">
-          <CardHeader title={d.containers.logs} action={<span className="text-xs text-faint">200</span>} />
-          {/* Logs scroll inside their own box: a container that prints long
-              lines must not make the whole page scroll sideways. */}
-          <pre className="max-h-[28rem] overflow-auto p-4 font-mono text-[11px] leading-relaxed text-muted">
-            {logs.trim() || "—"}
-          </pre>
-        </Card>
+        {/* Logs scroll inside their own box and keep following the tail; a
+            container that prints long lines must not make the page scroll. */}
+        <div className="lg:col-span-3">
+          <LiveLogs d={d} hostKey={container.hostKey} id={container.id} initial={logs} />
+        </div>
 
         {container.env.length > 0 && (
           <Card className="lg:col-span-3">

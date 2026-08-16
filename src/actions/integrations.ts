@@ -8,6 +8,7 @@ import { savePrometheus, saveProxmox, saveTelegram, telegramConfig } from "@/lib
 import { prometheusHealth } from "@/lib/prometheus";
 import { proxmoxHealth } from "@/lib/proxmox";
 import { sendWith } from "@/lib/telegram";
+import { saveGoogleConfig, unlinkAccount } from "@/lib/google";
 
 /**
  * Configuring the integrations from the settings page.
@@ -113,4 +114,26 @@ export async function disableNowPlaying(): Promise<void> {
   await setSetting("nowplaying.token", "");
   await setSetting("nowplaying.state", null);
   revalidatePath("/settings");
+}
+
+/**
+ * Google client credentials.
+ *
+ * Registered by whoever runs the panel, in their own Google Cloud project —
+ * an OAuth client cannot be shipped with an open-source application, because
+ * the secret would be in the repository and Google would revoke it.
+ */
+export async function saveGoogleSettings(input: { clientId: string; clientSecret: string }): Promise<TestResult> {
+  await requireRole("admin");
+  await saveGoogleConfig(input.clientId, input.clientSecret);
+  revalidatePath("/settings");
+  return { ok: true };
+}
+
+/** Forget the linked calendar for the signed-in account. */
+export async function unlinkGoogle(): Promise<void> {
+  const user = await requireRole("admin");
+  await unlinkAccount(user.id);
+  revalidatePath("/settings");
+  revalidatePath("/");
 }

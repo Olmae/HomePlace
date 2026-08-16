@@ -240,6 +240,66 @@ export async function containerLogs(hostKey: string, id: string, tail = 200): Pr
 }
 
 /**
+ * Follow a container's logs.
+ *
+ * Returns a stream of already-decoded text: Docker multiplexes stdout and
+ * stderr with an eight-byte header per frame, and every consumer of this would
+ * otherwise have to know that. The caller's AbortSignal is what ends it — when
+ * the browser closes the page, the follow stops.
+ */
+export async function streamLogs(
+  hostKey: string,
+  id: string,
+  tail: number,
+  signal: AbortSignal
+): Promise<ReadableStream<string> | null> {
+  const host = dockerHosts().find((h) => h.key === hostKey);
+  if (!host) return null;
+
+  const res = await fetch(
+    `${host.url}/containers/${encodeURIComponent(id)}/logs?stdout=1&stderr=1&follow=1&timestamps=0&tail=${tail}`,
+    { cache: "no-store", signal }
+  );
+  if (!res.ok || !res.body) return null;
+
+  // Typed explicitly: Buffer.concat widens to ArrayBufferLike, which no longer
+  // matches the narrower Buffer<ArrayBuffer> that Buffer.alloc infers.
+  let carry: Buffer = Buffer.alloc(0);
+  return res.body.pipeThrough(
+    new TransformStream<Uint8Array, string>({
+      transform(chunk, controller) {
+        // Frames can be split across chunks, so whatever cannot be decoded yet
+        // is carried into the next one.
+        carry = Buffer.concat([carry, Buffer.from(chunk)]) as Buffer;
+        const { text, rest } = takeFrames(carry);
+        carry = rest;
+        if (text) controller.enqueue(text);
+      },
+    })
+  );
+}
+
+/** Consume as many complete frames as `buf` holds; return the remainder. */
+function takeFrames(buf: Buffer): { text: string; rest: Buffer } {
+
+  let offset = 0;
+  const parts: string[] = [];
+
+  while (offset + 8 <= buf.length) {
+    const type = buf[offset];
+    // A container with a TTY writes plain bytes with no framing at all.
+    if (type !== 1 && type !== 2) return { text: buf.toString("utf8"), rest: Buffer.alloc(0) };
+
+    const length = buf.readUInt32BE(offset + 4);
+    if (offset + 8 + length > buf.length) break;
+    parts.push(buf.subarray(offset + 8, offset + 8 + length).toString("utf8"));
+    offset += 8 + length;
+  }
+
+  return { text: parts.join(""), rest: buf.subarray(offset) };
+}
+
+/**
  * Docker multiplexes stdout and stderr into one stream with an 8-byte header per
  * frame. Without stripping it, every line starts with control bytes.
  */

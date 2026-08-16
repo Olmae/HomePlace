@@ -42,10 +42,19 @@ export function overlaps(a: Box, b: Box): boolean {
  * The iteration cap is a safety net, not a limit anyone reaches: each pass
  * strictly increases the y of at least one tile, so it terminates on its own.
  */
-export function resolveCollisions(boxes: Box[], movedId: string): Box[] {
+export function resolveCollisions(boxes: Box[], movedId: string, locked: Set<string> = new Set()): Box[] {
   const result = boxes.map((b) => ({ ...b }));
   const moved = result.find((b) => b.id === movedId);
   if (!moved) return result;
+
+  // A pinned tile stays where it is, so the tile being dragged is what gives
+  // way. Without this the pin would be advisory — the first neighbour dropped
+  // on top of it would shove it down the board.
+  for (let guard = 0; guard < 50; guard++) {
+    const blocker = result.find((b) => b.id !== movedId && locked.has(b.id) && overlaps(b, moved));
+    if (!blocker) break;
+    moved.y = blocker.y + blocker.h;
+  }
 
   const settled = new Set([movedId]);
 
@@ -54,7 +63,7 @@ export function resolveCollisions(boxes: Box[], movedId: string): Box[] {
 
     for (const anchor of result.filter((b) => settled.has(b.id))) {
       for (const other of result) {
-        if (other.id === anchor.id || settled.has(other.id)) continue;
+        if (other.id === anchor.id || settled.has(other.id) || locked.has(other.id)) continue;
         if (!overlaps(anchor, other)) continue;
         other.y = anchor.y + anchor.h;
         settled.add(other.id);
@@ -76,11 +85,15 @@ export function resolveCollisions(boxes: Box[], movedId: string): Box[] {
  * Deliberately *not* run while dragging: a gap the user made on purpose has to
  * survive, and only gaps left behind by a departure get closed.
  */
-export function compactVertically(boxes: Box[]): Box[] {
+export function compactVertically(boxes: Box[], locked: Set<string> = new Set()): Box[] {
   const sorted = [...boxes].sort((a, b) => a.y - b.y || a.x - b.x).map((b) => ({ ...b }));
   const placed: Box[] = [];
 
   for (const box of sorted) {
+    if (locked.has(box.id)) {
+      placed.push(box);
+      continue;
+    }
     let y = box.y;
     while (y > 0) {
       const candidate = { ...box, y: y - 1 };

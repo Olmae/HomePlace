@@ -17,43 +17,86 @@ import { telegramConfig, type TelegramSettings } from "./integrations";
 /**
  * Dispatcher for the proxy, if one is configured.
  *
- * socks5:// goes through fetch-socks, http(s):// through undici's own
- * ProxyAgent. Built per call rather than cached because the address can change
- * from the settings page at any time, and a stale agent would keep using the
- * old one until a restart.
+ * Cached per proxy address, and that caching is the point. A tunnelled proxy —
+ * a VPN client, typically — is often slow to establish the first connection and
+ * fast on every one after it. A dispatcher built fresh for each message pays
+ * that cost every time and times out; a kept one keeps the pool warm. The cache
+ * is keyed by the URL, so changing the address in settings takes effect
+ * immediately without a restart.
+ *
+ * The return type is deliberately loose: fetch-socks bundles its own copy of
+ * undici, and the two Dispatcher types are structurally identical but not
+ * interchangeable to TypeScript. Both are valid dispatchers at runtime.
  */
-// The return type is deliberately loose: fetch-socks bundles its own copy of
-// undici, and the two Dispatcher types are structurally identical but not
-// interchangeable to TypeScript. Both are valid dispatchers at runtime.
+const dispatchers = new Map<string, unknown>();
+
 function proxyDispatcher(proxyUrl: string): unknown {
   if (!proxyUrl) return undefined;
+  const cached = dispatchers.get(proxyUrl);
+  if (cached) return cached;
+
   try {
     const url = new URL(proxyUrl);
+    // Generous connect timeout: the first hop through a VPN can take longer
+    // than undici's ten-second default, and failing at that point looks to the
+    // user like "the proxy is broken" when it merely needed a moment.
+    const pool = { connectTimeout: 25_000, keepAliveTimeout: 60_000, keepAliveMaxTimeout: 300_000 };
+
+    let dispatcher: unknown;
     if (url.protocol === "socks5:" || url.protocol === "socks:" || url.protocol === "socks5h:") {
-      return socksDispatcher({
-        type: 5,
-        host: url.hostname,
-        port: Number(url.port || 1080),
-        userId: url.username || undefined,
-        password: url.password || undefined,
-      });
+      dispatcher = socksDispatcher(
+        {
+          type: 5,
+          host: url.hostname,
+          port: Number(url.port || 1080),
+          userId: url.username || undefined,
+          password: url.password || undefined,
+        },
+        pool
+      );
+    } else if (url.protocol === "http:" || url.protocol === "https:") {
+      dispatcher = new ProxyAgent({ uri: proxyUrl, ...pool });
+    } else {
+      console.error(`unsupported telegram proxy scheme: ${url.protocol}`);
+      return undefined;
     }
-    if (url.protocol === "http:" || url.protocol === "https:") {
-      return new ProxyAgent(proxyUrl);
-    }
-    console.error(`unsupported telegram proxy scheme: ${url.protocol}`);
+
+    dispatchers.set(proxyUrl, dispatcher);
+    return dispatcher;
   } catch {
     console.error("TELEGRAM proxy URL is not a valid URL — ignoring it");
+    return undefined;
   }
-  return undefined;
 }
 
 export type SendResult = { ok: boolean; error?: string };
 
 /** Send a message with an explicit configuration — used by the "test" button. */
-export async function sendWith(cfg: Pick<TelegramSettings, "botToken" | "chatId" | "proxyUrl">, text: string): Promise<SendResult> {
+export async function sendWith(
+  cfg: Pick<TelegramSettings, "botToken" | "chatId" | "proxyUrl">,
+  text: string
+): Promise<SendResult> {
   if (!cfg.botToken || !cfg.chatId) return { ok: false, error: "bot token or chat id is missing" };
 
+  // Two attempts. Through a tunnel the first connection after an idle period
+  // regularly hangs and the next one succeeds instantly — measured on a real
+  // VPN, not guessed. A single attempt turns that into "notifications do not
+  // work"; a retry turns it into a message that arrives a second late.
+  let last: SendResult = { ok: false, error: "not attempted" };
+  for (let attempt = 0; attempt < 2; attempt++) {
+    if (attempt > 0) await new Promise((r) => setTimeout(r, 1500));
+    last = await attemptSend(cfg, text);
+    // Only transport failures are worth repeating. A refusal from Telegram —
+    // wrong token, unknown chat — will be refused just as firmly next time.
+    if (last.ok || !/fetch failed|timeout|ECONN|ETIMEDOUT|ENOTFOUND|UND_ERR/i.test(last.error ?? "")) break;
+  }
+  return last;
+}
+
+async function attemptSend(
+  cfg: Pick<TelegramSettings, "botToken" | "chatId" | "proxyUrl">,
+  text: string
+): Promise<SendResult> {
   try {
     const res = await fetch(`https://api.telegram.org/bot${cfg.botToken}/sendMessage`, {
       method: "POST",
@@ -65,7 +108,8 @@ export async function sendWith(cfg: Pick<TelegramSettings, "botToken" | "chatId"
         disable_web_page_preview: true,
       }),
       cache: "no-store",
-      signal: AbortSignal.timeout(15000),
+      // Long enough to cover a slow first hop plus the request itself.
+      signal: AbortSignal.timeout(40_000),
       // @ts-expect-error — undici's dispatcher option is not in the DOM types.
       dispatcher: proxyDispatcher(cfg.proxyUrl ?? ""),
     });

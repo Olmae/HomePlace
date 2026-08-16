@@ -3,6 +3,7 @@ import type { Item } from "@prisma/client";
 import { Card, StatusDot, TileIcon, type StatusKind } from "@/components/ui";
 import { Widget } from "@/components/widgets";
 import { ItemActions } from "./ItemActions";
+import { FolderContents } from "./FolderContents";
 import type { TileStatus } from "@/lib/status";
 import { percent, latency } from "@/lib/format";
 import { GLYPH, autoIcon, guessIcon } from "@/lib/icons";
@@ -25,6 +26,7 @@ export function Tile({
   editing,
   canEdit,
   iconPack = false,
+  userId,
 }: {
   item: ItemWithChildren;
   statuses: Map<string, TileStatus>;
@@ -32,6 +34,8 @@ export function Tile({
   editing: boolean;
   canEdit: boolean;
   iconPack?: boolean;
+  /** Passed to widgets that show something personal, such as the calendar. */
+  userId?: string;
 }) {
   // Resolved here rather than stored: a tile created before icon guessing
   // existed, or one whose address changed, picks up an icon without anyone
@@ -44,7 +48,7 @@ export function Tile({
     return (
       <div className="relative h-full">
         {editing && canEdit && <ItemActions item={item} d={d} />}
-        <Widget widget={item.widget ?? "notes"} config={parseConfig(item.config)} title={item.title} d={d} />
+        <Widget widget={item.widget ?? "notes"} config={parseConfig(item.config)} title={item.title} d={d} userId={userId} />
       </div>
     );
   }
@@ -55,7 +59,14 @@ export function Tile({
         {editing && canEdit && <ItemActions item={item} d={d} />}
         <div className="mb-2 flex items-center gap-2">
           <TileIcon icon={item.icon || GLYPH.folder} title={item.title} color={item.color} />
-          <span className="truncate text-sm font-semibold">{item.title}</span>
+          <span className="min-w-0 flex-1 truncate text-sm font-semibold">{item.title}</span>
+          <FolderContents
+            d={d}
+            folder={item}
+            children={item.children ?? []}
+            canEdit={canEdit}
+            iconPack={iconPack}
+          />
         </div>
         <ul className="space-y-0.5">
           {(item.children ?? []).map((child) => (
@@ -71,7 +82,9 @@ export function Tile({
               </a>
             </li>
           ))}
-          {(item.children ?? []).length === 0 && <li className="px-1.5 text-xs text-faint">{d.dashboard.empty}</li>}
+          {(item.children ?? []).length === 0 && (
+            <li className="px-1.5 text-xs text-faint">{canEdit ? d.dashboard.folderHint : d.dashboard.folderEmpty}</li>
+          )}
         </ul>
       </Card>
     );

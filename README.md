@@ -18,8 +18,10 @@ own; you decide which ones become tiles.
 - 🖥 **Proxmox** — guests, physical disks and SMART, storages
 - 🔔 **Telegram alerts** — with a delay before crying wolf, quiet hours, and a
   proxy for servers that cannot reach Telegram directly
-- 🎨 **A home page, not a NOC screen** — background photos, a slideshow widget,
-  a now-playing tile
+- 🎨 **A home page, not a NOC screen** — background photos from your phone's
+  gallery, a slideshow, weather, a calendar, a now-playing tile
+- 🔔 **Alerts that are not just "it is down"** — rules on any metric, held for a
+  time you choose, delivered to Telegram
 - ⌨️ **Ctrl+K** — search across services, containers and pages
 - 📱 **Installable** on a phone home screen
 - 🌗 **Light and dark**, five accents, **English and Russian**
@@ -136,6 +138,8 @@ Full reference with comments: [`.env.example`](.env.example). In short:
 | `PROMETHEUS_URL` | Enables hardware metrics and charts |
 | `PROXMOX_URL` + token | Enables the hypervisor view |
 | `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` | Alerts; `TELEGRAM_PROXY_URL` for a SOCKS5/HTTP proxy |
+| `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET` | Calendar widget |
+| `UPLOADS_DIR` | Where uploaded pictures live; inside `DATA_DIR` by default |
 | `FRIENDPLACE_*` | Optional SSO |
 | `DEFAULT_LOCALE` | `en` or `ru` |
 
@@ -148,6 +152,8 @@ Full reference with comments: [`.env.example`](.env.example). In short:
 | Proxmox | Everything else | Guests, physical disks, SMART |
 | FriendPlace | Everything else | The SSO button |
 | Telegram | Everything else | Notifications — the event feed still records everything |
+| Google | Everything else | The calendar widget |
+| Internet | Everything else | Weather, and the online icon pack |
 
 ---
 
@@ -196,20 +202,22 @@ Where this is going, roughly in order.
 
 ### Next
 
-- [ ] Live-streaming container logs instead of the last 200 lines
-- [ ] More widget kinds: multi-series charts, gauges, an uptime strip per service
-- [ ] An icon picker with a bundled set, instead of emoji and pasted URLs
-- [ ] Per-user dashboards alongside the shared ones
-- [ ] Weather widget
-- [ ] Calendar widget, and reading a Google Calendar if it can be done without
-      making everyone register an OAuth app
+- [x] Live-streaming container logs
+- [x] More widget kinds: multi-series charts, gauges, an uptime strip
+- [x] An icon picker with a bundled set
+- [x] Per-user dashboards alongside the shared ones
+- [x] Weather widget
+- [x] Google Calendar — with your own OAuth client, since a public one cannot
+      be shipped
+- [x] Uploading background and slideshow images to the panel
 - [ ] Reminders and simple recurring notes on the board
-- [ ] Uploading background and slideshow images to the panel instead of linking
+- [ ] Folders that can also hold widgets, not only links
+- [ ] Keyboard-only layout editing
 
 ### Alerts and notifications
 
 - [x] Telegram, with a delay before alerting, recovery messages and quiet hours
-- [ ] Rules on metrics, not only availability: "disk over 90%", "CPU pinned for
+- [x] Rules on metrics, not only availability: "disk over 90%", "CPU pinned for
       ten minutes"
 - [ ] More destinations: email, ntfy, webhooks
 - [ ] Grouping and escalation

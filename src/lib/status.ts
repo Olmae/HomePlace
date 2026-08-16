@@ -30,6 +30,50 @@ export type TileStatus = {
   uptime24h: number | null;
 };
 
+/**
+ * Availability split into equal buckets, for the uptime strip.
+ *
+ * One block per bucket, coloured by the worst probe inside it: a service that
+ * blinked for thirty seconds during an hour should not look like a perfect
+ * hour. Buckets with no probes are drawn as gaps — the panel was off, and
+ * pretending otherwise would be inventing history.
+ */
+export async function uptimeBuckets(
+  itemIds: string[],
+  hours: number,
+  buckets: number
+): Promise<Map<string, { ok: number; total: number }[]>> {
+  const result = new Map<string, { ok: number; total: number }[]>();
+  if (itemIds.length === 0) return result;
+
+  const since = new Date(Date.now() - hours * 3600_000);
+  const width = (hours * 3600_000) / buckets;
+
+  const rows = await prisma.uptimeCheck.findMany({
+    where: { itemId: { in: itemIds }, at: { gte: since } },
+    select: { itemId: true, at: true, ok: true },
+    orderBy: { at: "asc" },
+  });
+
+  for (const id of itemIds) {
+    result.set(
+      id,
+      Array.from({ length: buckets }, () => ({ ok: 0, total: 0 }))
+    );
+  }
+
+  for (const row of rows) {
+    const list = result.get(row.itemId);
+    if (!list) continue;
+    const index = Math.min(buckets - 1, Math.floor((row.at.getTime() - since.getTime()) / width));
+    if (index < 0) continue;
+    list[index].total++;
+    if (row.ok) list[index].ok++;
+  }
+
+  return result;
+}
+
 export async function statusFor(itemIds: string[]): Promise<Map<string, TileStatus>> {
   const result = new Map<string, TileStatus>();
   if (itemIds.length === 0) return result;

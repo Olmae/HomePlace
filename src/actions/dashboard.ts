@@ -14,7 +14,7 @@ import { uniqueSlug } from "@/lib/slug";
  * rearrange it, and certainly not point a tile somewhere new.
  */
 
-export async function createDashboard(name: string): Promise<string> {
+export async function createDashboard(name: string, shared = true): Promise<string> {
   const user = await requireRole("admin");
   const existing = await prisma.dashboard.findMany({ select: { slug: true } });
   const created = await prisma.dashboard.create({
@@ -23,11 +23,36 @@ export async function createDashboard(name: string): Promise<string> {
       slug: uniqueSlug(name, existing.map((d) => d.slug ?? ""), "tab"),
       order: existing.length,
       ownerId: user.id,
-      shared: true,
+      shared,
     },
   });
   revalidatePath("/");
   return created.id;
+}
+
+/**
+ * Shared or private.
+ *
+ * A private tab is visible only to the account that owns it — which is what
+ * makes a household panel work: one shared board everyone sees, and a personal
+ * one each with the bookmarks nobody else needs.
+ *
+ * Only the owner may flip it, so an administrator cannot quietly publish
+ * somebody else's tab.
+ */
+export async function setDashboardShared(id: string, shared: boolean): Promise<void> {
+  const user = await requireRole("admin");
+  const dash = await prisma.dashboard.findUnique({ where: { id }, select: { ownerId: true } });
+  if (!dash) return;
+  if (dash.ownerId && dash.ownerId !== user.id) return;
+
+  await prisma.dashboard.update({
+    where: { id },
+    // Making a tab private also claims it: a private board with no owner would
+    // be visible to nobody at all.
+    data: { shared, ownerId: shared ? dash.ownerId : user.id },
+  });
+  revalidatePath("/");
 }
 
 export async function renameDashboard(id: string, name: string): Promise<void> {
@@ -154,7 +179,12 @@ export async function deleteItem(id: string): Promise<void> {
     where: { dashboardId: item.dashboardId, parentId: item.parentId },
     select: { id: true, x: true, y: true, w: true, h: true },
   });
-  const compacted = compactVertically(rest);
+  const locked = new Set(
+    (await prisma.item.findMany({ where: { dashboardId: item.dashboardId, locked: true }, select: { id: true } })).map(
+      (i) => i.id
+    )
+  );
+  const compacted = compactVertically(rest, locked);
   await prisma.$transaction(
     compacted.map((box) => prisma.item.update({ where: { id: box.id }, data: { y: box.y } }))
   );
@@ -171,6 +201,16 @@ export async function deleteItem(id: string): Promise<void> {
 export async function saveLayout(boxes: { id: string; x: number; y: number; w: number; h: number }[]): Promise<void> {
   await requireRole("admin");
   if (boxes.length === 0) return;
+
+  // A pinned tile keeps the position it has in the database, whatever the
+  // browser sent: the client cannot drag it, but it should not be able to move
+  // it by accident either.
+  const pinned = await prisma.item.findMany({
+    where: { id: { in: boxes.map((b) => b.id) }, locked: true },
+    select: { id: true, x: true, y: true, w: true, h: true },
+  });
+  const pinnedBy = new Map(pinned.map((p) => [p.id, p]));
+  boxes = boxes.map((b) => pinnedBy.get(b.id) ?? b);
 
   await prisma.$transaction(
     // Reading order doubles as the phone layout, so it is recomputed here from
@@ -205,6 +245,47 @@ export async function updateDashboardBackground(
       ...(input.backgroundBlur !== undefined ? { backgroundBlur: clamp(input.backgroundBlur, 0, 40) } : {}),
     },
   });
+  revalidatePath("/");
+}
+
+/**
+ * Put a tile inside a folder, or take it back out.
+ *
+ * Called when a tile is dropped onto a folder on the board. A folder is a
+ * landing place for links you do not want spread across the grid, so anything
+ * can go in — the folder renders its contents as a compact list.
+ */
+export async function moveIntoFolder(itemId: string, folderId: string | null): Promise<void> {
+  await requireRole("admin");
+  const item = await prisma.item.findUnique({ where: { id: itemId } });
+  if (!item) return;
+
+  if (folderId) {
+    const folder = await prisma.item.findUnique({ where: { id: folderId } });
+    // Only a folder can hold things, and nothing may be put inside itself.
+    if (!folder || folder.kind !== "folder" || folder.id === itemId) return;
+
+    const inside = await prisma.item.count({ where: { parentId: folderId } });
+    await prisma.item.update({ where: { id: itemId }, data: { parentId: folderId, order: inside } });
+  } else {
+    // Back onto the board, below everything, so it does not land under a tile.
+    const siblings = await prisma.item.findMany({
+      where: { dashboardId: item.dashboardId, parentId: null },
+      select: { id: true, x: true, y: true, w: true, h: true },
+    });
+    const slot = nextFreeSlot(siblings, item.w, item.h);
+    await prisma.item.update({ where: { id: itemId }, data: { parentId: null, x: slot.x, y: slot.y } });
+  }
+
+  revalidatePath("/");
+}
+
+/** Pin a tile so dragging cannot move it and nothing can push it aside. */
+export async function toggleLock(itemId: string): Promise<void> {
+  await requireRole("admin");
+  const item = await prisma.item.findUnique({ where: { id: itemId }, select: { locked: true } });
+  if (!item) return;
+  await prisma.item.update({ where: { id: itemId }, data: { locked: !item.locked } });
   revalidatePath("/");
 }
 

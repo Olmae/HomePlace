@@ -25,6 +25,9 @@ services:
       # without anyone having to chown it first. `id -u` on the host.
       PUID: "${PUID:-1000}"
       PGID: "${PGID:-1000}"
+      # Uploaded pictures. Inside DATA_DIR by default, so the one volume below
+      # still holds everything the panel owns.
+      UPLOADS_DIR: "${UPLOADS_DIR:-}"
 
       # ── Identity ──────────────────────────────────────────────────────
       APP_URL: "${APP_URL:-http://localhost:3200}"
@@ -49,6 +52,15 @@ services:
       PROXMOX_TOKEN_ID: "${PROXMOX_TOKEN_ID:-}"
       PROXMOX_TOKEN_SECRET: "${PROXMOX_TOKEN_SECRET:-}"
       PROXMOX_VERIFY_TLS: "${PROXMOX_VERIFY_TLS:-false}"
+
+      # ── Google (optional, calendar widget) ────────────────────────────
+      GOOGLE_CLIENT_ID: "${GOOGLE_CLIENT_ID:-}"
+      GOOGLE_CLIENT_SECRET: "${GOOGLE_CLIENT_SECRET:-}"
+
+      # ── Telegram (optional, alerts) ───────────────────────────────────
+      TELEGRAM_BOT_TOKEN: "${TELEGRAM_BOT_TOKEN:-}"
+      TELEGRAM_CHAT_ID: "${TELEGRAM_CHAT_ID:-}"
+      TELEGRAM_PROXY_URL: "${TELEGRAM_PROXY_URL:-}"
 
       # ── FriendPlace SSO (optional) ────────────────────────────────────
       # Leave empty and the whole integration disappears from the login page.

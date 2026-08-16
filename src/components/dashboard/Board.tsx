@@ -1,8 +1,8 @@
 "use client";
 
 import { Children, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { COLUMNS, clampBox, resolveCollisions, readingOrder, type Box } from "@/lib/layout";
-import { saveLayout } from "@/actions/dashboard";
+import { COLUMNS, clampBox, resolveCollisions, readingOrder, overlaps, type Box } from "@/lib/layout";
+import { saveLayout, moveIntoFolder } from "@/actions/dashboard";
 
 /**
  * The board: tiles placed on a 12-column grid, dragged and resized directly.
@@ -29,11 +29,17 @@ export function Board({
   layout,
   editing,
   children,
+  folderIds = [],
+  lockedIds = [],
 }: {
   /** One entry per child, in the same order. */
   layout: Box[];
   editing: boolean;
   children: ReactNode;
+  /** Tiles that accept a drop — dragging onto one files the tile inside it. */
+  folderIds?: string[];
+  /** Tiles that cannot be dragged and are never pushed aside. */
+  lockedIds?: string[];
 }) {
   const [boxes, setBoxes] = useState<Box[]>(layout);
   const [drag, setDrag] = useState<Drag>(null);
@@ -43,6 +49,9 @@ export function Board({
   // once, and a server action fired from inside one re-renders on every run —
   // which is exactly the update loop React reports as error #185.
   const latest = useRef<Box[]>(layout);
+  const [dropTarget, setDropTarget] = useState<string | null>(null);
+  const locked = useMemo(() => new Set(lockedIds), [lockedIds]);
+  const folders = useMemo(() => new Set(folderIds), [folderIds]);
 
   // Server state wins whenever it changes: another tab, a deletion, a new tile.
   // Compared by value, not identity: the prop is a fresh array on every render,
@@ -71,21 +80,40 @@ export function Board({
       const cols = Math.round(dx / (cellWidth() + GAP));
       const rows = Math.round(dy / (ROW_HEIGHT + GAP));
 
-      const next = resolveCollisions(
-        latest.current.map((b) => {
-          if (b.id !== drag!.id) return b;
-          return drag!.kind === "move"
-            ? clampBox({ ...b, x: drag!.origin.x + cols, y: drag!.origin.y + rows })
-            : clampBox({ ...b, w: drag!.origin.w + cols, h: drag!.origin.h + rows });
-        }),
-        drag!.id
-      );
+      const proposed = latest.current.map((b) => {
+        if (b.id !== drag!.id) return b;
+        return drag!.kind === "move"
+          ? clampBox({ ...b, x: drag!.origin.x + cols, y: drag!.origin.y + rows })
+          : clampBox({ ...b, w: drag!.origin.w + cols, h: drag!.origin.h + rows });
+      });
+
+      // Dropping a tile onto a folder files it inside instead of moving it.
+      // Detected from the dragged tile's own top-left cell rather than the
+      // pointer, so the highlight matches what is actually being placed.
+      const dragged = proposed.find((b) => b.id === drag!.id)!;
+      const target =
+        drag!.kind === "move"
+          ? proposed.find((b) => b.id !== drag!.id && folders.has(b.id) && overlaps(b, { ...dragged, w: 1, h: 1 }))
+          : undefined;
+      setDropTarget(target?.id ?? null);
+
+      const next = resolveCollisions(proposed, drag!.id, locked);
       latest.current = next;
       setBoxes(next);
     }
 
     function onUp() {
+      const filing = dropTarget;
+      const draggedId = drag!.id;
       setDrag(null);
+      setDropTarget(null);
+
+      if (filing) {
+        // Into the folder: the board layout of the tile stops mattering, so
+        // there is nothing to save for it.
+        void moveIntoFolder(draggedId, filing);
+        return;
+      }
       // Save what is on screen. Plain call, no setState updater: the ref
       // already holds the final positions.
       void saveLayout(latest.current.map(({ id, x, y, w, h }) => ({ id, x, y, w, h })));
@@ -99,7 +127,7 @@ export function Board({
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onUp);
     };
-  }, [drag, cellWidth]);
+  }, [drag, cellWidth, dropTarget, folders, locked]);
 
   const order = useMemo(() => {
     const index = new Map(boxes.map((b, i) => [b.id, i]));
@@ -139,9 +167,13 @@ export function Board({
                 the tile is a drag handle. */}
             {editing && (
               <div
-                className="absolute inset-0 z-[5] cursor-grab rounded-card ring-1 ring-inset ring-accent/30 active:cursor-grabbing"
+                className={`absolute inset-0 z-[5] rounded-card ring-1 ring-inset ${
+                  locked.has(box.id)
+                    ? "cursor-not-allowed ring-warn/40"
+                    : "cursor-grab ring-accent/30 active:cursor-grabbing"
+                } ${dropTarget === box.id ? "bg-accent/20 ring-2 ring-accent" : ""}`}
                 onPointerDown={(e) => {
-                  if (e.button !== 0) return;
+                  if (e.button !== 0 || locked.has(box.id)) return;
                   e.preventDefault();
                   setDrag({ kind: "move", id: box.id, startX: e.clientX, startY: e.clientY, origin: box });
                 }}
@@ -155,7 +187,7 @@ export function Board({
                 inside the tile and became impossible to type into. */}
             <div className="h-full">{child}</div>
 
-            {editing && (
+            {editing && !locked.has(box.id) && (
               <button
                 type="button"
                 aria-label="Resize"

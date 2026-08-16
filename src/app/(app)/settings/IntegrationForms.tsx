@@ -11,6 +11,8 @@ import {
   rotateNowPlayingToken,
   disableNowPlaying,
   setIconPack,
+  saveGoogleSettings,
+  unlinkGoogle,
   type TestResult,
 } from "@/actions/integrations";
 import { importConfig } from "@/actions/config";
@@ -31,6 +33,7 @@ import type { Dictionary } from "@/i18n";
 type Display = {
   prometheus: { url: string; username: string; hasPassword: boolean; source: string };
   proxmox: { url: string; tokenId: string; hasSecret: boolean; verifyTls: boolean; source: string };
+  google: { clientId: string; hasSecret: boolean; source: string; linkedEmail: string | null; redirectUri: string };
   telegram: {
     enabled: boolean;
     chatId: string;
@@ -61,6 +64,7 @@ export function IntegrationForms({
       <PrometheusForm d={d} value={display.prometheus} />
       <ProxmoxForm d={d} value={display.proxmox} />
       <TelegramForm d={d} value={display.telegram} />
+      <GoogleCard d={d} value={display.google} />
       <NowPlayingCard d={d} token={nowPlayingToken} appUrl={appUrl} />
       <IconsCard d={d} enabled={iconPack} />
       <ConfigCard d={d} />
@@ -401,6 +405,90 @@ function NowPlayingCard({ d, token, appUrl }: { d: Dictionary; token: string; ap
                 {d.settings.turnOff}
               </Button>
             </>
+          )}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+// ───────────────────────────────── Google ────────────────────────────────
+
+/**
+ * Linking a Google account for the calendar widget.
+ *
+ * Two steps, and they are separate on purpose: the panel's owner registers an
+ * OAuth client once, and then each person links their own calendar. The
+ * redirect URI is shown to be copied into the Google console — getting it
+ * slightly wrong is the single most common reason this refuses to work.
+ */
+function GoogleCard({ d, value }: { d: Dictionary; value: Display["google"] }) {
+  const [form, setForm] = useState({ clientId: value.clientId, clientSecret: "" });
+  const [pending, startTransition] = useTransition();
+
+  return (
+    <Card>
+      <CardHeader
+        title="Google"
+        action={<Badge tone={value.linkedEmail ? "ok" : value.source === "none" ? "neutral" : "accent"}>{value.linkedEmail ? "linked" : value.source}</Badge>}
+      />
+      <div className="flex flex-col gap-3 p-4">
+        <p className="text-xs text-muted">{d.settings.googleHint}</p>
+
+        <Field label={d.settings.googleRedirect}>
+          <Input readOnly value={value.redirectUri} className="font-mono text-xs" onFocus={(e) => e.currentTarget.select()} />
+        </Field>
+
+        {value.source === "env" ? (
+          <EnvNotice d={d} lines={["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"]} />
+        ) : (
+          <>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Client ID">
+                <Input
+                  value={form.clientId}
+                  onChange={(e) => setForm({ ...form, clientId: e.target.value })}
+                  className="font-mono text-xs"
+                />
+              </Field>
+              <Field label="Client secret" hint={value.hasSecret ? d.settings.secretKept : undefined}>
+                <Input
+                  type="password"
+                  value={form.clientSecret}
+                  onChange={(e) => setForm({ ...form, clientSecret: e.target.value })}
+                  placeholder={value.hasSecret ? "••••••••" : ""}
+                />
+              </Field>
+            </div>
+            <div>
+              <Button
+                variant="primary"
+                disabled={pending}
+                onClick={() => startTransition(async () => void (await saveGoogleSettings(form)))}
+              >
+                {d.common.save}
+              </Button>
+            </div>
+          </>
+        )}
+
+        <div className="flex flex-wrap items-center gap-2 border-t border-line pt-3">
+          {value.linkedEmail ? (
+            <>
+              <span className="text-xs text-muted">{value.linkedEmail}</span>
+              <Button variant="danger" disabled={pending} onClick={() => startTransition(() => void unlinkGoogle())}>
+                {d.settings.googleUnlink}
+              </Button>
+            </>
+          ) : (
+            <a
+              href="/api/auth/google/start"
+              className={`inline-flex items-center rounded-control border border-line bg-surface px-3.5 py-2 text-sm font-medium transition-colors hover:bg-raised ${
+                value.source === "none" && !value.clientId ? "pointer-events-none opacity-50" : ""
+              }`}
+            >
+              {d.settings.googleLink}
+            </a>
           )}
         </div>
       </div>
