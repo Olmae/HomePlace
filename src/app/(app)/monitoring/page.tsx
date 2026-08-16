@@ -1,6 +1,10 @@
 import Link from "next/link";
 import { pageUser } from "@/lib/pageUser";
-import { prometheus as promConfig, proxmox as pveConfig } from "@/lib/config";
+// Resolved through integrations.ts, not through config.ts: these can be set in
+// the interface as well as in .env, and reading only the environment here is
+// what made a Prometheus configured from the settings page report itself as
+// missing on this one.
+import { prometheusConfig, proxmoxConfig } from "@/lib/integrations";
 import { query, queryOne, queryRange, Q } from "@/lib/prometheus";
 import { nodes, guests, disks, storages } from "@/lib/proxmox";
 import { dict } from "@/i18n";
@@ -23,8 +27,8 @@ export default async function MonitoringPage({ searchParams }: { searchParams: {
   const user = await pageUser();
   const d = dict(user.locale);
 
-  const hasProm = promConfig() !== null;
-  const hasPve = pveConfig() !== null;
+  const hasProm = (await prometheusConfig()) !== null;
+  const hasPve = (await proxmoxConfig()) !== null;
 
   if (!hasProm && !hasPve) {
     return (

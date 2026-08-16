@@ -27,6 +27,11 @@ chown -R "$PUID:$PGID" "$DATA_DIR" 2>/dev/null || true
 echo "→ applying database schema"
 if ! su-exec "$PUID:$PGID" node node_modules/prisma/build/index.js db push --skip-generate; then
   echo "✖ could not apply the schema — refusing to start on a database in an unknown state"
+  echo "  The message above says what Prisma would not do on its own. Nothing has"
+  echo "  been changed; your data is exactly as it was before this start."
+  echo "  Back up ${DATA_DIR}/homeplace.db before trying anything, and report the"
+  echo "  message: a schema an existing installation cannot apply is a bug here,"
+  echo "  not something you should have to fix by hand."
   exit 1
 fi
 

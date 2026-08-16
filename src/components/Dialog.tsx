@@ -40,7 +40,10 @@ export function Dialog({
       onClick={(e) => {
         if (e.target === ref.current) onClose();
       }}
-      className={`w-[calc(100vw-2rem)] rounded-card border border-line bg-surface p-0 text-text shadow-pop backdrop:bg-black/50 ${
+      // pointer-events are explicit: a dialog opened from inside a subtree that
+      // disables them would inherit that and become unclickable, even though it
+      // renders in the browser's top layer.
+      className={`pointer-events-auto w-[calc(100vw-2rem)] rounded-card border border-line bg-surface p-0 text-text shadow-pop backdrop:bg-black/50 ${
         wide ? "max-w-2xl" : "max-w-md"
       }`}
     >

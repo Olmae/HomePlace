@@ -148,7 +148,12 @@ export function Board({
               />
             )}
 
-            <div className={`h-full ${editing ? "pointer-events-none" : ""}`}>{child}</div>
+            {/* No `pointer-events-none` here. The drag surface above already
+                swallows clicks meant for the tile's links, and disabling
+                pointer events on this wrapper also disabled everything it
+                contains — including the edit dialog, which is rendered from
+                inside the tile and became impossible to type into. */}
+            <div className="h-full">{child}</div>
 
             {editing && (
               <button

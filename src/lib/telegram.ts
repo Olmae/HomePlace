@@ -78,8 +78,43 @@ export async function sendWith(cfg: Pick<TelegramSettings, "botToken" | "chatId"
     }
     return { ok: true };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+    return { ok: false, error: describeNetworkError(e, !!cfg.proxyUrl) };
   }
+}
+
+/**
+ * Turn "fetch failed" into something actionable.
+ *
+ * Node's fetch reports every transport problem as the same three words and
+ * hides the real reason in `cause` — sometimes nested twice. On a home server
+ * the answer is almost always "this network cannot reach Telegram", and the
+ * fix is the proxy field, so say that instead of making someone read the
+ * container log.
+ */
+function describeNetworkError(e: unknown, hasProxy: boolean): string {
+  const parts: string[] = [];
+  let current: unknown = e;
+  for (let depth = 0; depth < 4 && current; depth++) {
+    if (current instanceof Error) {
+      const code = (current as NodeJS.ErrnoException).code;
+      parts.push(code ? `${current.message} (${code})` : current.message);
+      current = (current as { cause?: unknown }).cause;
+    } else {
+      parts.push(String(current));
+      break;
+    }
+  }
+
+  const detail = parts.join(" ← ");
+  const looksBlocked = /fetch failed|ENOTFOUND|ETIMEDOUT|ECONNREFUSED|EAI_AGAIN|UND_ERR/i.test(detail);
+
+  if (looksBlocked && !hasProxy) {
+    return `${detail} — the server cannot reach api.telegram.org. If your connection blocks it, set a SOCKS5 or HTTP proxy in the Proxy field.`;
+  }
+  if (looksBlocked && hasProxy) {
+    return `${detail} — the proxy did not connect. Check that the address is reachable from inside the container (a proxy on the host is not "localhost" here).`;
+  }
+  return detail;
 }
 
 /** Send using the saved configuration. No-op when Telegram is off. */

@@ -59,7 +59,13 @@ model Dashboard {
   name   String
   // Readable identifier used in the URL (`/?tab=home`). Optional so an older
   // database keeps working; filled in on first load.
-  slug   String? @unique
+  //
+  // Indexed but deliberately NOT unique. Uniqueness is arranged when the slug
+  // is generated, and two dashboards briefly sharing one is a cosmetic problem
+  // — the first match wins. A unique constraint, by contrast, is a schema
+  // change `prisma db push` refuses to make without being told it may lose
+  // data, which would stop an existing installation from starting at all.
+  slug   String?
   icon   String?
   order  Int     @default(0)
   // Private dashboards are visible only to their owner; the rest are shared
@@ -81,6 +87,7 @@ model Dashboard {
   createdAt DateTime @default(now())
 
   @@index([ownerId])
+  @@index([slug])
 }
 
 // Everything placed on a dashboard is an Item. One table instead of four,
