@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { enabled, authorizeUrl, newState, STATE_COOKIE } from "@/lib/friendplace";
-import { settings, appUrl } from "@/lib/config";
+import { settings } from "@/lib/config";
+import { effectiveOrigin } from "@/lib/origin";
 
 export const dynamic = "force-dynamic";
 
@@ -16,7 +17,7 @@ export async function GET() {
   if (!enabled()) {
     // Not an error page: an installation without FriendPlace should behave as
     // if the integration never existed.
-    return NextResponse.redirect(new URL("/login", appUrl()));
+    return NextResponse.redirect(new URL("/login", effectiveOrigin()));
   }
 
   const state = newState();

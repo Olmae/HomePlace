@@ -36,6 +36,11 @@ const widgetKinds = [
   "uptimestrip",
   "weather",
   "calendar",
+  "jellyfin",
+  "qbittorrent",
+  "arr",
+  "pbs",
+  "homeassistant",
   "containers",
   "proxmox",
   "clock",
@@ -113,6 +118,7 @@ export function ItemDialog({
     hours: Number(config.hours ?? 24),
     blocks: Number(config.blocks ?? 40),
     days: Number(config.days ?? 7),
+    entities: Array.isArray(config.entities) ? (config.entities as string[]).join("\n") : str(config.entities),
     services: Array.isArray(config.items) ? (config.items as string[]).join("\n") : str(config.items),
   });
 
@@ -221,6 +227,8 @@ export function ItemDialog({
           latitude: Number(form.latitude),
           longitude: Number(form.longitude),
         };
+      case "homeassistant":
+        return { entities: form.entities.split("\n").map((e) => e.trim()).filter(Boolean) };
       case "calendar":
         return { days: Number(form.days), limit: Number(form.limit) };
       case "uptimestrip":
@@ -418,6 +426,18 @@ export function ItemDialog({
                   <Textarea rows={3} value={form.services} onChange={(e) => set("services", e.target.value)} className="text-xs" />
                 </Field>
               </>
+            )}
+
+            {form.widget === "homeassistant" && (
+              <Field label={d.services.entities} hint={d.services.entitiesHint}>
+                <Textarea
+                  rows={4}
+                  value={form.entities}
+                  onChange={(e) => set("entities", e.target.value)}
+                  className="font-mono text-xs"
+                  placeholder="light.kitchen"
+                />
+              </Field>
             )}
 
             {form.widget === "calendar" && (

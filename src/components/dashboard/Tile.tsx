@@ -9,7 +9,7 @@ import { percent, latency } from "@/lib/format";
 import { GLYPH, autoIcon, guessIcon } from "@/lib/icons";
 import type { Dictionary } from "@/i18n";
 
-type ItemWithChildren = Item & { children?: Item[] };
+type ItemWithChildren = Item & { children?: ItemWithChildren[] };
 
 /**
  * One tile.
@@ -54,35 +54,79 @@ export function Tile({
   }
 
   if (item.kind === "folder") {
+    const children = item.children ?? [];
     return (
-      <Card className="relative h-full p-3">
+      <Card className="relative flex h-full flex-col p-3">
         {editing && canEdit && <ItemActions item={item} d={d} />}
+
         <div className="mb-2 flex items-center gap-2">
           <TileIcon icon={item.icon || GLYPH.folder} title={item.title} color={item.color} />
           <span className="min-w-0 flex-1 truncate text-sm font-semibold">{item.title}</span>
+          {/* Opening the folder shows the tiles themselves, fully rendered —
+              they are built here on the server and handed to the dialog. */}
           <FolderContents
             d={d}
-            folder={item}
-            children={item.children ?? []}
+            title={item.title}
+            icon={item.icon || GLYPH.folder}
+            count={children.length}
             canEdit={canEdit}
-            iconPack={iconPack}
-          />
+            items={children.map((c) => ({ id: c.id, title: c.title, w: c.w }))}
+          >
+            {children.map((child) => (
+              <Tile
+                key={child.id}
+                item={child}
+                statuses={statuses}
+                d={d}
+                editing={false}
+                canEdit={canEdit}
+                iconPack={iconPack}
+                userId={userId}
+              />
+            ))}
+          </FolderContents>
         </div>
-        <ul className="space-y-0.5">
-          {(item.children ?? []).map((child) => (
-            <li key={child.id}>
-              <a
-                href={child.url ?? "#"}
-                target={child.newTab ? "_blank" : undefined}
-                rel={child.newTab ? "noreferrer" : undefined}
-                className="flex items-center gap-2 rounded-control px-1.5 py-1 text-sm text-muted transition-colors hover:bg-raised hover:text-text"
-              >
-                <StatusDot {...dotFor(child, statuses.get(child.id), d)} />
-                <span className="truncate">{child.title}</span>
-              </a>
-            </li>
-          ))}
-          {(item.children ?? []).length === 0 && (
+
+        {/* The tile itself stays a compact index: icon, name, status. The full
+            version is one click away and does not have to fit in a small card. */}
+        <ul className="min-h-0 flex-1 space-y-0.5 overflow-y-auto">
+          {children.map((child) => {
+            const childIcon =
+              child.icon ||
+              autoIcon({ name: child.containerName ?? child.title, url: child.url ?? "", pack: iconPack });
+            const inner = (
+              <>
+                <TileIcon
+                  icon={childIcon}
+                  title={child.title}
+                  size="sm"
+                  fallback={guessIcon({ name: child.containerName ?? child.title, url: child.url ?? "" })}
+                />
+                <span className="min-w-0 flex-1 truncate">{child.title}</span>
+                {child.checkKind !== "none" && <StatusDot {...dotFor(child, statuses.get(child.id), d)} />}
+              </>
+            );
+
+            // A widget in a folder has nowhere to link to; it opens with the
+            // folder instead, where there is room to draw it.
+            return (
+              <li key={child.id}>
+                {child.kind === "widget" || !child.url ? (
+                  <span className="flex items-center gap-2 rounded-control px-1.5 py-1 text-sm text-muted">{inner}</span>
+                ) : (
+                  <a
+                    href={child.url}
+                    target={child.newTab ? "_blank" : undefined}
+                    rel={child.newTab ? "noreferrer" : undefined}
+                    className="flex items-center gap-2 rounded-control px-1.5 py-1 text-sm text-muted transition-colors hover:bg-raised hover:text-text"
+                  >
+                    {inner}
+                  </a>
+                )}
+              </li>
+            );
+          })}
+          {children.length === 0 && (
             <li className="px-1.5 text-xs text-faint">{canEdit ? d.dashboard.folderHint : d.dashboard.folderEmpty}</li>
           )}
         </ul>

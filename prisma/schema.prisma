@@ -45,6 +45,11 @@ model User {
   theme  String @default("system")
   accent String @default("default")
 
+  // Bumped to invalidate every session this account has: changing a password,
+  // or asking to be signed out everywhere. The number is carried in the cookie,
+  // so old cookies stop matching without keeping a table of live sessions.
+  tokenVersion Int @default(0)
+
   createdAt   DateTime  @default(now())
   lastLoginAt DateTime?
 

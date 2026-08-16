@@ -2,13 +2,13 @@ import { NextResponse, type NextRequest } from "next/server";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/db";
 import { createSession } from "@/lib/session";
-import { appUrl } from "@/lib/config";
+import { effectiveOrigin } from "@/lib/origin";
 import { enabled, profileFromCode, mayEnter, defaultRole, STATE_COOKIE } from "@/lib/friendplace";
 
 export const dynamic = "force-dynamic";
 
 function back(error?: string) {
-  const url = new URL("/login", appUrl());
+  const url = new URL("/login", effectiveOrigin());
   if (error) url.searchParams.set("error", error);
   return NextResponse.redirect(url);
 }
@@ -84,5 +84,5 @@ export async function GET(req: NextRequest) {
   await prisma.event.create({ data: { type: "login", title: user.name, actor: user.name, detail: "FriendPlace" } });
   await createSession(user.id);
 
-  return NextResponse.redirect(new URL("/", appUrl()));
+  return NextResponse.redirect(new URL("/", effectiveOrigin()));
 }

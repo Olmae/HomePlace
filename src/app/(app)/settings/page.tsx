@@ -4,7 +4,8 @@ import { atLeast } from "@/lib/auth";
 import { dockerHealth } from "@/lib/docker";
 import { prometheusHealth } from "@/lib/prometheus";
 import { proxmoxHealth } from "@/lib/proxmox";
-import { settings as cfg, appUrl } from "@/lib/config";
+import { settings as cfg } from "@/lib/config";
+import { effectiveOrigin } from "@/lib/origin";
 import { integrationStatus, integrationsForDisplay } from "@/lib/integrations";
 import { enabled as ssoEnabled } from "@/lib/friendplace";
 import { dict } from "@/i18n";
@@ -13,6 +14,8 @@ import { ago } from "@/lib/format";
 import { PasswordForm } from "./PasswordForm";
 import { IntegrationForms } from "./IntegrationForms";
 import { RuleForms } from "./RuleForms";
+import { ServiceForms } from "./ServiceForms";
+import { servicesForDisplay } from "@/lib/services";
 import { currentNowPlayingToken } from "@/actions/integrations";
 
 export const dynamic = "force-dynamic";
@@ -40,6 +43,7 @@ export default async function SettingsPage() {
   ]);
   const iconPack = await getSetting<boolean>("icons.pack", false);
   const rules = isAdmin ? await prisma.alertRule.findMany({ orderBy: { createdAt: "asc" } }) : [];
+  const services = isAdmin ? await servicesForDisplay() : null;
 
   const users = isAdmin
     ? await prisma.user.findMany({ orderBy: { createdAt: "asc" } })
@@ -96,10 +100,17 @@ export default async function SettingsPage() {
 
         {isAdmin && (
           <div className="mt-3">
-            <IntegrationForms d={d} display={display} nowPlayingToken={npToken} appUrl={appUrl()} iconPack={iconPack} />
+            <IntegrationForms d={d} display={display} nowPlayingToken={npToken} appUrl={effectiveOrigin()} iconPack={iconPack} />
           </div>
         )}
       </section>
+
+      {isAdmin && services && (
+        <section>
+          <SectionTitle hint={d.settings.servicesHint}>{d.settings.services}</SectionTitle>
+          <ServiceForms d={d} display={services} />
+        </section>
+      )}
 
       {isAdmin && (
         <section>

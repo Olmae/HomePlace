@@ -3,7 +3,7 @@ import { prisma } from "@/lib/db";
 import { currentUser } from "@/lib/session";
 import { canEdit } from "@/lib/auth";
 import { listContainers } from "@/lib/docker";
-import { dockerHosts } from "@/lib/config";
+import { resolvedDockerHosts } from "@/lib/integrations";
 import { autoIcon, GLYPH } from "@/lib/icons";
 
 export const dynamic = "force-dynamic";
@@ -60,7 +60,7 @@ export async function GET() {
   }
 
   // Containers are only useful to someone who may act on them.
-  if (canEdit(user) && dockerHosts().length > 0) {
+  if (canEdit(user) && (await resolvedDockerHosts()).length > 0) {
     const containers = await listContainers();
     for (const c of containers) {
       hits.push({

@@ -1,7 +1,7 @@
 import "server-only";
 import { prisma } from "./db";
 import { encrypt, decrypt } from "./secretBox";
-import { appUrl } from "./config";
+import { effectiveOrigin } from "./origin";
 import { getSetting, setSetting } from "./db";
 
 /**
@@ -46,8 +46,17 @@ export async function saveGoogleConfig(clientId: string, clientSecret: string): 
   });
 }
 
+/**
+ * The redirect URI Google is given, and the one shown in settings to paste into
+ * the Google console. Derived from the request, so a panel opened at
+ * 192.168.0.68:3200 registers that address rather than whatever APP_URL says.
+ *
+ * Google compares this string exactly — scheme, host, port and path all have to
+ * match what is registered, which is why it is displayed for copying instead of
+ * described in prose.
+ */
 export function redirectUri(): string {
-  return `${appUrl()}${REDIRECT_PATH}`;
+  return `${effectiveOrigin()}${REDIRECT_PATH}`;
 }
 
 export async function authorizeUrl(state: string): Promise<string | null> {

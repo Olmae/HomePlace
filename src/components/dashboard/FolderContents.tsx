@@ -1,37 +1,43 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import type { Item } from "@prisma/client";
+import { useState, useTransition, type ReactNode } from "react";
 import { Dialog } from "@/components/Dialog";
 import { Button } from "@/components/form";
-import { TileIcon } from "@/components/TileIcon";
 import { moveIntoFolder } from "@/actions/dashboard";
-import { autoIcon, guessIcon, GLYPH } from "@/lib/icons";
 import type { Dictionary } from "@/i18n";
 
 /**
- * What is inside a folder, and how to get it back out.
+ * A folder, opened.
  *
- * Filing a tile away is a drag onto the folder; taking it out needs a place to
- * click, and the tile is no longer on the board to click on. Hence this list —
- * it is the only way back, so it exists whether or not the layout is being
- * edited.
+ * The tiles inside are rendered on the server exactly as they are on the board
+ * and handed in as children — so a widget filed into a folder is still a live
+ * widget, a service still shows its status, and a container still has its
+ * arrow. Filing something away must not quietly demote it to a bookmark.
+ *
+ * The only thing this component adds is the way back out.
  */
 export function FolderContents({
   d,
-  folder,
-  children,
+  title,
+  icon,
+  count,
   canEdit,
-  iconPack,
+  items,
+  children,
 }: {
   d: Dictionary;
-  folder: Item;
-  children: Item[];
+  title: string;
+  icon: string;
+  count: number;
   canEdit: boolean;
-  iconPack: boolean;
+  /** One entry per child, in the same order as `children`. */
+  items: { id: string; title: string; w: number }[];
+  children: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
+
+  const childArray = Array.isArray(children) ? children : [children];
 
   return (
     <>
@@ -39,49 +45,42 @@ export function FolderContents({
         type="button"
         onClick={() => setOpen(true)}
         title={d.dashboard.openFolder}
+        aria-label={d.dashboard.openFolder}
         className="rounded-control px-1.5 py-0.5 text-xs text-faint transition-colors hover:bg-raised hover:text-text"
       >
-        {children.length} ▸
+        {count} ▸
       </button>
 
       {open && (
-        <Dialog open onClose={() => setOpen(false)} title={`${folder.icon || GLYPH.folder} ${folder.title}`}>
+        <Dialog open onClose={() => setOpen(false)} title={`${icon} ${title}`} wide>
           <div className="flex flex-col gap-3">
-            {children.length === 0 && (
-              <p className="text-sm text-muted">{d.dashboard.folderEmpty}</p>
-            )}
+            {count === 0 && <p className="text-sm text-muted">{d.dashboard.folderEmpty}</p>}
 
-            <ul className="divide-y divide-line">
-              {children.map((child) => (
-                <li key={child.id} className="flex items-center gap-2 py-2">
-                  <TileIcon
-                    icon={child.icon || autoIcon({ name: child.title, url: child.url ?? "", pack: iconPack })}
-                    title={child.title}
-                    size="sm"
-                    fallback={guessIcon({ name: child.title, url: child.url ?? "" })}
-                  />
-                  <a
-                    href={child.url ?? "#"}
-                    target={child.newTab ? "_blank" : undefined}
-                    rel={child.newTab ? "noreferrer" : undefined}
-                    className="min-w-0 flex-1 truncate text-sm hover:text-accent"
-                  >
-                    {child.title}
-                  </a>
+            {/* The same twelve-column grid as the board, so a tile that is four
+                wide out there looks the same in here. */}
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-12">
+              {items.map((item, i) => (
+                <div
+                  key={item.id}
+                  className="relative sm:col-span-6"
+                  style={{ gridColumn: undefined }}
+                >
                   {canEdit && (
-                    <Button
-                      size="sm"
-                      variant="quiet"
-                      disabled={pending}
+                    <button
+                      type="button"
                       title={d.dashboard.takeOut}
-                      onClick={() => startTransition(() => void moveIntoFolder(child.id, null))}
+                      aria-label={`${item.title} — ${d.dashboard.takeOut}`}
+                      disabled={pending}
+                      onClick={() => startTransition(() => void moveIntoFolder(item.id, null))}
+                      className="absolute right-1.5 top-1.5 z-20 rounded-control border border-line bg-surface/95 px-1.5 py-0.5 text-xs text-muted shadow-card transition-colors hover:text-text"
                     >
                       ↥
-                    </Button>
+                    </button>
                   )}
-                </li>
+                  {childArray[i]}
+                </div>
               ))}
-            </ul>
+            </div>
 
             {canEdit && <p className="text-xs text-faint">{d.dashboard.folderHint}</p>}
           </div>

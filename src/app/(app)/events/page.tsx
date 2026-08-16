@@ -3,6 +3,7 @@ import { pageUser } from "@/lib/pageUser";
 import { dict } from "@/i18n";
 import { Card, EmptyState, Badge } from "@/components/ui";
 import { AutoRefresh } from "@/components/AutoRefresh";
+import { EventFilters } from "./EventFilters";
 import { ago } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -14,19 +15,37 @@ export const dynamic = "force-dynamic";
  * someone triggered, a sign-in. A row per probe would be a log, and nobody
  * reads a log looking for "what broke last night".
  */
-export default async function EventsPage() {
+export default async function EventsPage({
+  searchParams,
+}: {
+  searchParams: { type?: string; q?: string };
+}) {
   const user = await pageUser();
   const d = dict(user.locale);
 
+  const type = searchParams.type ?? "";
+  const q = (searchParams.q ?? "").trim();
+
+  // "What happened with jellyfin this week" is the question this page exists
+  // for, and two hundred unfiltered rows do not answer it.
   const events = await prisma.event.findMany({
+    where: {
+      ...(type ? { type } : {}),
+      ...(q
+        ? {
+            OR: [
+              { title: { contains: q } },
+              { detail: { contains: q } },
+              { actor: { contains: q } },
+              { item: { title: { contains: q } } },
+            ],
+          }
+        : {}),
+    },
     orderBy: { at: "desc" },
     take: 200,
     include: { item: { select: { title: true } } },
   });
-
-  if (events.length === 0) {
-    return <EmptyState title={d.events.empty} />;
-  }
 
   const label: Record<string, string> = {
     down: d.events.wentDown,
@@ -40,8 +59,15 @@ export default async function EventsPage() {
   return (
     <>
       <AutoRefresh seconds={60} />
-      <h1 className="mb-4 text-lg font-semibold tracking-tight">{d.events.title}</h1>
 
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+        <h1 className="text-lg font-semibold tracking-tight">{d.events.title}</h1>
+        <EventFilters d={d} type={type} q={q} />
+      </div>
+
+      {events.length === 0 ? (
+        <EmptyState title={q || type ? d.events.noMatches : d.events.empty} />
+      ) : (
       <Card>
         <ul className="divide-y divide-line">
           {events.map((event) => (
@@ -71,6 +97,7 @@ export default async function EventsPage() {
           ))}
         </ul>
       </Card>
+      )}
     </>
   );
 }

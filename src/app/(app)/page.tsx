@@ -4,7 +4,7 @@ import { ensureSlugs, ensureLayout } from "@/lib/dashboards";
 import { pageUser } from "@/lib/pageUser";
 import { canEdit } from "@/lib/auth";
 import { listContainers } from "@/lib/docker";
-import { dockerHosts } from "@/lib/config";
+import { resolvedDockerHosts } from "@/lib/integrations";
 import { statusFor } from "@/lib/status";
 import { dict } from "@/i18n";
 import { EmptyState } from "@/components/ui";
@@ -94,7 +94,7 @@ export default async function DashboardPage({
   );
 
   const containers: ContainerOption[] =
-    editable && dockerHosts().length > 0
+    editable && (await resolvedDockerHosts()).length > 0
       ? (await listContainers()).map((c) => ({
           name: c.name,
           hostKey: c.hostKey,

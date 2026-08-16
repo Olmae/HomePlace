@@ -1,5 +1,6 @@
 import "server-only";
-import { dockerHosts, settings, type DockerHost } from "./config";
+import { settings, type DockerHost } from "./config";
+import { resolvedDockerHosts } from "./integrations";
 
 /**
  * Docker, over HTTP.
@@ -61,7 +62,7 @@ async function dockerFetch(host: DockerHost, path: string, init?: RequestInit) {
  *   homeplace.hide = "true"
  */
 export async function listContainers(hostKey?: string): Promise<Container[]> {
-  const hosts = dockerHosts().filter((h) => !hostKey || h.key === hostKey);
+  const hosts = (await resolvedDockerHosts()).filter((h) => !hostKey || h.key === hostKey);
   const results = await Promise.allSettled(
     hosts.map(async (host) => {
       const res = await dockerFetch(host, "/containers/json?all=1");
@@ -137,7 +138,7 @@ export async function controlContainer(
   if (!settings.allowContainerControl()) {
     return { ok: false, error: "container control is disabled (ALLOW_CONTAINER_CONTROL)" };
   }
-  const host = dockerHosts().find((h) => h.key === hostKey);
+  const host = (await resolvedDockerHosts()).find((h) => h.key === hostKey);
   if (!host) return { ok: false, error: `unknown docker host: ${hostKey}` };
 
   try {
@@ -169,7 +170,7 @@ export type ContainerDetail = Container & {
  * a page is a credential leak waiting for someone to share a screenshot.
  */
 export async function inspectContainer(hostKey: string, id: string): Promise<ContainerDetail | null> {
-  const host = dockerHosts().find((h) => h.key === hostKey);
+  const host = (await resolvedDockerHosts()).find((h) => h.key === hostKey);
   if (!host) return null;
 
   try {
@@ -231,12 +232,67 @@ export async function inspectContainer(hostKey: string, id: string): Promise<Con
 
 /** Recent log lines for the container detail view. */
 export async function containerLogs(hostKey: string, id: string, tail = 200): Promise<string> {
-  const host = dockerHosts().find((h) => h.key === hostKey);
+  const host = (await resolvedDockerHosts()).find((h) => h.key === hostKey);
   if (!host) return "";
   const res = await dockerFetch(host, `/containers/${encodeURIComponent(id)}/logs?stdout=1&stderr=1&tail=${tail}`);
   if (!res.ok) return "";
   const buf = Buffer.from(await res.arrayBuffer());
   return stripLogHeaders(buf);
+}
+
+export type ContainerStats = { name: string; cpu: number; memory: number; memoryLimit: number };
+
+/**
+ * CPU and memory straight from Docker.
+ *
+ * cAdvisor answers this better and with history, but it is one more thing to
+ * run — and the load widget should say something useful on an installation that
+ * has nothing but Docker. One request per container, so the list is capped by
+ * the caller.
+ */
+export async function containerStats(hostKey: string, id: string, name: string): Promise<ContainerStats | null> {
+  const host = (await resolvedDockerHosts()).find((h) => h.key === hostKey);
+  if (!host) return null;
+
+  try {
+    // stream=false returns a single sample that already contains the previous
+    // reading, which is what makes a percentage possible from one request.
+    const res = await fetch(`${host.url}/containers/${encodeURIComponent(id)}/stats?stream=false&one-shot=false`, {
+      cache: "no-store",
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) return null;
+    const raw = (await res.json()) as Record<string, any>;
+
+    const cpuDelta = (raw.cpu_stats?.cpu_usage?.total_usage ?? 0) - (raw.precpu_stats?.cpu_usage?.total_usage ?? 0);
+    const systemDelta = (raw.cpu_stats?.system_cpu_usage ?? 0) - (raw.precpu_stats?.system_cpu_usage ?? 0);
+    // Docker reports per-core totals; multiplying by the core count gives the
+    // same "200% means two cores" scale people expect from `docker stats`.
+    const cores = raw.cpu_stats?.online_cpus ?? raw.cpu_stats?.cpu_usage?.percpu_usage?.length ?? 1;
+    const cpu = systemDelta > 0 && cpuDelta > 0 ? (cpuDelta / systemDelta) * cores * 100 : 0;
+
+    // The cache is memory the kernel can reclaim; counting it makes every
+    // container look far hungrier than it is.
+    const cache = raw.memory_stats?.stats?.inactive_file ?? raw.memory_stats?.stats?.cache ?? 0;
+    const memory = Math.max(0, (raw.memory_stats?.usage ?? 0) - cache);
+
+    return { name, cpu, memory, memoryLimit: raw.memory_stats?.limit ?? 0 };
+  } catch {
+    return null;
+  }
+}
+
+/** Stats for several containers at once, capped so a busy host is not hammered. */
+export async function statsForContainers(
+  containers: { id: string; name: string; hostKey: string }[],
+  limit = 12
+): Promise<ContainerStats[]> {
+  const results = await Promise.allSettled(
+    containers.slice(0, limit).map((c) => containerStats(c.hostKey, c.id, c.name))
+  );
+  return results
+    .map((r) => (r.status === "fulfilled" ? r.value : null))
+    .filter((s): s is ContainerStats => s !== null);
 }
 
 /**
@@ -253,7 +309,7 @@ export async function streamLogs(
   tail: number,
   signal: AbortSignal
 ): Promise<ReadableStream<string> | null> {
-  const host = dockerHosts().find((h) => h.key === hostKey);
+  const host = (await resolvedDockerHosts()).find((h) => h.key === hostKey);
   if (!host) return null;
 
   const res = await fetch(
@@ -321,7 +377,7 @@ function stripLogHeaders(buf: Buffer): string {
 /** Is each configured endpoint reachable? Used by the health/settings page. */
 export async function dockerHealth(): Promise<{ key: string; label: string; ok: boolean; error?: string }[]> {
   return Promise.all(
-    dockerHosts().map(async (host) => {
+    (await resolvedDockerHosts()).map(async (host) => {
       try {
         const res = await dockerFetch(host, "/_ping");
         return { key: host.key, label: host.label, ok: res.ok, error: res.ok ? undefined : `HTTP ${res.status}` };

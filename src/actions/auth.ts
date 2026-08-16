@@ -6,6 +6,8 @@ import { prisma } from "@/lib/db";
 import { hashPassword, verifyPassword, needsSetup } from "@/lib/auth";
 import { createSession, destroySession, currentUser } from "@/lib/session";
 import { settings } from "@/lib/config";
+import { headers } from "next/headers";
+import { checkAttempt, recordFailure, clearAttempts } from "@/lib/rateLimit";
 
 export type FormState = { error?: string; ok?: boolean };
 
@@ -62,15 +64,25 @@ export async function signIn(_prev: FormState, form: FormData): Promise<FormStat
   });
   if (!parsed.success) return { error: "auth.wrongCredentials" };
 
+  // Limited per login name and per source address together: one wrong password
+  // typed twice should not lock out the household, and one address trying every
+  // name in turn should still run into the wall.
+  const source = headers().get("x-forwarded-for")?.split(",")[0]?.trim() || "local";
+  const key = `${parsed.data.login}|${source}`;
+  const limit = checkAttempt(key);
+  if (!limit.allowed) return { error: "auth.tooManyAttempts" };
+
   const user = await prisma.user.findUnique({ where: { login: parsed.data.login } });
 
   // Same message and roughly the same work whether the login exists or not, so
   // the form cannot be used to enumerate accounts.
   if (!user?.passwordHash) {
     await hashPassword(parsed.data.password);
+    recordFailure(key);
     return { error: "auth.wrongCredentials" };
   }
   if (!(await verifyPassword(parsed.data.password, user.passwordHash))) {
+    recordFailure(key);
     await prisma.event.create({
       data: { type: "auth-fail", severity: "warn", title: parsed.data.login, actor: parsed.data.login },
     });
@@ -78,6 +90,7 @@ export async function signIn(_prev: FormState, form: FormData): Promise<FormStat
   }
   if (user.disabled) return { error: "auth.accountDisabled" };
 
+  clearAttempts(key);
   await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
   await prisma.event.create({ data: { type: "login", title: user.name, actor: user.name } });
   await createSession(user.id);
@@ -117,6 +130,27 @@ export async function changePassword(_prev: FormState, form: FormData): Promise<
   if (!user.passwordHash || !(await verifyPassword(current, user.passwordHash))) {
     return { error: "auth.wrongCredentials" };
   }
-  await prisma.user.update({ where: { id: user.id }, data: { passwordHash: await hashPassword(next) } });
+  // Changing a password ends every other session — that is what someone means
+  // when they change it because they think somebody else has it.
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { passwordHash: await hashPassword(next), tokenVersion: { increment: 1 } },
+  });
+  await createSession(user.id);
   return { ok: true };
+}
+
+/**
+ * Sign out everywhere.
+ *
+ * A panel is opened on phones, tablets and a laptop that may be somewhere else
+ * entirely; "I do not know where I am still signed in" needs an answer that is
+ * not "change your password".
+ */
+export async function signOutEverywhere(): Promise<void> {
+  const user = await currentUser();
+  if (!user) return;
+  await prisma.user.update({ where: { id: user.id }, data: { tokenVersion: { increment: 1 } } });
+  destroySession();
+  redirect("/login");
 }

@@ -2,7 +2,8 @@ import { prisma, getSetting } from "@/lib/db";
 import { pageUser } from "@/lib/pageUser";
 import { canEdit } from "@/lib/auth";
 import { listContainers } from "@/lib/docker";
-import { dockerHosts, settings } from "@/lib/config";
+import { settings } from "@/lib/config";
+import { resolvedDockerHosts } from "@/lib/integrations";
 import { dict } from "@/i18n";
 import { EmptyState, SectionTitle, Badge } from "@/components/ui";
 import { AutoRefresh } from "@/components/AutoRefresh";
@@ -24,7 +25,7 @@ export default async function ContainersPage() {
   const d = dict(user.locale);
   const editable = canEdit(user);
 
-  if (dockerHosts().length === 0) {
+  if ((await resolvedDockerHosts()).length === 0) {
     return <EmptyState title={d.containers.noDocker} hint={d.containers.noDockerHint} />;
   }
 

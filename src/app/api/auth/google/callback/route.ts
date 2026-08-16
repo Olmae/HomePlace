@@ -1,13 +1,13 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { cookies } from "next/headers";
 import { currentUser } from "@/lib/session";
-import { appUrl } from "@/lib/config";
+import { effectiveOrigin } from "@/lib/origin";
 import { linkAccount, STATE_COOKIE } from "@/lib/google";
 
 export const dynamic = "force-dynamic";
 
 function back(status: string) {
-  const url = new URL("/settings", appUrl());
+  const url = new URL("/settings", effectiveOrigin());
   url.searchParams.set("google", status);
   return NextResponse.redirect(url);
 }

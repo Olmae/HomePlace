@@ -3,7 +3,8 @@ import { cookies } from "next/headers";
 import { randomBytes } from "node:crypto";
 import { currentUser } from "@/lib/session";
 import { canEdit } from "@/lib/auth";
-import { appUrl, settings } from "@/lib/config";
+import { settings } from "@/lib/config";
+import { effectiveOrigin } from "@/lib/origin";
 import { authorizeUrl, STATE_COOKIE } from "@/lib/google";
 
 export const dynamic = "force-dynamic";
@@ -11,10 +12,10 @@ export const dynamic = "force-dynamic";
 /** Starts linking a Google account to the signed-in user. */
 export async function GET() {
   const user = await currentUser();
-  if (!canEdit(user)) return NextResponse.redirect(new URL("/settings", appUrl()));
+  if (!canEdit(user)) return NextResponse.redirect(new URL("/settings", effectiveOrigin()));
 
   const url = await authorizeUrl("");
-  if (!url) return NextResponse.redirect(new URL("/settings?google=unconfigured", appUrl()));
+  if (!url) return NextResponse.redirect(new URL("/settings?google=unconfigured", effectiveOrigin()));
 
   // The state ties the callback to this browser and this account: without it a
   // prepared callback URL could attach an attacker's calendar to someone else.

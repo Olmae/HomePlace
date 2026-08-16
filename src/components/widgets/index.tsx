@@ -3,13 +3,13 @@ import { Sparkline } from "@/components/Sparkline";
 import { Clock } from "./Clock";
 import { query, queryOne, queryRange, Q } from "@/lib/prometheus";
 import { guests, storages } from "@/lib/proxmox";
-import { listContainers } from "@/lib/docker";
-import { dockerHosts } from "@/lib/config";
-import { prometheusConfig, proxmoxConfig } from "@/lib/integrations";
+import { listContainers, statsForContainers } from "@/lib/docker";
+import { prometheusConfig, proxmoxConfig, resolvedDockerHosts } from "@/lib/integrations";
 import { Slideshow } from "./Slideshow";
 import { NowPlayingWidget } from "./NowPlaying";
 import { WeatherWidget } from "./Weather";
 import { CalendarWidget } from "./Calendar";
+import { JellyfinWidget, QbitWidget, ArrWidget, PbsWidget, HomeAssistantWidget } from "./Services";
 import { Gauge } from "@/components/Gauge";
 import { Chart } from "@/components/Chart";
 import { prisma } from "@/lib/db";
@@ -76,6 +76,16 @@ export async function Widget({ widget, config, title, d, userId }: WidgetProps) 
       return <GaugeWidget config={config} title={title} d={d} />;
     case "uptimestrip":
       return <UptimeStripWidget config={config} title={title} d={d} />;
+    case "jellyfin":
+      return <JellyfinWidget title={title} d={d} />;
+    case "qbittorrent":
+      return <QbitWidget title={title} d={d} />;
+    case "arr":
+      return <ArrWidget title={title} d={d} />;
+    case "pbs":
+      return <PbsWidget title={title} d={d} />;
+    case "homeassistant":
+      return <HomeAssistantWidget config={config} title={title} d={d} />;
     case "notes":
       return <NotesWidget title={title} text={str(config.text) ?? ""} />;
     default:
@@ -302,7 +312,7 @@ function seriesLabel(metric: Record<string, string>): string {
 // ──────────────────────────────── Containers ─────────────────────────────
 
 async function ContainersWidget({ title, d }: { title: string; d: Dictionary }) {
-  if (dockerHosts().length === 0) {
+  if ((await resolvedDockerHosts()).length === 0) {
     return <NotConfigured title={title} message={d.containers.noDocker} hint={d.containers.noDockerHint} />;
   }
   const containers = await listContainers();
@@ -506,19 +516,32 @@ async function UptimeStripWidget({
  * the ones worth watching; empty means everything, top N.
  */
 async function LoadWidget({ config, title, d }: { config: Record<string, unknown>; title: string; d: Dictionary }) {
-  if (!(await prometheusConfig())) {
-    return <NotConfigured title={title} message={d.monitoring.noPrometheus} hint={d.monitoring.noPrometheusHint} />;
-  }
-
   const only = lines(config.containers);
   const sortBy = str(config.sortBy) === "memory" ? "memory" : "cpu";
   const limit = num(config.limit, 6);
+  const hasPrometheus = (await prometheusConfig()) !== null;
 
-  const [cpu, mem] = await Promise.all([query(Q.allContainerCpu()), query(Q.allContainerMemory())]);
-  const memBy = new Map(mem.map((s) => [s.metric.name, s.value]));
+  let rows: { name: string; cpu: number; memory: number }[] = [];
 
-  const rows = cpu
-    .map((s) => ({ name: s.metric.name ?? "?", cpu: s.value, memory: memBy.get(s.metric.name) ?? 0 }))
+  if (hasPrometheus) {
+    const [cpu, mem] = await Promise.all([query(Q.allContainerCpu()), query(Q.allContainerMemory())]);
+    const memBy = new Map(mem.map((s) => [s.metric.name, s.value]));
+    rows = cpu.map((s) => ({ name: s.metric.name ?? "?", cpu: s.value, memory: memBy.get(s.metric.name) ?? 0 }));
+  } else if ((await resolvedDockerHosts()).length > 0) {
+    // No cAdvisor: ask Docker itself. Running containers only — a stopped one
+    // has no statistics and would block the request waiting for them.
+    const running = (await listContainers()).filter((c) => c.state === "running");
+    const chosen = only.length > 0 ? running.filter((c) => only.includes(c.name)) : running;
+    rows = (await statsForContainers(chosen, Math.max(limit, 12))).map((s) => ({
+      name: s.name,
+      cpu: s.cpu,
+      memory: s.memory,
+    }));
+  } else {
+    return <NotConfigured title={title} message={d.monitoring.noPrometheus} hint={d.monitoring.noPrometheusHint} />;
+  }
+
+  rows = rows
     .filter((r) => (only.length === 0 ? true : only.includes(r.name)))
     .sort((a, b) => (sortBy === "memory" ? b.memory - a.memory : b.cpu - a.cpu))
     .slice(0, limit);
@@ -529,7 +552,10 @@ async function LoadWidget({ config, title, d }: { config: Record<string, unknown
 
   return (
     <Card className="h-full">
-      <CardHeader title={title} action={<span className="text-[11px] text-faint">{sortBy}</span>} />
+      <CardHeader
+        title={title}
+        action={<span className="text-[11px] text-faint">{hasPrometheus ? sortBy : `${sortBy} · docker`}</span>}
+      />
       <div className="space-y-2 p-4">
         {rows.length === 0 && <p className="text-sm text-muted">{d.widgets.noData}</p>}
         {rows.map((r) => (

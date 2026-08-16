@@ -7,6 +7,7 @@ import {
   proxmox as proxmoxEnv,
   friendplace as friendplaceEnv,
   dockerHosts,
+  type DockerHost,
 } from "./config";
 
 /**
@@ -55,7 +56,45 @@ const KEY = {
   prometheus: "integration.prometheus",
   proxmox: "integration.proxmox",
   telegram: "integration.telegram",
+  dockerHosts: "integration.dockerHosts",
 };
+
+/**
+ * Every Docker endpoint: the ones pinned in .env, then the ones added in the
+ * interface.
+ *
+ * Env first and never overridden — a key that exists in both places keeps the
+ * deployment's version, the same rule as everywhere else. Added hosts are not
+ * secrets (an address and a label), so unlike tokens they are stored as they
+ * are.
+ */
+export async function resolvedDockerHosts(): Promise<DockerHost[]> {
+  const fromEnv = dockerHosts();
+  const stored = await getSetting<DockerHost[]>(KEY.dockerHosts, []);
+  const keys = new Set(fromEnv.map((h) => h.key));
+
+  return [
+    ...fromEnv,
+    ...stored
+      .filter((h) => h?.url && h.key && !keys.has(h.key))
+      .map((h) => ({ key: h.key, label: h.label || h.key, url: h.url.replace(/\/+$/, "") })),
+  ];
+}
+
+export async function saveDockerHosts(hosts: DockerHost[]): Promise<void> {
+  await setSetting(
+    KEY.dockerHosts,
+    hosts
+      .filter((h) => h.url?.trim() && h.key?.trim())
+      .map((h) => ({
+        // The key is what tiles remember, so it is normalised rather than free
+        // text: renaming a host must not orphan every tile attached to it.
+        key: h.key.trim().toLowerCase().replace(/[^a-z0-9-]+/g, "-"),
+        label: h.label?.trim() || h.key.trim(),
+        url: h.url.trim().replace(/\/+$/, ""),
+      }))
+  );
+}
 
 // ─────────────────────────────── Prometheus ──────────────────────────────
 
@@ -182,7 +221,7 @@ export async function saveTelegram(input: Partial<TelegramSettings>): Promise<vo
 export async function integrationStatus() {
   const [prom, pve, tg] = await Promise.all([prometheusConfig(), proxmoxConfig(), telegramConfig()]);
   return {
-    docker: dockerHosts().length > 0,
+    docker: (await resolvedDockerHosts()).length > 0,
     prometheus: prom !== null,
     proxmox: pve !== null,
     telegram: tg !== null && tg.enabled,

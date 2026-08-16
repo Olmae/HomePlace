@@ -2,6 +2,7 @@ import "server-only";
 import { ProxyAgent } from "undici";
 import { socksDispatcher } from "fetch-socks";
 import { telegramConfig, type TelegramSettings } from "./integrations";
+import { inQuietHours } from "./quietHours";
 
 /**
  * Telegram delivery.
@@ -176,19 +177,7 @@ export async function send(text: string): Promise<SendResult> {
   return sendWith(cfg, text);
 }
 
-/**
- * Is now inside the quiet window?
- *
- * Format is "23:00-08:00", and a window that wraps past midnight is the normal
- * case rather than an edge case — which is why the comparison flips when the
- * end is earlier than the start.
- */
-export function inQuietHours(quietHours: string, now = new Date()): boolean {
-  const match = /^(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})$/.exec(quietHours.trim());
-  if (!match) return false;
-  const [, sh, sm, eh, em] = match;
-  const minutes = now.getHours() * 60 + now.getMinutes();
-  const start = Number(sh) * 60 + Number(sm);
-  const end = Number(eh) * 60 + Number(em);
-  return start <= end ? minutes >= start && minutes < end : minutes >= start || minutes < end;
-}
+// Quiet hours live in their own module so they can be unit-tested without
+// dragging the HTTP stack in; re-exported here because this is where callers
+// expect to find them.
+export { inQuietHours } from "./quietHours";

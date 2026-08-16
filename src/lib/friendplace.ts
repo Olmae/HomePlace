@@ -1,6 +1,7 @@
 import "server-only";
 import { randomBytes } from "node:crypto";
-import { friendplace, appUrl } from "./config";
+import { friendplace } from "./config";
+import { effectiveOrigin } from "./origin";
 
 /**
  * Optional single sign-on against FriendPlace, which acts as an OAuth 2.0
@@ -25,7 +26,9 @@ export function enabled(): boolean {
 }
 
 export function redirectUri(): string {
-  return `${appUrl()}${REDIRECT_PATH}`;
+  // Same reasoning as the Google flow: the address in the browser is the one
+  // the provider must send the person back to.
+  return `${effectiveOrigin()}${REDIRECT_PATH}`;
 }
 
 /** Random value tying the callback to the browser that started the flow. */

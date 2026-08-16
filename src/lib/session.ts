@@ -9,7 +9,7 @@ export const SESSION_COOKIE = "hp_session";
 
 type SessionPayload = {
   uid: string;
-  /** Bumped when a password changes, to invalidate old cookies. */
+  /** Account's token version when the cookie was issued. */
   v?: number;
 };
 
@@ -47,7 +47,8 @@ async function secret(): Promise<Uint8Array> {
 
 export async function createSession(userId: string): Promise<void> {
   const days = settings.sessionDays();
-  const token = await new SignJWT({ uid: userId } satisfies SessionPayload)
+  const account = await prisma.user.findUnique({ where: { id: userId }, select: { tokenVersion: true } });
+  const token = await new SignJWT({ uid: userId, v: account?.tokenVersion ?? 0 } satisfies SessionPayload)
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime(`${days}d`)
@@ -76,6 +77,9 @@ export async function currentUser() {
     if (!uid) return null;
     const user = await prisma.user.findUnique({ where: { id: uid } });
     if (!user || user.disabled) return null;
+    // A cookie issued before the last "sign out everywhere" (or password
+    // change) no longer counts, however valid its signature.
+    if ((payload as SessionPayload).v !== undefined && (payload as SessionPayload).v !== user.tokenVersion) return null;
     return user;
   } catch {
     // Expired or tampered-with cookie — treat as signed out, not as an error.
