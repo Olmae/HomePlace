@@ -9,6 +9,8 @@ import { autoIcon, GLYPH } from "@/lib/icons";
 import { TileIcon } from "@/components/TileIcon";
 import { IconPicker } from "@/components/IconPicker";
 import { PlacePicker } from "./PlacePicker";
+import { WidgetPicker } from "./WidgetPicker";
+import { HaEntityPicker } from "./HaEntityPicker";
 import { ImagePicker } from "@/components/ImagePicker";
 import type { Dictionary } from "@/i18n";
 
@@ -231,7 +233,9 @@ export function ItemDialog({
       case "homeassistant":
         return { entities: form.entities.split("\n").map((e) => e.trim()).filter(Boolean) };
       case "calendar":
-        return { days: Number(form.days), limit: Number(form.limit) };
+        // Nothing to configure: the widget shows the month, and how much of it
+        // fits is decided by dragging the tile.
+        return {};
       case "uptimestrip":
         return {
           hours: Number(form.hours),
@@ -303,13 +307,7 @@ export function ItemDialog({
         {kind === "widget" && (
           <>
             <Field label={d.widgets.pick}>
-              <Select value={form.widget} onChange={(e) => set("widget", e.target.value)}>
-                {widgetKinds.map((w) => (
-                  <option key={w} value={w}>
-                    {d.widgets[w]}
-                  </option>
-                ))}
-              </Select>
+              <WidgetPicker d={d} value={form.widget} onChange={(w) => set("widget", w)} />
             </Field>
 
             {form.widget === "chart" && (
@@ -412,12 +410,9 @@ export function ItemDialog({
 
             {form.widget === "uptimestrip" && (
               <>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 gap-3">
                   <Field label={d.widgets.hours}>
                     <Input type="number" min={1} value={form.hours} onChange={(e) => set("hours", Number(e.target.value))} />
-                  </Field>
-                  <Field label={d.widgets.blocks}>
-                    <Input type="number" min={5} max={120} value={form.blocks} onChange={(e) => set("blocks", Number(e.target.value))} />
                   </Field>
                   <Field label={d.widgets.limit}>
                     <Input type="number" min={1} max={20} value={form.limit} onChange={(e) => set("limit", Number(e.target.value))} />
@@ -430,26 +425,13 @@ export function ItemDialog({
             )}
 
             {form.widget === "homeassistant" && (
-              <Field label={d.services.entities} hint={d.services.entitiesHint}>
-                <Textarea
-                  rows={4}
-                  value={form.entities}
-                  onChange={(e) => set("entities", e.target.value)}
-                  className="font-mono text-xs"
-                  placeholder="light.kitchen"
+              <Field label={d.services.haEntities} hint={d.services.haPickerHint}>
+                <HaEntityPicker
+                  d={d}
+                  value={form.entities.split("\n").map((e) => e.trim()).filter(Boolean)}
+                  onChange={(ids) => set("entities", ids.join("\n"))}
                 />
               </Field>
-            )}
-
-            {form.widget === "calendar" && (
-              <div className="grid grid-cols-2 gap-3">
-                <Field label={d.widgets.calendarDays}>
-                  <Input type="number" min={1} max={60} value={form.days} onChange={(e) => set("days", Number(e.target.value))} />
-                </Field>
-                <Field label={d.widgets.limit}>
-                  <Input type="number" min={1} max={30} value={form.limit} onChange={(e) => set("limit", Number(e.target.value))} />
-                </Field>
-              </div>
             )}
 
             {form.widget === "load" && (
@@ -582,7 +564,7 @@ export function ItemDialog({
           </div>
         )}
 
-        {!containerStep && !isFolder && (
+        {!containerStep && !isFolder && kind !== "widget" && (
         <div className="grid grid-cols-2 gap-3">
           <Field label={d.dashboard.tileWidth}>
             <Select value={String(form.w)} onChange={(e) => set("w", Number(e.target.value))}>

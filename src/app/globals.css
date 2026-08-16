@@ -154,13 +154,33 @@ body {
   Board placement.
 
   Grid coordinates arrive as custom properties on each cell, because inline
-  styles cannot be made conditional on a breakpoint — and below `md` the board
-  has to become a single column, where a two-dimensional layout means nothing.
+  styles cannot be made conditional on a breakpoint.
+
+  Below `md` the board is one column and rows size themselves to their contents.
+  The fixed row height belongs to the two-dimensional layout only: applying it on
+  a phone gave every tile one 84px row regardless of its height, and anything
+  taller than that spilled over the tile beneath it.
+
+  A minimum height keeps proportions recognisable — a chart that is three rows
+  tall on the board should not collapse to a strip on a phone.
 */
+.hp-board {
+  grid-auto-rows: auto;
+}
+
+.hp-cell {
+  min-height: calc(var(--h, 1) * 3.25rem);
+}
+
 @media (min-width: 768px) {
+  .hp-board {
+    grid-auto-rows: var(--row-height, 84px);
+  }
+
   .hp-cell {
     grid-column: var(--col);
     grid-row: var(--row);
+    min-height: 0;
   }
 }
 

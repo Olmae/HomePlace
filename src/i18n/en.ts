@@ -312,14 +312,22 @@ export const en = {
 
   },
   settings: {
+    addToBoard: "Put on the board",
+    addedToBoard: "On the board",
     title: "Settings",
     appearance: "Appearance",
     account: "Account",
     users: "Users",
     integrations: "Integrations",
+    system: "System",
     alerts: "Alerts",
     notifications: "Notifications",
     push: "Push notifications",
+    ntfyHint: "A notifier you can host yourself. On the same network as this panel it keeps working when the connection to the outside world is what broke — which is when a server alert matters most.",
+    ntfyTopic: "Topic",
+    webhook: "Webhook",
+    webhookHint: "A POST with the whole event as JSON, for whatever else you run — Node-RED, a script, another bot.",
+
     pushHint: "Alerts and reminders delivered by the browser. Each browser is allowed separately, and works even when Telegram is unreachable.",
     pushEnable: "Allow in this browser",
     pushDenied: "The browser refused permission",
@@ -415,29 +423,50 @@ export const en = {
       "+ adds a tile: a container, any link, a folder, or a widget. \"Edit layout\" turns on dragging — move a tile anywhere, pull its bottom-right corner to resize. Tabs across the top are separate boards; each one can have its own background photo.",
     containersTitle: "Containers",
     containersText:
-      "Containers on your Docker host appear by themselves. One click puts one on the dashboard; the arrow opens its details — logs, mounts, restarts. Start/stop/restart needs the socket proxy from docker-compose.yml and can be switched off entirely with ALLOW_CONTAINER_CONTROL=false.",
+      "The containers page is the operations view: every container on the machine, with live CPU and memory, search, a filter for the ones misbehaving, and controls on each row. The arrow opens one — logs streaming live, mounts, ports, restarts. Start and stop need the socket proxy from docker-compose.yml and can be switched off entirely with ALLOW_CONTAINER_CONTROL=false.",
     monitoringTitle: "Monitoring",
     monitoringText:
       "Hardware numbers come from Prometheus (node_exporter for the machine, cAdvisor for containers). Proxmox adds guests, physical disks and SMART. Both are set up on this page — address, token, then Save runs a real test.",
     alertsTitle: "Notifications",
     alertsText:
-      "Telegram sends a message when a tile stays down longer than the delay, and one more when it comes back. Quiet hours silence the night. If Telegram is not reachable from the server, point Proxy at a SOCKS5 or HTTP proxy you already run.",
+      "Two kinds: a service that stops answering, and a rule you write on any metric — «disk over 90% for ten minutes». Both wait before crying wolf and report once. They go to every route you have set up: the browser, Telegram, ntfy, a webhook. Those fail in different ways, and an outage is a bad moment to depend on one.",
     nowPlayingTitle: "Now playing",
     nowPlayingText:
       "The panel cannot see what your PC is playing, so the PC tells it: generate a token and POST the track to /api/now-playing from a script or a browser extension. The example command is on this page.",
+    boardTitle:
+      "Arranging the board",
+    boardText:
+      "Edit layout turns on dragging: move a tile anywhere, pull its bottom-right corner to resize, and with a tile focused the arrow keys move it — Shift with them resizes. Drop a tile onto a folder to file it away; it keeps working in there, widgets included. The padlock pins a tile so nothing can shove it.",
+    remindersTitle:
+      "Reminders and the home half",
+    remindersText:
+      "A reminder is a line and a time, added straight on its tile, repeating if you want; it notifies whoever set it. Weather needs nothing, a calendar needs a linked Google account, and a tab can have a background photo from your phone.",
     shortcutsTitle: "Shortcuts",
     shortcutsText: "Ctrl+K opens search — services, containers, pages. Arrows to move, Enter to go.",
   },
   services: {
+    haEntities: "Devices",
+    haPickerHint: "Discovered from Home Assistant. Pick what belongs on the tile; the ones marked ⇄ can be switched from here.",
+    haAllDomains: "All kinds",
+
     notConfigured: "Not set up — add it in settings",
     nothingPlaying: "Nothing playing",
     transcoding: "transcoding",
+    nextUp: "Next up",
+    recentlyAdded: "Recently added",
+
     idle: "Nothing downloading",
     inQueue: "in queue",
     noBackups: "no backups",
     entities: "Entities",
     entitiesHint: "One entity id per line, e.g. light.kitchen. Lights, switches, scenes and scripts can be operated; everything else is shown read-only.",
     pickEntities: "Choose which entities to show",
+  },
+  widgetGroups: {
+    monitoring: "Monitoring",
+    services: "Services",
+    home: "Home",
+    atmosphere: "Atmosphere",
   },
   reminders: {
     what: "What to remember",

@@ -207,6 +207,11 @@ Where this is going, roughly in order.
 
 ### Next
 
+- [x] Settings split into sections — the page had outgrown one column
+- [x] Adding a widget by picking from categories, each with a sketch of itself
+- [x] The calendar widget drawn as an actual calendar
+- [x] Putting a configured service onto the board in one click
+- [x] Keyboard-only layout editing — arrows move a focused tile, Shift resizes
 - [x] Live-streaming container logs
 - [x] More widget kinds: multi-series charts, gauges, an uptime strip
 - [x] An icon picker with a bundled set
@@ -217,7 +222,6 @@ Where this is going, roughly in order.
 - [x] Uploading background and slideshow images to the panel
 - [x] Reminders that repeat, on the board and in your notifications
 - [x] Folders hold anything, widgets included, and can be pinned in place
-- [ ] Keyboard-only layout editing
 - [ ] Grouping tiles into labelled sections, as an alternative to folders
 
 ### Alerts and notifications
@@ -225,15 +229,17 @@ Where this is going, roughly in order.
 - [x] Telegram, with a delay before alerting, recovery messages and quiet hours
 - [x] Rules on metrics, not only availability: "disk over 90%", "CPU pinned for
       ten minutes"
-- [ ] More destinations: email, ntfy, webhooks
+- [x] More destinations: ntfy and webhooks
+- [ ] Email as a destination
 - [ ] Grouping and escalation
 - [x] Web push in the browser and on the phone, independent of Telegram
 
 ### Service integrations
 
-- [x] **Home Assistant** — entities and toggles on the board
+- [x] **Home Assistant** — entities and toggles on the board, discovered from
+      the house rather than typed in by hand
 - [x] **qBittorrent** — active torrents and speeds
-- [x] **Jellyfin** — what is playing right now, and on what
+- [x] **Jellyfin** — what is playing, what to watch next, with artwork
 - [x] ***arr stack** — queue and health
 - [ ] Deeper *arr: upcoming calendar, search from the panel
 - [x] **Proxmox Backup Server** — last backup, datastore usage

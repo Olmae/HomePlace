@@ -17,9 +17,11 @@ export function Help({ d }: { d: Dictionary }) {
 
   const sections = [
     { title: d.help.dashboardTitle, text: d.help.dashboardText },
+    { title: d.help.boardTitle, text: d.help.boardText },
     { title: d.help.containersTitle, text: d.help.containersText },
     { title: d.help.monitoringTitle, text: d.help.monitoringText },
     { title: d.help.alertsTitle, text: d.help.alertsText },
+    { title: d.help.remindersTitle, text: d.help.remindersText },
     { title: d.help.nowPlayingTitle, text: d.help.nowPlayingText },
     { title: d.help.shortcutsTitle, text: d.help.shortcutsText },
   ];

@@ -50,10 +50,26 @@ const trim = (url: string) => url.trim().replace(/\/+$/, "");
 // ──────────────────────────────── Jellyfin ───────────────────────────────
 
 export type JellyfinSettings = { url: string; apiKey: string };
+export type JellyfinItem = {
+  id: string;
+  name: string;
+  /** "The Expanse · S02E04" — the line under the artwork. */
+  detail: string;
+  /** Poster URL, already signed with the API key so the browser can load it. */
+  image: string;
+  /** How far into it, for a resumable item. */
+  progress: number;
+  kind: string;
+};
+
 export type JellyfinState = {
   sessions: { user: string; item: string; kind: string; transcoding: boolean; progress: number }[];
   transcoding: number;
   counts: { movies: number; episodes: number; series: number };
+  /** Half-watched things first, then the next unwatched episode of a series. */
+  nextUp: JellyfinItem[];
+  /** Recently added, for when nothing is half-watched. */
+  recent: JellyfinItem[];
 };
 
 export async function jellyfinConfig(): Promise<JellyfinSettings | null> {
@@ -76,11 +92,57 @@ export async function jellyfinState(): Promise<JellyfinState | null> {
   if (!cfg) return null;
 
   const headers = { "x-emby-token": cfg.apiKey };
-  const [sessions, counts] = await Promise.all([
+
+  // Four calls, in parallel: what is playing, how big the library is, what to
+  // continue, and what has just arrived. A tile that only answers "is anything
+  // playing" is blank most of the day, which is most of the time you look at it.
+  const [sessions, counts, resume, nextUp, recent] = await Promise.all([
     get<Record<string, any>[]>({ url: `${cfg.url}/Sessions`, headers }),
     get<Record<string, number>>({ url: `${cfg.url}/Items/Counts`, headers }),
+    get<{ Items?: Record<string, any>[] }>({
+      url: `${cfg.url}/Items/Resume?Limit=8&MediaTypes=Video&Fields=SeriesName,IndexNumber,ParentIndexNumber`,
+      headers,
+    }),
+    get<{ Items?: Record<string, any>[] }>({
+      url: `${cfg.url}/Shows/NextUp?Limit=8&Fields=SeriesName,IndexNumber,ParentIndexNumber`,
+      headers,
+    }),
+    get<{ Items?: Record<string, any>[] }>({
+      url: `${cfg.url}/Items/Latest?Limit=8&IncludeItemTypes=Movie,Episode&Fields=SeriesName,IndexNumber,ParentIndexNumber`,
+      headers,
+    }),
   ]);
   if (!sessions) return null;
+
+  const toItem = (raw: Record<string, any>): JellyfinItem => {
+    const season = raw.ParentIndexNumber;
+    const episode = raw.IndexNumber;
+    const number =
+      season !== undefined && episode !== undefined
+        ? `S${String(season).padStart(2, "0")}E${String(episode).padStart(2, "0")}`
+        : "";
+    const ticks = Number(raw.RunTimeTicks ?? 0);
+    const position = Number(raw.UserData?.PlaybackPositionTicks ?? 0);
+
+    return {
+      id: String(raw.Id ?? ""),
+      name: String(raw.SeriesName ?? raw.Name ?? ""),
+      detail: [number, raw.SeriesName ? raw.Name : ""].filter(Boolean).join(" · "),
+      // The key goes in the URL because the browser fetches the image directly
+      // and cannot send a header; Jellyfin accepts it there for images.
+      image: raw.Id
+        ? `${cfg.url}/Items/${raw.Id}/Images/Primary?maxHeight=240&quality=80&api_key=${encodeURIComponent(cfg.apiKey)}`
+        : "",
+      progress: ticks > 0 && position > 0 ? (position / ticks) * 100 : 0,
+      kind: String(raw.Type ?? ""),
+    };
+  };
+
+  // Resume first — a half-watched episode is more "next" than an unwatched one.
+  const nextItems = [...(resume?.Items ?? []), ...(nextUp?.Items ?? [])]
+    .filter((raw, i, all) => all.findIndex((other) => other.Id === raw.Id) === i)
+    .slice(0, 8)
+    .map(toItem);
 
   // Only sessions actually playing something: an idle app that is merely
   // connected is not "what is on".
@@ -103,6 +165,8 @@ export async function jellyfinState(): Promise<JellyfinState | null> {
       episodes: counts?.EpisodeCount ?? 0,
       series: counts?.SeriesCount ?? 0,
     },
+    nextUp: nextItems,
+    recent: (recent?.Items ?? []).map(toItem),
   };
 }
 

@@ -78,6 +78,34 @@ export async function saveHaSettings(input: HaSettings): Promise<ServiceResult> 
 }
 
 /** Entities to choose from when configuring the widget. */
+/**
+ * Discovery for the widget's entity picker.
+ *
+ * Returns the state as well as the name, so the list is recognisable: two lamps
+ * called "Ceiling" are told apart by one being on.
+ */
+export async function discoverHaEntities(): Promise<{
+  ok: boolean;
+  error?: string;
+  entities: { id: string; name: string; state: string; domain: string; toggleable: boolean }[];
+}> {
+  await requireRole("admin");
+  const entities = await haStates();
+  if (!entities) {
+    return { ok: false, error: "Home Assistant is not configured, or did not answer", entities: [] };
+  }
+  return {
+    ok: true,
+    entities: entities.map((e) => ({
+      id: e.id,
+      name: e.name,
+      state: e.state,
+      domain: e.domain,
+      toggleable: e.toggleable,
+    })),
+  };
+}
+
 export async function listHaEntities(): Promise<{ id: string; name: string; domain: string }[]> {
   await requireRole("admin");
   const entities = await haStates();

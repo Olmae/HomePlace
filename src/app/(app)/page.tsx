@@ -175,6 +175,7 @@ export default async function DashboardPage({
         <EmptyState title={d.dashboard.empty} hint={editable ? d.dashboard.emptyHint : undefined} />
       ) : (
         <Board
+          d={d}
           layout={items.map(({ id, x, y, w, h }) => ({ id, x, y, w, h }))}
           editing={editing}
           folderIds={items.filter((i) => i.kind === "folder").map((i) => i.id)}

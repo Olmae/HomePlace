@@ -9,6 +9,7 @@ import { prometheusHealth } from "@/lib/prometheus";
 import { proxmoxHealth } from "@/lib/proxmox";
 import { sendWith } from "@/lib/telegram";
 import { saveGoogleConfig, unlinkAccount } from "@/lib/google";
+import { saveNtfy, ntfyConfig, sendNtfy, saveWebhook, webhookConfig, sendWebhook } from "@/lib/notify";
 
 /**
  * Configuring the integrations from the settings page.
@@ -136,4 +137,41 @@ export async function unlinkGoogle(): Promise<void> {
   await unlinkAccount(user.id);
   revalidatePath("/settings");
   revalidatePath("/");
+}
+
+/** ntfy — a notifier that works without leaving the house. */
+export async function saveNtfySettings(input: {
+  enabled: boolean;
+  url: string;
+  topic: string;
+  token: string;
+}): Promise<TestResult> {
+  await requireRole("admin");
+  await saveNtfy(input);
+  revalidatePath("/settings");
+  return { ok: true };
+}
+
+export async function testNtfy(): Promise<TestResult> {
+  await requireRole("admin");
+  const cfg = await ntfyConfig();
+  if (!cfg) return { ok: false, error: "ntfy is not configured" };
+  const ok = await sendNtfy(cfg, { title: "HomePlace", body: "Test notification — ntfy is working.", severity: "info" });
+  return ok ? { ok: true } : { ok: false, error: "the server did not accept the message" };
+}
+
+/** A webhook, for whatever else the household runs. */
+export async function saveWebhookSettings(input: { enabled: boolean; url: string; token: string }): Promise<TestResult> {
+  await requireRole("admin");
+  await saveWebhook(input);
+  revalidatePath("/settings");
+  return { ok: true };
+}
+
+export async function testWebhook(): Promise<TestResult> {
+  await requireRole("admin");
+  const cfg = await webhookConfig();
+  if (!cfg) return { ok: false, error: "no webhook address" };
+  const ok = await sendWebhook(cfg, { title: "HomePlace", body: "Test notification — the webhook is working.", severity: "info" });
+  return ok ? { ok: true } : { ok: false, error: "the endpoint did not answer with a success status" };
 }

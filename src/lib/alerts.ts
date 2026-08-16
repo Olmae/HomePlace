@@ -1,9 +1,9 @@
 import "server-only";
 import { prisma } from "./db";
 import { telegramConfig } from "./integrations";
-import { send, inQuietHours } from "./telegram";
+import { inQuietHours } from "./quietHours";
 import { appUrl } from "./config";
-import { sendPush, alertRecipients } from "./push";
+import { notify } from "./notify";
 
 /**
  * Turning probe results into notifications.
@@ -75,21 +75,19 @@ export async function processAlerts(current: Watched[]): Promise<void> {
 async function deliver(text: string, quietHours: string, itemId: string, state: "up" | "down"): Promise<void> {
   const quiet = inQuietHours(quietHours);
   if (!quiet) {
-    // Both channels, because they fail differently: Telegram needs a network
-    // this server may not have, push needs a browser that has been opened.
-    await sendPush(await alertRecipients(), {
+    // Every configured route at once. They fail differently — push needs a
+    // browser, Telegram needs the outside world, ntfy needs only the LAN — and
+    // an outage is the worst moment to depend on one of them.
+    const delivered = await notify({
       title: state === "down" ? "⚠ HomePlace" : "✅ HomePlace",
       body: stripHtml(text),
+      severity: state === "down" ? "error" : "info",
       tag: `item-${itemId}`,
-    }).catch(() => ({ sent: 0, failed: 0 }));
+    });
 
-    const result = await send(text);
-    if (!result.ok) {
-      console.error("telegram delivery failed:", result.error);
-      // Not marking it as notified: a delivery that failed for a network reason
-      // should be retried on the next tick.
-      if (state === "down") return;
-    }
+    // Nothing got through: leave it unmarked so the next tick tries again.
+    const anything = delivered.push > 0 || delivered.telegram || delivered.ntfy || delivered.webhook;
+    if (!anything && state === "down") return;
   }
   if (state === "down") {
     await prisma.alertState.update({ where: { itemId }, data: { notifiedAt: new Date() } }).catch(() => {});

@@ -27,8 +27,13 @@ export async function JellyfinWidget({ title, d }: { title: string; d: Dictionar
   const state = await jellyfinState();
   if (!state) return <NotSet title={title} message={d.services.notConfigured} />;
 
+  // What to watch is the question this tile is asked most of the day; what is
+  // playing right now only matters for the hour or two it is true.
+  const queue = state.nextUp.length > 0 ? state.nextUp : state.recent;
+  const heading = state.nextUp.length > 0 ? d.services.nextUp : d.services.recentlyAdded;
+
   return (
-    <Card className="h-full">
+    <Card className="flex h-full flex-col">
       <CardHeader
         title={title}
         action={
@@ -43,17 +48,51 @@ export async function JellyfinWidget({ title, d }: { title: string; d: Dictionar
           )
         }
       />
-      <div className="space-y-2.5 p-4">
-        {state.sessions.length === 0 && <p className="text-sm text-muted">{d.services.nothingPlaying}</p>}
-        {state.sessions.map((session, i) => (
-          <div key={`${session.user}-${i}`}>
-            <div className="mb-1 flex items-baseline justify-between gap-2">
-              <span className="truncate text-sm">{session.item}</span>
-              <span className="shrink-0 text-[11px] text-faint">{session.user}</span>
+
+      {state.sessions.length > 0 && (
+        <div className="space-y-2 border-b border-line p-3">
+          {state.sessions.map((session, i) => (
+            <div key={`${session.user}-${i}`}>
+              <div className="mb-1 flex items-baseline justify-between gap-2">
+                <span className="truncate text-sm">▶ {session.item}</span>
+                <span className="shrink-0 text-[11px] text-faint">{session.user}</span>
+              </div>
+              <Meter value={session.progress} tone={session.transcoding ? "warn" : "ok"} />
             </div>
-            <Meter value={session.progress} tone={session.transcoding ? "warn" : "ok"} />
+          ))}
+        </div>
+      )}
+
+      <div className="min-h-0 flex-1 overflow-y-auto p-3">
+        <p className="mb-2 text-[11px] uppercase tracking-wide text-faint">{heading}</p>
+
+        {queue.length === 0 ? (
+          <p className="text-sm text-muted">{d.services.nothingPlaying}</p>
+        ) : (
+          // A row of posters: artwork is how anyone actually recognises what a
+          // thing is, and a list of episode titles is not.
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {queue.map((item) => (
+              <div key={item.id} className="w-20 shrink-0">
+                <div className="relative aspect-[2/3] overflow-hidden rounded border border-line bg-raised">
+                  {item.image && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={item.image} alt="" className="h-full w-full object-cover" loading="lazy" />
+                  )}
+                  {item.progress > 0 && (
+                    <span className="absolute inset-x-0 bottom-0 h-1 bg-black/40">
+                      <span className="block h-full bg-accent" style={{ width: `${item.progress}%` }} />
+                    </span>
+                  )}
+                </div>
+                <p className="mt-1 truncate text-[11px]" title={item.name}>
+                  {item.name}
+                </p>
+                {item.detail && <p className="truncate text-[10px] text-faint">{item.detail}</p>}
+              </div>
+            ))}
           </div>
-        ))}
+        )}
       </div>
     </Card>
   );

@@ -3,9 +3,8 @@ import { prisma } from "./db";
 import { queryOne } from "./prometheus";
 import { prometheusConfig } from "./integrations";
 import { telegramConfig } from "./integrations";
-import { send, inQuietHours } from "./telegram";
 import { bytes, percent } from "./format";
-import { sendPush, alertRecipients } from "./push";
+import { notify } from "./notify";
 
 /**
  * Conditions on metrics, not just on availability.
@@ -31,7 +30,6 @@ export async function evaluateRules(): Promise<RuleEvaluation[]> {
   if (rules.length === 0) return [];
 
   const cfg = await telegramConfig();
-  const notifications = !!cfg?.enabled;
   const now = new Date();
   const results: RuleEvaluation[] = [];
 
@@ -61,8 +59,13 @@ export async function evaluateRules(): Promise<RuleEvaluation[]> {
         await prisma.event.create({
           data: { type: "up", severity: "info", title: rule.name, detail: describe(rule, value) },
         });
-        if (notifications && wasNotified && cfg!.notifyRecovery && !inQuietHours(cfg!.quietHours)) {
-          await send(`✅ <b>${escapeHtml(rule.name)}</b> — back to normal (${describe(rule, value)})`);
+        if (wasNotified && (cfg?.notifyRecovery ?? true)) {
+          await notify({
+            title: `✅ ${rule.name}`,
+            body: `back to normal — ${describe(rule, value)}`,
+            severity: "info",
+            tag: `rule-${rule.id}`,
+          });
         }
       } else {
         await prisma.alertRule.update({
@@ -95,21 +98,13 @@ export async function evaluateRules(): Promise<RuleEvaluation[]> {
       },
     });
 
-    const quiet = notifications ? inQuietHours(cfg!.quietHours) : inQuietHours("");
-    if (!quiet) {
-      const mark = rule.severity === "error" ? "🔴" : rule.severity === "info" ? "ℹ️" : "🟠";
-      // Push does not depend on Telegram being configured or reachable, so it
-      // is sent whether or not the bot is set up.
-      await sendPush(await alertRecipients(), {
-        title: `${mark} ${rule.name}`,
-        body: describe(rule, value),
-        tag: `rule-${rule.id}`,
-      }).catch(() => ({ sent: 0, failed: 0 }));
-
-      if (notifications) {
-        await send(`${mark} <b>${escapeHtml(rule.name)}</b>\n${escapeHtml(describe(rule, value))}`);
-      }
-    }
+    const mark = rule.severity === "error" ? "🔴" : rule.severity === "info" ? "ℹ️" : "🟠";
+    await notify({
+      title: `${mark} ${rule.name}`,
+      body: describe(rule, value),
+      severity: rule.severity === "error" ? "error" : rule.severity === "info" ? "info" : "warn",
+      tag: `rule-${rule.id}`,
+    });
   }
 
   return results;

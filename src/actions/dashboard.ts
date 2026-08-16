@@ -289,6 +289,48 @@ export async function toggleLock(itemId: string): Promise<void> {
   revalidatePath("/");
 }
 
+/**
+ * Put a service's widget straight onto the board.
+ *
+ * Configuring Jellyfin in settings and then being sent to the dashboard to add
+ * a widget, name it and pick its kind is three steps too many: the moment the
+ * credentials work, the panel already knows what the tile should be.
+ */
+export async function addServiceWidget(widget: string, title: string): Promise<{ ok: boolean; dashboard?: string }> {
+  await requireRole("admin");
+
+  const dashboard = await prisma.dashboard.findFirst({ orderBy: { order: "asc" } });
+  if (!dashboard) return { ok: false };
+
+  const existing = await prisma.item.findFirst({ where: { dashboardId: dashboard.id, widget, parentId: null } });
+  // Already there: adding a second identical tile is never what the button
+  // meant, so this reports success and changes nothing.
+  if (existing) return { ok: true, dashboard: dashboard.slug ?? dashboard.id };
+
+  const siblings = await prisma.item.findMany({
+    where: { dashboardId: dashboard.id, parentId: null },
+    select: { id: true, x: true, y: true, w: true, h: true },
+  });
+  const slot = nextFreeSlot(siblings, 4, 3);
+
+  await prisma.item.create({
+    data: {
+      dashboardId: dashboard.id,
+      kind: "widget",
+      widget,
+      title,
+      x: slot.x,
+      y: slot.y,
+      w: 4,
+      h: 3,
+      order: siblings.length,
+    },
+  });
+
+  revalidatePath("/");
+  return { ok: true, dashboard: dashboard.slug ?? dashboard.id };
+}
+
 /** Containers the user chose not to see in the discovery list. */
 export async function hideContainer(name: string, hidden: boolean): Promise<void> {
   await requireRole("admin");

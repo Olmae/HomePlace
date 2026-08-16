@@ -1,0 +1,281 @@
+"use client";
+
+import { useState } from "react";
+import type { Dictionary } from "@/i18n";
+
+/**
+ * Choosing a widget by looking at it.
+ *
+ * A dropdown of fifteen names asks someone to already know what "uptime strip"
+ * looks like. Here they are grouped by what they are for and each one carries a
+ * small sketch of itself — not a live preview, which would mean fifteen
+ * simultaneous queries against Prometheus every time this dialog opens, but
+ * enough shape to recognise.
+ */
+
+export type WidgetKind =
+  | "system"
+  | "disks"
+  | "load"
+  | "chart"
+  | "gauge"
+  | "uptimestrip"
+  | "containers"
+  | "proxmox"
+  | "jellyfin"
+  | "qbittorrent"
+  | "arr"
+  | "pbs"
+  | "homeassistant"
+  | "weather"
+  | "calendar"
+  | "reminders"
+  | "clock"
+  | "notes"
+  | "slideshow"
+  | "nowplaying";
+
+type Category = { key: "monitoring" | "services" | "home" | "atmosphere"; widgets: WidgetKind[] };
+
+const CATEGORIES: Category[] = [
+  { key: "monitoring", widgets: ["system", "disks", "load", "chart", "gauge", "uptimestrip", "containers", "proxmox"] },
+  { key: "services", widgets: ["jellyfin", "qbittorrent", "arr", "pbs", "homeassistant"] },
+  { key: "home", widgets: ["weather", "calendar", "reminders", "clock", "notes"] },
+  { key: "atmosphere", widgets: ["slideshow", "nowplaying"] },
+];
+
+export function WidgetPicker({
+  d,
+  value,
+  onChange,
+}: {
+  d: Dictionary;
+  value: string;
+  onChange: (widget: WidgetKind) => void;
+}) {
+  const [category, setCategory] = useState<Category["key"]>(
+    CATEGORIES.find((c) => c.widgets.includes(value as WidgetKind))?.key ?? "monitoring"
+  );
+
+  const shown = CATEGORIES.find((c) => c.key === category)!;
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-wrap gap-1">
+        {CATEGORIES.map((c) => (
+          <button
+            key={c.key}
+            type="button"
+            onClick={() => setCategory(c.key)}
+            className={`rounded-control border px-3 py-1.5 text-xs font-medium transition-colors ${
+              c.key === category ? "border-accent bg-accent/10 text-accent" : "border-line text-muted hover:bg-raised"
+            }`}
+          >
+            {d.widgetGroups[c.key]}
+          </button>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+        {shown.widgets.map((widget) => (
+          <button
+            key={widget}
+            type="button"
+            onClick={() => onChange(widget)}
+            className={`flex flex-col gap-2 rounded-control border p-2 text-left transition-colors ${
+              widget === value ? "border-accent bg-accent/10" : "border-line hover:bg-raised"
+            }`}
+          >
+            <Preview kind={widget} />
+            <span className="text-xs font-medium">{d.widgets[widget]}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * A sketch of what the widget looks like: bars for a meter, a line for a chart,
+ * blocks for the uptime strip. Deliberately crude — its job is recognition, and
+ * a faithful copy would have to be kept in step with the real thing forever.
+ */
+function Preview({ kind }: { kind: WidgetKind }) {
+  const frame = "flex h-14 w-full flex-col justify-center gap-1 rounded bg-raised p-2";
+
+  switch (kind) {
+    case "system":
+    case "disks":
+    case "proxmox":
+      return (
+        <span className={frame}>
+          {[70, 45, 30].map((w, i) => (
+            <span key={i} className="flex items-center gap-1">
+              <span className="h-1 flex-1 rounded-full bg-line">
+                <span className="block h-1 rounded-full bg-accent" style={{ width: `${w}%` }} />
+              </span>
+            </span>
+          ))}
+        </span>
+      );
+
+    case "load":
+    case "qbittorrent":
+      return (
+        <span className={frame}>
+          {[85, 55, 25].map((w, i) => (
+            <span key={i} className="flex items-center gap-1">
+              <span className="h-1.5 w-6 rounded bg-line" />
+              <span className="h-1 rounded-full bg-ok" style={{ width: `${w / 2}%` }} />
+            </span>
+          ))}
+        </span>
+      );
+
+    case "chart":
+      return (
+        <span className={frame}>
+          <svg viewBox="0 0 60 24" className="h-full w-full" aria-hidden>
+            <path d="M0,18 L10,12 L20,15 L30,6 L40,10 L50,4 L60,8" fill="none" stroke="rgb(var(--accent))" strokeWidth="1.5" />
+            <path d="M0,21 L10,19 L20,20 L30,16 L40,18 L50,14 L60,16" fill="none" stroke="rgb(var(--ok))" strokeWidth="1.5" />
+          </svg>
+        </span>
+      );
+
+    case "gauge":
+      return (
+        <span className={frame}>
+          <svg viewBox="0 0 60 30" className="h-full w-full" aria-hidden>
+            <path d="M10,26 A20,20 0 1 1 50,26" fill="none" stroke="rgb(var(--line))" strokeWidth="4" strokeLinecap="round" />
+            <path d="M10,26 A20,20 0 0 1 30,6" fill="none" stroke="rgb(var(--accent))" strokeWidth="4" strokeLinecap="round" />
+          </svg>
+        </span>
+      );
+
+    case "uptimestrip":
+      return (
+        <span className={frame}>
+          {[0, 1].map((row) => (
+            <span key={row} className="flex gap-[2px]">
+              {Array.from({ length: 14 }).map((_, i) => (
+                <span
+                  key={i}
+                  className={`h-2 flex-1 rounded-[1px] ${
+                    (row === 0 && i === 9) || (row === 1 && i === 3) ? "bg-danger" : "bg-ok"
+                  }`}
+                />
+              ))}
+            </span>
+          ))}
+        </span>
+      );
+
+    case "containers":
+    case "pbs":
+      return (
+        <span className={`${frame} items-start justify-center`}>
+          <span className="font-mono text-lg leading-none">12</span>
+          <span className="h-1 w-10 rounded-full bg-line" />
+        </span>
+      );
+
+    case "jellyfin":
+    case "nowplaying":
+      return (
+        <span className={`${frame} flex-row items-center gap-2`}>
+          <span className="h-9 w-9 shrink-0 rounded bg-accent/30" />
+          <span className="flex flex-1 flex-col gap-1">
+            <span className="h-1.5 w-full rounded bg-line" />
+            <span className="h-1.5 w-2/3 rounded bg-line" />
+          </span>
+        </span>
+      );
+
+    case "arr":
+      return (
+        <span className={frame}>
+          {[0, 1, 2].map((i) => (
+            <span key={i} className="flex items-center gap-1">
+              <span className="h-1.5 w-1.5 rounded-full bg-accent" />
+              <span className="h-1.5 flex-1 rounded bg-line" />
+            </span>
+          ))}
+        </span>
+      );
+
+    case "homeassistant":
+      return (
+        <span className={`${frame} flex-row items-center gap-1.5`}>
+          {[true, false, true].map((on, i) => (
+            <span key={i} className={`h-6 flex-1 rounded ${on ? "bg-accent/40" : "bg-line"}`} />
+          ))}
+        </span>
+      );
+
+    case "weather":
+      return (
+        <span className={`${frame} flex-row items-center gap-2`}>
+          <span className="text-xl leading-none" aria-hidden>
+            🌤️
+          </span>
+          <span className="font-mono text-lg leading-none">14°</span>
+        </span>
+      );
+
+    case "calendar":
+      return (
+        <span className={`${frame} gap-[3px]`}>
+          {[0, 1].map((row) => (
+            <span key={row} className="flex gap-[3px]">
+              {Array.from({ length: 7 }).map((_, i) => (
+                <span
+                  key={i}
+                  className={`h-3 flex-1 rounded-[2px] ${row === 0 && i === 2 ? "bg-accent" : "bg-line"}`}
+                />
+              ))}
+            </span>
+          ))}
+        </span>
+      );
+
+    case "reminders":
+      return (
+        <span className={frame}>
+          {[0, 1, 2].map((i) => (
+            <span key={i} className="flex items-center gap-1.5">
+              <span className="h-2 w-2 rounded-[2px] border border-line" />
+              <span className="h-1.5 flex-1 rounded bg-line" />
+            </span>
+          ))}
+        </span>
+      );
+
+    case "clock":
+      return (
+        <span className={`${frame} items-center justify-center`}>
+          <span className="font-mono text-lg leading-none">21:40</span>
+        </span>
+      );
+
+    case "notes":
+      return (
+        <span className={frame}>
+          {[100, 90, 60].map((w, i) => (
+            <span key={i} className="h-1.5 rounded bg-line" style={{ width: `${w}%` }} />
+          ))}
+        </span>
+      );
+
+    case "slideshow":
+      return (
+        <span className={`${frame} items-center justify-center bg-gradient-to-br from-accent/30 to-ok/20`}>
+          <span className="text-lg leading-none" aria-hidden>
+            🖼️
+          </span>
+        </span>
+      );
+
+    default:
+      return <span className={frame} />;
+  }
+}

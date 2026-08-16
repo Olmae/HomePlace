@@ -11,6 +11,7 @@ import {
   saveHaSettings,
   type ServiceResult,
 } from "@/actions/services";
+import { addServiceWidget } from "@/actions/dashboard";
 import type { Dictionary } from "@/i18n";
 
 /**
@@ -40,6 +41,32 @@ export function ServiceForms({ d, display }: { d: Dictionary; display: ServicesD
       <PbsForm d={d} value={display.pbs} />
       <HaForm d={d} value={display.homeassistant} />
     </div>
+  );
+}
+
+/**
+ * "Put it on the board", next to the credentials that make it work.
+ *
+ * The moment a service is configured is the moment someone wants to see it. The
+ * alternative was: leave settings, open the dashboard, press +, choose Widget,
+ * find the right one, name it — five steps to express something the panel
+ * already knows.
+ */
+function AddToBoard({ d, widget, title, enabled }: { d: Dictionary; widget: string; title: string; enabled: boolean }) {
+  const [done, setDone] = useState(false);
+  const [pending, startTransition] = useTransition();
+
+  if (!enabled) return null;
+
+  return (
+    <Button
+      size="sm"
+      variant="quiet"
+      disabled={pending || done}
+      onClick={() => startTransition(async () => setDone((await addServiceWidget(widget, title)).ok))}
+    >
+      {done ? d.settings.addedToBoard : d.settings.addToBoard}
+    </Button>
   );
 }
 
@@ -84,6 +111,7 @@ function JellyfinForm({ d, value }: { d: Dictionary; value: ServicesDisplay["jel
             {d.common.save}
           </Button>
           <Result result={result} d={d} />
+          <AddToBoard d={d} widget="jellyfin" title="Jellyfin" enabled={!!value.url} />
         </div>
       </div>
     </Card>
@@ -125,6 +153,7 @@ function QbitForm({ d, value }: { d: Dictionary; value: ServicesDisplay["qbittor
             {d.common.save}
           </Button>
           <Result result={result} d={d} />
+          <AddToBoard d={d} widget="qbittorrent" title="qBittorrent" enabled={!!value.url} />
         </div>
       </div>
     </Card>
@@ -192,6 +221,7 @@ function ArrForm({ d, value }: { d: Dictionary; value: ServicesDisplay["arr"] })
             {d.common.save}
           </Button>
           <Result result={result} d={d} />
+          <AddToBoard d={d} widget="arr" title="*arr" enabled={value.length > 0} />
         </div>
       </div>
     </Card>
@@ -247,6 +277,7 @@ function PbsForm({ d, value }: { d: Dictionary; value: ServicesDisplay["pbs"] })
             {d.common.save}
           </Button>
           <Result result={result} d={d} />
+          <AddToBoard d={d} widget="pbs" title="Proxmox Backup" enabled={!!value.url} />
         </div>
       </div>
     </Card>
@@ -283,6 +314,7 @@ function HaForm({ d, value }: { d: Dictionary; value: ServicesDisplay["homeassis
             {d.common.save}
           </Button>
           <Result result={result} d={d} />
+          <AddToBoard d={d} widget="homeassistant" title="Home Assistant" enabled={!!value.url} />
         </div>
       </div>
     </Card>

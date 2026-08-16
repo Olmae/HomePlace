@@ -3,6 +3,7 @@
 import { Children, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { COLUMNS, clampBox, resolveCollisions, readingOrder, overlaps, type Box } from "@/lib/layout";
 import { saveLayout, moveIntoFolder } from "@/actions/dashboard";
+import type { Dictionary } from "@/i18n";
 
 /**
  * The board: tiles placed on a 12-column grid, dragged and resized directly.
@@ -26,12 +27,14 @@ type Drag =
   | null;
 
 export function Board({
+  d,
   layout,
   editing,
   children,
   folderIds = [],
   lockedIds = [],
 }: {
+  d: Dictionary;
   /** One entry per child, in the same order. */
   layout: Box[];
   editing: boolean;
@@ -50,6 +53,7 @@ export function Board({
   // which is exactly the update loop React reports as error #185.
   const latest = useRef<Box[]>(layout);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const locked = useMemo(() => new Set(lockedIds), [lockedIds]);
   const folders = useMemo(() => new Set(folderIds), [folderIds]);
 
@@ -64,6 +68,19 @@ export function Board({
   }, [signature]);
 
   const childArray = Children.toArray(children);
+
+  /**
+   * Save shortly after the last change.
+   *
+   * Dragging saves on release, but a keyboard nudge has no release — holding an
+   * arrow key would otherwise write the whole board on every repeat.
+   */
+  const saveSoon = useCallback((boxes: Box[]) => {
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      void saveLayout(boxes.map(({ id, x, y, w, h }) => ({ id, x, y, w, h })));
+    }, 500);
+  }, []);
 
   /** Width of one column in pixels, measured rather than assumed. */
   const cellWidth = useCallback(() => {
@@ -129,6 +146,33 @@ export function Board({
     };
   }, [drag, cellWidth, dropTarget, folders, locked]);
 
+  /**
+   * Moving and resizing from the keyboard.
+   *
+   * Dragging needs a pointer and a screen wide enough to show the grid. This is
+   * the same operation for everyone else: arrows move the focused tile, Shift
+   * with arrows resizes it. Without it the board would be editable by mouse
+   * only, which is exactly the hole that removing the old arrow buttons left.
+   */
+  const nudge = useCallback(
+    (id: string, dx: number, dy: number, resize: boolean) => {
+      if (locked.has(id)) return;
+      const next = resolveCollisions(
+        latest.current.map((b) =>
+          b.id === id
+            ? clampBox(resize ? { ...b, w: b.w + dx, h: b.h + dy } : { ...b, x: b.x + dx, y: b.y + dy })
+            : b
+        ),
+        id,
+        locked
+      );
+      latest.current = next;
+      setBoxes(next);
+      saveSoon(next);
+    },
+    [locked, saveSoon]
+  );
+
   const order = useMemo(() => {
     const index = new Map(boxes.map((b, i) => [b.id, i]));
     return readingOrder(boxes).map((b) => index.get(b.id)!);
@@ -137,8 +181,10 @@ export function Board({
   return (
     <div
       ref={ref}
-      className="grid grid-cols-1 gap-3 md:grid-cols-12"
-      style={{ gridAutoRows: `${ROW_HEIGHT}px` }}
+      className="hp-board grid grid-cols-1 gap-3 md:grid-cols-12"
+      // The row height is a variable rather than an inline grid property: it
+      // must apply from `md` up only, and inline styles cannot be conditional.
+      style={{ ["--row-height" as string]: `${ROW_HEIGHT}px` }}
     >
       {childArray.map((child, i) => {
         const box = boxes[i];
@@ -156,11 +202,34 @@ export function Board({
               // inline grid placement cannot be made conditional on a breakpoint.
               ["--col" as string]: `${box.x + 1} / span ${box.w}`,
               ["--row" as string]: `${box.y + 1} / span ${box.h}`,
+              ["--h" as string]: String(box.h),
             }}
             className={`hp-cell relative ${dragging ? "z-20 opacity-90" : ""} ${
-              editing ? "touch-none select-none" : ""
+              editing ? "touch-none select-none focus-within:z-10" : ""
             }`}
           >
+            {editing && (
+              // Focusable only while editing, so tabbing through the dashboard
+              // normally still lands on the links rather than on the layout.
+              <div
+                tabIndex={0}
+                role="application"
+                aria-label={`${d.dashboard.editMode}: ${box.w}×${box.h}`}
+                onKeyDown={(e) => {
+                  const step: Record<string, [number, number]> = {
+                    ArrowLeft: [-1, 0],
+                    ArrowRight: [1, 0],
+                    ArrowUp: [0, -1],
+                    ArrowDown: [0, 1],
+                  };
+                  const delta = step[e.key];
+                  if (!delta) return;
+                  e.preventDefault();
+                  nudge(box.id, delta[0], delta[1], e.shiftKey);
+                }}
+                className="absolute inset-0 z-[6] rounded-card focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+              />
+            )}
             {/* Drag surface, edit mode only. The tile's own controls sit above
                 it (z-20 in ItemActions) and re-enable pointer events for
                 themselves, so edit and delete stay clickable while the rest of

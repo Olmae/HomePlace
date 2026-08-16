@@ -1,9 +1,7 @@
 import "server-only";
 import { prisma } from "./db";
 import { sendPush } from "./push";
-import { send as sendTelegram } from "./telegram";
-import { telegramConfig } from "./integrations";
-import { inQuietHours } from "./quietHours";
+import { notify } from "./notify";
 
 /**
  * Reminders that have come due.
@@ -21,8 +19,6 @@ export async function processReminders(): Promise<void> {
   });
   if (due.length === 0) return;
 
-  const cfg = await telegramConfig();
-
   for (const reminder of due) {
     await prisma.reminder.update({ where: { id: reminder.id }, data: { notifiedAt: now } });
 
@@ -30,19 +26,24 @@ export async function processReminders(): Promise<void> {
       data: { type: "system", severity: "info", title: reminder.title, detail: "reminder" },
     });
 
-    // To the person who set it, and nobody else.
+    // Push goes to the person who set it, and nobody else — a reminder is
+    // personal in a way an alert is not.
     await sendPush([reminder.userId], {
       title: `⏰ ${reminder.title}`,
       body: reminder.at.toLocaleString(),
       tag: `reminder-${reminder.id}`,
     }).catch(() => ({ sent: 0, failed: 0 }));
 
-    if (cfg?.enabled && !inQuietHours(cfg.quietHours)) {
-      await sendTelegram(`⏰ <b>${escapeHtml(reminder.title)}</b>`);
-    }
+    // The shared routes carry it too, and quiet hours do not apply: this is a
+    // time the person chose, not something the server decided to raise.
+    await notify({
+      title: `⏰ ${reminder.title}`,
+      body: reminder.at.toLocaleString(),
+      severity: "info",
+      tag: `reminder-${reminder.id}`,
+      respectQuietHours: false,
+      // Already pushed, to the one person it belongs to.
+      skipPush: true,
+    });
   }
-}
-
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }

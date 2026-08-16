@@ -52,22 +52,36 @@ export function IntegrationForms({
   nowPlayingToken,
   appUrl,
   iconPack,
+  only,
 }: {
   d: Dictionary;
   display: Display;
   nowPlayingToken: string;
   appUrl: string;
   iconPack: boolean;
+  /**
+   * Which half to render. The settings page is split into sections, and these
+   * cards belong to two different ones: the connections to other machines, and
+   * the things that are about this installation itself.
+   */
+  only?: "connections" | "system";
 }) {
+  if (only === "system") {
+    return (
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+        <NowPlayingCard d={d} token={nowPlayingToken} appUrl={appUrl} />
+        <IconsCard d={d} enabled={iconPack} />
+        <ConfigCard d={d} />
+      </div>
+    );
+  }
+
   return (
     <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
       <PrometheusForm d={d} value={display.prometheus} />
       <ProxmoxForm d={d} value={display.proxmox} />
       <TelegramForm d={d} value={display.telegram} />
       <GoogleCard d={d} value={display.google} />
-      <NowPlayingCard d={d} token={nowPlayingToken} appUrl={appUrl} />
-      <IconsCard d={d} enabled={iconPack} />
-      <ConfigCard d={d} />
     </div>
   );
 }
