@@ -29,7 +29,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <div className="flex min-h-screen flex-col">
       <AppNav d={d} user={{ name: user.name, role: user.role, avatarUrl: user.avatarUrl }} />
-      <main className="mx-auto w-full max-w-[1400px] flex-1 px-4 py-5 sm:px-6">{children}</main>
+      {/* The bottom padding is for the floating navigation on a phone: without
+          it the last tile ends up underneath the pill. */}
+      <main className="mx-auto w-full max-w-[1400px] flex-1 px-4 py-5 pb-28 sm:px-6 sm:pb-5">{children}</main>
     </div>
   );
 }

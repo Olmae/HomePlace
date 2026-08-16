@@ -23,6 +23,10 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
+  // Lets the page draw into the rounded corners and around the home indicator,
+  // which is also what makes env(safe-area-inset-*) report real numbers — the
+  // bottom navigation positions itself with them.
+  viewportFit: "cover",
   // Both are declared so the browser chrome follows whichever theme is active;
   // the page itself picks its palette from CSS variables.
   themeColor: [

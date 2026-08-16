@@ -111,8 +111,16 @@ function describeNetworkError(e: unknown, hasProxy: boolean): string {
   if (looksBlocked && !hasProxy) {
     return `${detail} — the server cannot reach api.telegram.org. If your connection blocks it, set a SOCKS5 or HTTP proxy in the Proxy field.`;
   }
+  if (/ECONNREFUSED/i.test(detail) && hasProxy) {
+    // The common trap: a proxy running in another container that binds
+    // 127.0.0.1 inside its own namespace. Publishing the port does not help —
+    // Docker forwards the connection to the container's address, where nothing
+    // is listening. Containers that share its network namespace reach it, and
+    // everything else is refused, which looks like the proxy is down.
+    return `${detail} — the address answered with "refused". If the proxy runs in another container, check that it listens on 0.0.0.0 and not on 127.0.0.1: a published port cannot reach a service bound to localhost inside its own container.`;
+  }
   if (looksBlocked && hasProxy) {
-    return `${detail} — the proxy did not connect. Check that the address is reachable from inside the container (a proxy on the host is not "localhost" here).`;
+    return `${detail} — the proxy did not connect. Check that the address is reachable from inside this container (a proxy on the host is not "localhost" here).`;
   }
   return detail;
 }

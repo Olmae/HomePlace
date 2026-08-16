@@ -7,6 +7,7 @@ import { signOut } from "@/actions/auth";
 import { AppearanceMenu } from "./AppearanceMenu";
 import { CommandPalette } from "./CommandPalette";
 import { Help } from "./Help";
+import { MobileNav } from "./MobileNav";
 import type { Dictionary } from "@/i18n";
 
 /**
@@ -40,7 +41,8 @@ export function AppNav({
           <span className="hidden sm:inline">HomePlace</span>
         </Link>
 
-        <nav className="flex items-center gap-0.5 overflow-x-auto">
+        {/* Hidden on a phone: those destinations live in the bottom pill. */}
+        <nav className="hidden items-center gap-0.5 overflow-x-auto sm:flex">
           {links.map((link) => {
             // Exact match for the dashboard, prefix for the rest, so a detail
             // page still highlights its section.
@@ -65,7 +67,7 @@ export function AppNav({
             onClick={() => window.dispatchEvent(new Event("homeplace:palette"))}
             title={`${d.common.search} · ${d.palette.hint}`}
             aria-label={d.common.search}
-            className="flex items-center gap-1.5 rounded-control px-2.5 py-1.5 text-sm text-muted transition-colors hover:bg-raised hover:text-text"
+            className="hidden items-center gap-1.5 rounded-control px-2.5 py-1.5 text-sm text-muted transition-colors hover:bg-raised hover:text-text sm:flex"
           >
             <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden>
               <circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" strokeWidth="1.5" />
@@ -130,6 +132,7 @@ export function AppNav({
       </div>
 
       <CommandPalette d={d} />
+      <MobileNav d={d} />
     </header>
   );
 }

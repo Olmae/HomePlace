@@ -90,21 +90,53 @@ export function ItemDialog({
     setForm((f) => ({ ...f, [key]: value }));
   }
 
-  /** Picking a container fills in the rest — that is the whole point of the shortcut. */
+  /**
+   * Picking a container.
+   *
+   * When adding, that click *is* the whole interaction: the container already
+   * knows its name, its port and (through the labels or the image) its icon, so
+   * asking for the same facts in a form afterwards would be asking the user to
+   * retype what the server just told us. The tile appears; anything about it
+   * can still be changed from the pencil.
+   *
+   * When editing an existing tile, it only refills the fields — that dialog is
+   * a form and stays one.
+   */
   function pickContainer(name: string) {
     const found = containers.find((c) => c.name === name);
     if (!found) return;
-    setForm((f) => ({
-      ...f,
+
+    const filled = {
       containerName: found.name,
       hostKey: found.hostKey,
-      title: f.title || found.name,
-      icon: f.icon || found.icon || "",
-      // The guessed address contains a placeholder for the host, because the
-      // panel cannot know which name or IP you reach that machine by.
-      url: f.url || (found.suggestedUrl ?? "").replace("HOST_ADDRESS", window.location.hostname),
-      checkKind: f.checkKind === "none" ? "docker" : f.checkKind,
-    }));
+      title: form.title || found.name,
+      // The guessed address carries a placeholder for the host, because the
+      // server cannot know which name or IP this browser reached it by.
+      url: form.url || (found.suggestedUrl ?? "").replace("HOST_ADDRESS", window.location.hostname),
+      icon: form.icon || found.icon || "",
+      // Container state is the check that needs no configuration and cannot be
+      // fooled by a login page.
+      checkKind: form.checkKind === "none" ? "docker" : form.checkKind,
+    };
+
+    if (mode === "edit") {
+      setForm((f) => ({ ...f, ...filled }));
+      return;
+    }
+
+    startTransition(async () => {
+      await createItem({
+        dashboardId: dashboardId!,
+        kind: "service",
+        title: filled.title,
+        icon: filled.icon || null,
+        url: filled.url || null,
+        containerName: filled.containerName,
+        hostKey: filled.hostKey,
+        checkKind: "docker",
+      });
+      onClose();
+    });
   }
 
   function submit() {
@@ -164,6 +196,9 @@ export function ItemDialog({
   }
 
   const isTile = kind === "service" || kind === "link";
+  // Adding a container is a one-click step: the grid and nothing else. Editing
+  // one, or adding anything else, is a form.
+  const containerStep = mode === "add" && kind === "service";
 
   return (
     <Dialog open onClose={onClose} title={mode === "add" ? d.dashboard.addTitle : d.common.edit} wide>
@@ -187,9 +222,11 @@ export function ItemDialog({
           />
         )}
 
-        <Field label={d.dashboard.tileTitle}>
-          <Input value={form.title} onChange={(e) => set("title", e.target.value)} autoFocus />
-        </Field>
+        {!containerStep && (
+          <Field label={d.dashboard.tileTitle}>
+            <Input value={form.title} onChange={(e) => set("title", e.target.value)} autoFocus />
+          </Field>
+        )}
 
         {kind === "widget" && (
           <>
@@ -307,7 +344,7 @@ export function ItemDialog({
           </>
         )}
 
-        {isTile && (
+        {isTile && !containerStep && (
           <>
             <Field label={d.dashboard.tileUrl}>
               <Input
@@ -333,13 +370,13 @@ export function ItemDialog({
           </>
         )}
 
-        {kind !== "widget" && (
+        {kind !== "widget" && !containerStep && (
           <Field label={d.dashboard.tileIcon} hint={d.dashboard.tileIconHint}>
             <Input value={form.icon} onChange={(e) => set("icon", e.target.value)} placeholder="🎬" />
           </Field>
         )}
 
-        {isTile && (
+        {isTile && !containerStep && (
           <div className="grid grid-cols-2 gap-3">
             <Field label={d.dashboard.tileCheck}>
               <Select value={form.checkKind} onChange={(e) => set("checkKind", e.target.value)}>
@@ -359,6 +396,7 @@ export function ItemDialog({
           </div>
         )}
 
+        {!containerStep && (
         <div className="grid grid-cols-2 gap-3">
           <Field label={d.dashboard.tileWidth}>
             <Select value={String(form.w)} onChange={(e) => set("w", Number(e.target.value))}>
@@ -382,8 +420,9 @@ export function ItemDialog({
             </Field>
           )}
         </div>
+        )}
 
-        {isTile && (
+        {isTile && !containerStep && (
           <label className="flex items-center gap-2 text-sm text-muted">
             <input type="checkbox" checked={form.newTab} onChange={(e) => set("newTab", e.target.checked)} />
             {d.dashboard.tileOpenNewTab}
@@ -394,9 +433,11 @@ export function ItemDialog({
           <Button variant="quiet" onClick={onClose}>
             {d.common.cancel}
           </Button>
-          <Button variant="primary" onClick={submit} disabled={pending || !form.title.trim()}>
-            {d.common.save}
-          </Button>
+          {!containerStep && (
+            <Button variant="primary" onClick={submit} disabled={pending || !form.title.trim()}>
+              {d.common.save}
+            </Button>
+          )}
         </div>
       </div>
     </Dialog>
