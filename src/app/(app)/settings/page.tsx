@@ -15,6 +15,7 @@ import { PasswordForm } from "./PasswordForm";
 import { IntegrationForms } from "./IntegrationForms";
 import { RuleForms } from "./RuleForms";
 import { ServiceForms } from "./ServiceForms";
+import { PushCard } from "./PushCard";
 import { servicesForDisplay } from "@/lib/services";
 import { currentNowPlayingToken } from "@/actions/integrations";
 
@@ -44,6 +45,7 @@ export default async function SettingsPage() {
   const iconPack = await getSetting<boolean>("icons.pack", false);
   const rules = isAdmin ? await prisma.alertRule.findMany({ orderBy: { createdAt: "asc" } }) : [];
   const services = isAdmin ? await servicesForDisplay() : null;
+  const pushCount = await prisma.pushSubscription.count({ where: { userId: user.id } });
 
   const users = isAdmin
     ? await prisma.user.findMany({ orderBy: { createdAt: "asc" } })
@@ -118,6 +120,13 @@ export default async function SettingsPage() {
           <RuleForms d={d} rules={rules} />
         </section>
       )}
+
+      <section>
+        <SectionTitle>{d.settings.notifications}</SectionTitle>
+        <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+          <PushCard d={d} count={pushCount} />
+        </div>
+      </section>
 
       <section>
         <SectionTitle>{d.settings.account}</SectionTitle>

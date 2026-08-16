@@ -4,6 +4,7 @@ import { settings } from "./config";
 import { listContainers } from "./docker";
 import { processAlerts } from "./alerts";
 import { evaluateRules } from "./rules";
+import { processReminders } from "./reminders";
 
 /**
  * The availability prober.
@@ -49,6 +50,7 @@ async function tick(): Promise<void> {
     // Metric rules are evaluated on the same tick as the probes: one clock for
     // everything the panel watches, and nothing to schedule separately.
     await evaluateRules();
+    await processReminders();
     await pruneOldChecks();
   } catch (e) {
     console.error("monitor tick failed:", e);

@@ -21,7 +21,11 @@ own; you decide which ones become tiles.
 - 🎨 **A home page, not a NOC screen** — background photos from your phone's
   gallery, a slideshow, weather, a calendar, a now-playing tile
 - 🔔 **Alerts that are not just "it is down"** — rules on any metric, held for a
-  time you choose, delivered to Telegram
+  time you choose, delivered to Telegram and to the browser
+- 🧰 **Your services, not just their tiles** — Jellyfin, qBittorrent, the *arr
+  stack, Proxmox Backup Server and Home Assistant report into the board
+- 🐳 **A containers page that is an operations view**, not a second way to build
+  the dashboard: search, sort, live CPU and memory, controls per row
 - ⌨️ **Ctrl+K** — search across services, containers and pages
 - 📱 **Installable** on a phone home screen
 - 🌗 **Light and dark**, five accents, **English and Russian**
@@ -153,6 +157,7 @@ Full reference with comments: [`.env.example`](.env.example). In short:
 | FriendPlace | Everything else | The SSO button |
 | Telegram | Everything else | Notifications — the event feed still records everything |
 | Google | Everything else | The calendar widget |
+| Jellyfin / qBittorrent / *arr / PBS / Home Assistant | Everything else | Their own widgets; each is configured separately in Settings |
 | Internet | Everything else | Weather, and the online icon pack |
 
 ---
@@ -210,9 +215,10 @@ Where this is going, roughly in order.
 - [x] Google Calendar — with your own OAuth client, since a public one cannot
       be shipped
 - [x] Uploading background and slideshow images to the panel
-- [ ] Reminders and simple recurring notes on the board
-- [ ] Folders that can also hold widgets, not only links
+- [x] Reminders that repeat, on the board and in your notifications
+- [x] Folders hold anything, widgets included, and can be pinned in place
 - [ ] Keyboard-only layout editing
+- [ ] Grouping tiles into labelled sections, as an alternative to folders
 
 ### Alerts and notifications
 
@@ -221,15 +227,16 @@ Where this is going, roughly in order.
       ten minutes"
 - [ ] More destinations: email, ntfy, webhooks
 - [ ] Grouping and escalation
-- [ ] Web push in the browser
+- [x] Web push in the browser and on the phone, independent of Telegram
 
 ### Service integrations
 
-- [ ] **Home Assistant** — entities, quick toggles, scenes
-- [ ] **qBittorrent** — active torrents, speeds, control
-- [ ] **Jellyfin** — what is playing, library size, transcodes
-- [ ] ***arr stack** — queue, upcoming, health
-- [ ] **Proxmox Backup Server** — last backup, datastore usage, failures
+- [x] **Home Assistant** — entities and toggles on the board
+- [x] **qBittorrent** — active torrents and speeds
+- [x] **Jellyfin** — what is playing right now, and on what
+- [x] ***arr stack** — queue and health
+- [ ] Deeper *arr: upcoming calendar, search from the panel
+- [x] **Proxmox Backup Server** — last backup, datastore usage
 - [ ] **Weather** and a calendar widget for the home-page feel
 - [ ] **Uptime Kuma** import, for people migrating
 

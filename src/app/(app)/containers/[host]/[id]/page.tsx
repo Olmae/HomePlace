@@ -94,10 +94,10 @@ export default async function ContainerDetailPage({ params }: { params: { host: 
             <Row label={d.containers.restarts} value={String(container.restartCount)} />
             <Row label={d.containers.restartPolicy} value={container.restartPolicy || "—"} />
             <Row label={d.containers.host} value={container.hostLabel} />
-            {container.health && (
+            {container.healthCheck && (
               <Row
                 label={d.containers.health}
-                value={`${container.health.status}${container.health.failingStreak ? ` · ${container.health.failingStreak}` : ""}`}
+                value={`${container.healthCheck.status}${container.healthCheck.failingStreak ? ` · ${container.healthCheck.failingStreak}` : ""}`}
               />
             )}
           </dl>

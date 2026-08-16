@@ -25,6 +25,12 @@ export type Container = {
   networks: string[];
   hostKey: string;
   hostLabel: string;
+  /** Compose project and service, when the container was started by compose.
+   *  This is what groups twenty containers into the six stacks they belong to. */
+  project?: string;
+  service?: string;
+  /** Docker's own health check, when the image defines one. */
+  health?: string;
   /** Guessed or label-provided address to open in the browser. */
   suggestedUrl?: string;
   /** Label-provided display data, if the container declares it. */
@@ -38,6 +44,7 @@ type RawContainer = {
   State: string;
   Status: string;
   Created: number;
+  Health?: string;
   Ports?: { PrivatePort: number; PublicPort?: number; Type: string }[];
   Labels?: Record<string, string>;
   NetworkSettings?: { Networks?: Record<string, unknown> };
@@ -100,6 +107,11 @@ function toContainer(c: RawContainer, host: DockerHost): Container {
     networks: Object.keys(c.NetworkSettings?.Networks ?? {}),
     hostKey: host.key,
     hostLabel: host.label,
+    project: labels["com.docker.compose.project"],
+    service: labels["com.docker.compose.service"],
+    // Docker puts the health verdict in the status line ("Up 2 hours
+    // (healthy)"), which is the only place the list endpoint reports it.
+    health: /\((healthy|unhealthy|health: starting)\)/.exec(c.Status ?? "")?.[1],
     suggestedUrl: labels["homeplace.url"] ?? guessUrl(ports),
     declared: {
       title: labels["homeplace.title"],
@@ -159,7 +171,9 @@ export type ContainerDetail = Container & {
   restartPolicy: string;
   mounts: { source: string; destination: string; mode: string; type: string }[];
   env: string[];
-  health?: { status: string; failingStreak: number };
+  // Named differently from Container.health (a single word from the status
+  // line): inspect returns the full verdict, and one field cannot be both.
+  healthCheck?: { status: string; failingStreak: number };
 };
 
 /**
@@ -220,7 +234,8 @@ export async function inspectContainer(hostKey: string, id: string): Promise<Con
       })),
       // Names only — see the note above.
       env: (raw.Config?.Env ?? []).map((line: string) => line.split("=")[0]),
-      health: raw.State?.Health
+      health: raw.State?.Health?.Status ? String(raw.State.Health.Status) : undefined,
+      healthCheck: raw.State?.Health
         ? { status: String(raw.State.Health.Status), failingStreak: Number(raw.State.Health.FailingStreak ?? 0) }
         : undefined,
     };

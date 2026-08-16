@@ -3,6 +3,7 @@ import { prisma } from "./db";
 import { telegramConfig } from "./integrations";
 import { send, inQuietHours } from "./telegram";
 import { appUrl } from "./config";
+import { sendPush, alertRecipients } from "./push";
 
 /**
  * Turning probe results into notifications.
@@ -74,6 +75,14 @@ export async function processAlerts(current: Watched[]): Promise<void> {
 async function deliver(text: string, quietHours: string, itemId: string, state: "up" | "down"): Promise<void> {
   const quiet = inQuietHours(quietHours);
   if (!quiet) {
+    // Both channels, because they fail differently: Telegram needs a network
+    // this server may not have, push needs a browser that has been opened.
+    await sendPush(await alertRecipients(), {
+      title: state === "down" ? "⚠ HomePlace" : "✅ HomePlace",
+      body: stripHtml(text),
+      tag: `item-${itemId}`,
+    }).catch(() => ({ sent: 0, failed: 0 }));
+
     const result = await send(text);
     if (!result.ok) {
       console.error("telegram delivery failed:", result.error);
@@ -85,6 +94,16 @@ async function deliver(text: string, quietHours: string, itemId: string, state: 
   if (state === "down") {
     await prisma.alertState.update({ where: { itemId }, data: { notifiedAt: new Date() } }).catch(() => {});
   }
+}
+
+/** Push has no markup, so the Telegram formatting is taken back out. */
+function stripHtml(s: string): string {
+  return s
+    .replace(/<[^>]+>/g, "")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&")
+    .trim();
 }
 
 function escapeHtml(s: string): string {

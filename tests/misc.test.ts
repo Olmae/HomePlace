@@ -4,6 +4,7 @@ import { slugify, uniqueSlug } from "../src/lib/slug";
 import { inQuietHours } from "../src/lib/quietHours";
 import { bytes, duration, latency, percent } from "../src/lib/format";
 import { guessKey, guessIcon, autoIcon, faviconUrl } from "../src/lib/icons";
+import { nextOccurrence } from "../src/lib/recurrence";
 
 /** Small pure helpers that everything else leans on. */
 
@@ -106,4 +107,20 @@ test("autoIcon: prefers the site's own favicon, falls back to the emoji", () => 
 test("autoIcon: the logo pack wins when it is switched on", () => {
   const icon = autoIcon({ name: "grafana", url: "http://box:3000", pack: true });
   assert.match(icon, /dashboard-icons\/png\/grafana\.png$/);
+});
+
+test("nextOccurrence lands in the future, however long it was ignored", () => {
+  const lastMonth = new Date(Date.now() - 30 * 86400_000);
+
+  const daily = nextOccurrence(lastMonth, "daily");
+  assert.ok(daily.getTime() > Date.now(), "a daily reminder comes back tomorrow, not a month ago");
+
+  const weekly = nextOccurrence(lastMonth, "weekly");
+  assert.ok(weekly.getTime() > Date.now());
+  // Still on the same weekday as it was originally set.
+  assert.equal(weekly.getDay(), lastMonth.getDay());
+
+  // A one-off never moves: it is due when it is due.
+  const once = nextOccurrence(lastMonth, "none");
+  assert.equal(once.getTime(), lastMonth.getTime());
 });

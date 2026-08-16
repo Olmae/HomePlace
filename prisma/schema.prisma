@@ -285,6 +285,43 @@ model GoogleAccount {
   updatedAt    DateTime @updatedAt
 }
 
+// A browser that asked to be notified.
+//
+// One row per browser, not per person: the same account on a phone and a laptop
+// is two subscriptions, and each is revoked independently when its browser
+// forgets the permission.
+model PushSubscription {
+  endpoint  String   @id
+  userId    String
+  p256dh    String
+  auth      String
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+// Something to be reminded of.
+//
+// Deliberately simple: a title, a time, and whether it repeats. A panel that is
+// open all day is a good place for "take the bins out", and a bad place for a
+// project management tool.
+model Reminder {
+  id      String   @id @default(cuid())
+  userId  String
+  title   String
+  at      DateTime
+  // none | daily | weekly | monthly
+  repeat  String   @default("none")
+  done    Boolean  @default(false)
+  // Set when the notification went out, so it is sent exactly once per due time.
+  notifiedAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId, at])
+}
+
 // Small key/value store for panel-wide settings that are not secrets:
 // default locale, whether discovery is enabled, containers the user chose to
 // hide, and so on. Values are JSON.

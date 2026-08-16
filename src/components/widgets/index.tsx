@@ -10,6 +10,7 @@ import { NowPlayingWidget } from "./NowPlaying";
 import { WeatherWidget } from "./Weather";
 import { CalendarWidget } from "./Calendar";
 import { JellyfinWidget, QbitWidget, ArrWidget, PbsWidget, HomeAssistantWidget } from "./Services";
+import { RemindersWidget } from "./Reminders";
 import { Gauge } from "@/components/Gauge";
 import { Chart } from "@/components/Chart";
 import { prisma } from "@/lib/db";
@@ -86,6 +87,14 @@ export async function Widget({ widget, config, title, d, userId }: WidgetProps) 
       return <PbsWidget title={title} d={d} />;
     case "homeassistant":
       return <HomeAssistantWidget config={config} title={title} d={d} />;
+    case "reminders":
+      return userId ? (
+        <RemindersList title={title} d={d} userId={userId} />
+      ) : (
+        <Card className="p-4">
+          <p className="text-sm text-muted">{d.widgets.noData}</p>
+        </Card>
+      );
     case "notes":
       return <NotesWidget title={title} text={str(config.text) ?? ""} />;
     default:
@@ -373,6 +382,28 @@ async function ProxmoxWidget({ title, d }: { title: string; d: Dictionary }) {
         ))}
       </div>
     </Card>
+  );
+}
+
+// ───────────────────────────────── Reminders ─────────────────────────────
+
+/**
+ * The list is read here, on the server, and handed to the client component that
+ * edits it — so the tile is filled in on first paint rather than after a fetch.
+ */
+async function RemindersList({ title, d, userId }: { title: string; d: Dictionary; userId: string }) {
+  const rows = await prisma.reminder.findMany({
+    where: { userId, done: false },
+    orderBy: { at: "asc" },
+    take: 20,
+  });
+
+  return (
+    <RemindersWidget
+      d={d}
+      title={title}
+      rows={rows.map((r) => ({ id: r.id, title: r.title, at: r.at.toISOString(), repeat: r.repeat }))}
+    />
   );
 }
 

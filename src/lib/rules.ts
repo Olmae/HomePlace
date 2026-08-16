@@ -5,6 +5,7 @@ import { prometheusConfig } from "./integrations";
 import { telegramConfig } from "./integrations";
 import { send, inQuietHours } from "./telegram";
 import { bytes, percent } from "./format";
+import { sendPush, alertRecipients } from "./push";
 
 /**
  * Conditions on metrics, not just on availability.
@@ -94,9 +95,20 @@ export async function evaluateRules(): Promise<RuleEvaluation[]> {
       },
     });
 
-    if (notifications && !inQuietHours(cfg!.quietHours)) {
+    const quiet = notifications ? inQuietHours(cfg!.quietHours) : inQuietHours("");
+    if (!quiet) {
       const mark = rule.severity === "error" ? "🔴" : rule.severity === "info" ? "ℹ️" : "🟠";
-      await send(`${mark} <b>${escapeHtml(rule.name)}</b>\n${escapeHtml(describe(rule, value))}`);
+      // Push does not depend on Telegram being configured or reachable, so it
+      // is sent whether or not the bot is set up.
+      await sendPush(await alertRecipients(), {
+        title: `${mark} ${rule.name}`,
+        body: describe(rule, value),
+        tag: `rule-${rule.id}`,
+      }).catch(() => ({ sent: 0, failed: 0 }));
+
+      if (notifications) {
+        await send(`${mark} <b>${escapeHtml(rule.name)}</b>\n${escapeHtml(describe(rule, value))}`);
+      }
     }
   }
 

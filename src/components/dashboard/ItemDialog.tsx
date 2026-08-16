@@ -41,6 +41,7 @@ const widgetKinds = [
   "arr",
   "pbs",
   "homeassistant",
+  "reminders",
   "containers",
   "proxmox",
   "clock",
