@@ -5,6 +5,7 @@ import { prisma, getSetting, setSetting } from "@/lib/db";
 import { requireRole } from "@/lib/auth";
 import { settings } from "@/lib/config";
 import { readingOrder, nextFreeSlot, compactVertically, resolveCollisions } from "@/lib/layout";
+import { uniqueSlug } from "@/lib/slug";
 
 /**
  * Everything that changes the dashboard layout.
@@ -15,9 +16,15 @@ import { readingOrder, nextFreeSlot, compactVertically, resolveCollisions } from
 
 export async function createDashboard(name: string): Promise<string> {
   const user = await requireRole("admin");
-  const count = await prisma.dashboard.count();
+  const existing = await prisma.dashboard.findMany({ select: { slug: true } });
   const created = await prisma.dashboard.create({
-    data: { name: name.trim() || "New", order: count, ownerId: user.id, shared: true },
+    data: {
+      name: name.trim() || "New",
+      slug: uniqueSlug(name, existing.map((d) => d.slug ?? ""), "tab"),
+      order: existing.length,
+      ownerId: user.id,
+      shared: true,
+    },
   });
   revalidatePath("/");
   return created.id;
@@ -25,7 +32,17 @@ export async function createDashboard(name: string): Promise<string> {
 
 export async function renameDashboard(id: string, name: string): Promise<void> {
   await requireRole("admin");
-  await prisma.dashboard.update({ where: { id }, data: { name: name.trim() || "New" } });
+  // The slug follows the name, so the URL keeps matching what the tab says.
+  // Other dashboards' slugs are reserved, this one's own is not — renaming
+  // "Home" to "Home" must not turn its slug into "home-2".
+  const others = await prisma.dashboard.findMany({ where: { id: { not: id } }, select: { slug: true } });
+  await prisma.dashboard.update({
+    where: { id },
+    data: {
+      name: name.trim() || "New",
+      slug: uniqueSlug(name, others.map((d) => d.slug ?? ""), id),
+    },
+  });
   revalidatePath("/");
 }
 
@@ -140,36 +157,6 @@ export async function deleteItem(id: string): Promise<void> {
   const compacted = compactVertically(rest);
   await prisma.$transaction(
     compacted.map((box) => prisma.item.update({ where: { id: box.id }, data: { y: box.y } }))
-  );
-  revalidatePath("/");
-}
-
-/**
- * Move a tile one row up or down.
- *
- * Dragging is the main way to arrange the board, but it needs a pointer and a
- * screen wide enough to show the grid. These two buttons are how the same thing
- * is done from a phone or from the keyboard, so the layout is never editable
- * only by mouse.
- */
-export async function moveItem(id: string, direction: "up" | "down"): Promise<void> {
-  await requireRole("admin");
-  const item = await prisma.item.findUnique({ where: { id } });
-  if (!item) return;
-
-  const siblings = await prisma.item.findMany({
-    where: { dashboardId: item.dashboardId, parentId: item.parentId },
-    select: { id: true, x: true, y: true, w: true, h: true },
-  });
-
-  const target = Math.max(0, item.y + (direction === "up" ? -1 : 1));
-  const moved = siblings.map((b) => (b.id === id ? { ...b, y: target } : b));
-  const resolved = readingOrder(resolveCollisions(moved, id));
-
-  await prisma.$transaction(
-    resolved.map((box, index) =>
-      prisma.item.update({ where: { id: box.id }, data: { y: box.y, order: index } })
-    )
   );
   revalidatePath("/");
 }

@@ -1,4 +1,4 @@
-import { prisma } from "@/lib/db";
+import { prisma, getSetting } from "@/lib/db";
 import { pageUser } from "@/lib/pageUser";
 import { atLeast } from "@/lib/auth";
 import { dockerHealth } from "@/lib/docker";
@@ -37,6 +37,7 @@ export default async function SettingsPage() {
     integrationsForDisplay(),
     isAdmin ? currentNowPlayingToken() : Promise.resolve(""),
   ]);
+  const iconPack = await getSetting<boolean>("icons.pack", false);
 
   const users = isAdmin
     ? await prisma.user.findMany({ orderBy: { createdAt: "asc" } })
@@ -93,7 +94,7 @@ export default async function SettingsPage() {
 
         {isAdmin && (
           <div className="mt-3">
-            <IntegrationForms d={d} display={display} nowPlayingToken={npToken} appUrl={appUrl()} />
+            <IntegrationForms d={d} display={display} nowPlayingToken={npToken} appUrl={appUrl()} iconPack={iconPack} />
           </div>
         )}
       </section>

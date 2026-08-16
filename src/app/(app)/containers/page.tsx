@@ -28,11 +28,12 @@ export default async function ContainersPage() {
     return <EmptyState title={d.containers.noDocker} hint={d.containers.noDockerHint} />;
   }
 
-  const [containers, placed, hidden, dashboards] = await Promise.all([
+  const [containers, placed, hidden, dashboards, iconPack] = await Promise.all([
     listContainers(),
     prisma.item.findMany({ where: { containerName: { not: null } }, select: { containerName: true } }),
     getSetting<string[]>("containers.hidden", []),
     prisma.dashboard.findMany({ orderBy: { order: "asc" }, select: { id: true, name: true } }),
+    getSetting<boolean>("icons.pack", false),
   ]);
 
   const placedNames = new Set(placed.map((p) => p.containerName!));
@@ -72,6 +73,7 @@ export default async function ContainersPage() {
                 key={`${c.hostKey}/${c.id}`}
                 d={d}
                 canEdit={editable}
+                iconPack={iconPack}
                 controlEnabled={settings.allowContainerControl()}
                 hidden={hiddenSet.has(c.name)}
                 dashboards={dashboards}

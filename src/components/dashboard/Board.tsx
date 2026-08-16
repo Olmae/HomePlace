@@ -38,12 +38,23 @@ export function Board({
   const [boxes, setBoxes] = useState<Box[]>(layout);
   const [drag, setDrag] = useState<Drag>(null);
   const ref = useRef<HTMLDivElement>(null);
+  // Mirrors `boxes` for the pointer handlers. Reading state through a ref keeps
+  // the save out of a setState updater: React may run an updater more than
+  // once, and a server action fired from inside one re-renders on every run —
+  // which is exactly the update loop React reports as error #185.
+  const latest = useRef<Box[]>(layout);
 
   // Server state wins whenever it changes: another tab, a deletion, a new tile.
-  useEffect(() => setBoxes(layout), [layout]);
+  // Compared by value, not identity: the prop is a fresh array on every render,
+  // and assigning it back unconditionally would be a render loop of its own.
+  const signature = layout.map((b) => `${b.id}:${b.x},${b.y},${b.w},${b.h}`).join("|");
+  useEffect(() => {
+    setBoxes(layout);
+    latest.current = layout;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [signature]);
 
   const childArray = Children.toArray(children);
-  const byId = useMemo(() => new Map(boxes.map((b) => [b.id, b])), [boxes]);
 
   /** Width of one column in pixels, measured rather than assumed. */
   const cellWidth = useCallback(() => {
@@ -60,26 +71,24 @@ export function Board({
       const cols = Math.round(dx / (cellWidth() + GAP));
       const rows = Math.round(dy / (ROW_HEIGHT + GAP));
 
-      setBoxes((prev) => {
-        const next = prev.map((b) => {
+      const next = resolveCollisions(
+        latest.current.map((b) => {
           if (b.id !== drag!.id) return b;
           return drag!.kind === "move"
             ? clampBox({ ...b, x: drag!.origin.x + cols, y: drag!.origin.y + rows })
             : clampBox({ ...b, w: drag!.origin.w + cols, h: drag!.origin.h + rows });
-        });
-        return resolveCollisions(next, drag!.id);
-      });
+        }),
+        drag!.id
+      );
+      latest.current = next;
+      setBoxes(next);
     }
 
     function onUp() {
       setDrag(null);
-      // Persist what is on screen. Read from the state setter rather than a
-      // captured value so the final pointer position is not lost to a stale
-      // closure.
-      setBoxes((prev) => {
-        void saveLayout(prev.map(({ id, x, y, w, h }) => ({ id, x, y, w, h })));
-        return prev;
-      });
+      // Save what is on screen. Plain call, no setState updater: the ref
+      // already holds the final positions.
+      void saveLayout(latest.current.map(({ id, x, y, w, h }) => ({ id, x, y, w, h })));
     }
 
     window.addEventListener("pointermove", onMove);
@@ -124,9 +133,10 @@ export function Board({
               editing ? "touch-none select-none" : ""
             }`}
           >
-            {/* Drag surface. Only present in edit mode, and it sits *under* the
-                tile's own controls so the edit and delete buttons stay
-                clickable. */}
+            {/* Drag surface, edit mode only. The tile's own controls sit above
+                it (z-20 in ItemActions) and re-enable pointer events for
+                themselves, so edit and delete stay clickable while the rest of
+                the tile is a drag handle. */}
             {editing && (
               <div
                 className="absolute inset-0 z-[5] cursor-grab rounded-card ring-1 ring-inset ring-accent/30 active:cursor-grabbing"

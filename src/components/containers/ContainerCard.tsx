@@ -6,7 +6,7 @@ import { Card, StatusDot, Badge, TileIcon } from "@/components/ui";
 import { Button } from "@/components/form";
 import { createItem, hideContainer } from "@/actions/dashboard";
 import { ContainerControls } from "./ContainerControls";
-import { autoIcon, GLYPH } from "@/lib/icons";
+import { autoIcon, guessIcon, GLYPH } from "@/lib/icons";
 import type { Dictionary } from "@/i18n";
 
 export type ContainerView = {
@@ -34,6 +34,7 @@ export function ContainerCard({
   controlEnabled,
   hidden,
   dashboards,
+  iconPack = false,
 }: {
   d: Dictionary;
   container: ContainerView;
@@ -41,6 +42,7 @@ export function ContainerCard({
   controlEnabled: boolean;
   hidden: boolean;
   dashboards: { id: string; name: string }[];
+  iconPack?: boolean;
 }) {
   const [pending, startTransition] = useTransition();
 
@@ -48,7 +50,8 @@ export function ContainerCard({
   const published = container.ports.filter((p) => p.external);
   // Falls back to a guess from the image name, so a container nobody labelled
   // still arrives with something recognisable instead of a grey square.
-  const icon = container.icon ?? autoIcon({ name: container.name, image: container.image });
+  const icon = container.icon ?? autoIcon({ name: container.name, image: container.image, pack: iconPack });
+  const emoji = guessIcon({ name: container.name, image: container.image });
 
   function addToDashboard() {
     const target = dashboards[0];
@@ -74,7 +77,7 @@ export function ContainerCard({
   return (
     <Card className="flex h-full flex-col p-3">
       <div className="flex items-start gap-2.5">
-        <TileIcon icon={icon} title={container.name} />
+        <TileIcon icon={icon} title={container.name} fallback={emoji || GLYPH.container} />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
             <span className="truncate text-sm font-semibold">{container.name}</span>

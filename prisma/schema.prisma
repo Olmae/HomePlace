@@ -57,6 +57,9 @@ model User {
 model Dashboard {
   id     String  @id @default(cuid())
   name   String
+  // Readable identifier used in the URL (`/?tab=home`). Optional so an older
+  // database keeps working; filled in on first load.
+  slug   String? @unique
   icon   String?
   order  Int     @default(0)
   // Private dashboards are visible only to their owner; the rest are shared

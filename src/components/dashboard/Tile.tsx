@@ -5,7 +5,7 @@ import { Widget } from "@/components/widgets";
 import { ItemActions } from "./ItemActions";
 import type { TileStatus } from "@/lib/status";
 import { percent, latency } from "@/lib/format";
-import { GLYPH } from "@/lib/icons";
+import { GLYPH, autoIcon, guessIcon } from "@/lib/icons";
 import type { Dictionary } from "@/i18n";
 
 type ItemWithChildren = Item & { children?: Item[] };
@@ -24,13 +24,22 @@ export function Tile({
   d,
   editing,
   canEdit,
+  iconPack = false,
 }: {
   item: ItemWithChildren;
   statuses: Map<string, TileStatus>;
   d: Dictionary;
   editing: boolean;
   canEdit: boolean;
+  iconPack?: boolean;
 }) {
+  // Resolved here rather than stored: a tile created before icon guessing
+  // existed, or one whose address changed, picks up an icon without anyone
+  // opening the edit dialog.
+  const icon =
+    item.icon ||
+    autoIcon({ name: item.containerName ?? item.title, url: item.url ?? item.internalUrl ?? "", pack: iconPack });
+  const emoji = guessIcon({ name: item.containerName ?? item.title, url: item.url ?? item.internalUrl ?? "" });
   if (item.kind === "widget") {
     return (
       <div className="relative h-full">
@@ -45,7 +54,7 @@ export function Tile({
       <Card className="relative h-full p-3">
         {editing && canEdit && <ItemActions item={item} d={d} />}
         <div className="mb-2 flex items-center gap-2">
-          <TileIcon icon={item.icon ?? GLYPH.folder} title={item.title} color={item.color} />
+          <TileIcon icon={item.icon || GLYPH.folder} title={item.title} color={item.color} />
           <span className="truncate text-sm font-semibold">{item.title}</span>
         </div>
         <ul className="space-y-0.5">
@@ -77,7 +86,7 @@ export function Tile({
   const body = (
     <>
       <div className="flex items-start gap-2.5">
-        <TileIcon icon={item.icon} title={item.title} color={item.color} />
+        <TileIcon icon={icon} title={item.title} color={item.color} fallback={emoji} />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
             <span className="truncate text-sm font-semibold">{item.title}</span>

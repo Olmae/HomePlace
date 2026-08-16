@@ -135,19 +135,39 @@ const KNOWN: Record<string, string> = {
 };
 
 /**
- * Best guess for a tile icon.
+ * Which known service this looks like, or "".
  *
  * Longest key first: several keys can match one string, and the most specific
- * one is almost always the right answer.
+ * one is almost always the right answer — "jellyseerr" must not resolve to
+ * "jellyfin", "qbittorrent" not to "torrent".
  */
-export function guessIcon(input: { name?: string; image?: string; url?: string }): string {
+export function guessKey(input: { name?: string; image?: string; url?: string }): string {
   const haystack = [input.name, input.image, hostOf(input.url)].filter(Boolean).join(" ").toLowerCase();
   if (!haystack) return "";
+  return (
+    Object.keys(KNOWN)
+      .sort((a, b) => b.length - a.length)
+      .find((key) => haystack.includes(key)) ?? ""
+  );
+}
 
-  const hit = Object.keys(KNOWN)
-    .sort((a, b) => b.length - a.length)
-    .find((key) => haystack.includes(key));
-  return hit ? KNOWN[hit] : "";
+/** Best guess for a tile icon, as an emoji. Works with no internet at all. */
+export function guessIcon(input: { name?: string; image?: string; url?: string }): string {
+  const key = guessKey(input);
+  return key ? KNOWN[key] : "";
+}
+
+/**
+ * Real logo for a known service, from the community icon pack.
+ *
+ * Off by default and switched on in settings, because it is the one thing in
+ * HomePlace that fetches from the public internet. A panel on a LAN with no
+ * route out would otherwise show a row of broken images — the emoji above
+ * always works, so the pack is an upgrade rather than a dependency.
+ */
+export function iconPackUrl(input: { name?: string; image?: string; url?: string }): string {
+  const key = guessKey(input);
+  return key ? `https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/png/${key}.png` : "";
 }
 
 /**
@@ -163,9 +183,20 @@ export function faviconUrl(url: string | null | undefined): string {
   return host ? `${host}/favicon.ico` : "";
 }
 
-/** An icon for a tile that has no explicit one: known service, else favicon. */
-export function autoIcon(input: { name?: string; image?: string; url?: string }): string {
-  return guessIcon(input) || faviconUrl(input.url);
+/**
+ * The icon a tile should show when it has none of its own.
+ *
+ * Order: the icon pack when it is enabled, then the service's own favicon,
+ * then the emoji. Images can fail — the host is down, there is no favicon, the
+ * pack has no logo — so `TileIcon` is given the emoji as a fallback and swaps
+ * to it silently when an image does not load.
+ */
+export function autoIcon(input: { name?: string; image?: string; url?: string; pack?: boolean }): string {
+  if (input.pack) {
+    const packed = iconPackUrl(input);
+    if (packed) return packed;
+  }
+  return faviconUrl(input.url) || guessIcon(input);
 }
 
 function hostOf(url: string | null | undefined): string {

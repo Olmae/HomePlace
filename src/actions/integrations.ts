@@ -73,6 +73,22 @@ export async function testTelegram(): Promise<TestResult> {
 }
 
 /**
+ * The online icon pack.
+ *
+ * Off by default because it is the only thing in HomePlace that fetches from
+ * the public internet. On a panel with a route out it turns a row of emoji into
+ * real logos; on one without, leaving it off costs nothing — the built-in
+ * emoji and the services' own favicons keep working.
+ */
+export async function setIconPack(enabled: boolean): Promise<void> {
+  await requireRole("admin");
+  await setSetting("icons.pack", enabled);
+  revalidatePath("/");
+  revalidatePath("/containers");
+  revalidatePath("/settings");
+}
+
+/**
  * Token for the now-playing endpoint.
  *
  * Generated here rather than typed by a person: it is a shared secret between

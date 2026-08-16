@@ -7,7 +7,15 @@ import { ServiceWorker } from "@/components/ServiceWorker";
 export const metadata: Metadata = {
   title: "HomePlace",
   description: "Self-hosted dashboard and monitoring panel for your home server.",
-  icons: { icon: "/favicon.svg", apple: "/icon-192.png" },
+  // .ico first for the browsers that ask for /favicon.ico regardless of what
+  // the document declares; the SVG is what modern ones actually use.
+  icons: {
+    icon: [
+      { url: "/favicon.svg", type: "image/svg+xml" },
+      { url: "/favicon.ico", sizes: "32x32" },
+    ],
+    apple: "/icon-192.png",
+  },
   manifest: "/manifest.webmanifest",
   appleWebApp: { capable: true, title: "HomePlace", statusBarStyle: "black-translucent" },
 };

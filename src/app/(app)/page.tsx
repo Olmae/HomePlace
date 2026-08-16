@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { prisma } from "@/lib/db";
+import { prisma, getSetting } from "@/lib/db";
+import { ensureSlugs, ensureLayout } from "@/lib/dashboards";
 import { pageUser } from "@/lib/pageUser";
 import { canEdit } from "@/lib/auth";
 import { listContainers } from "@/lib/docker";
@@ -18,6 +19,20 @@ import type { ContainerOption } from "@/components/dashboard/ItemDialog";
 export const dynamic = "force-dynamic";
 
 /**
+ * The browser tab is named after the dashboard, not after the app. With the
+ * panel pinned in a browser all day, "Home · HomePlace" is what makes it
+ * findable among twenty other tabs.
+ */
+export async function generateMetadata({ searchParams }: { searchParams: { tab?: string } }) {
+  const dashboards = await prisma.dashboard.findMany({ orderBy: { order: "asc" }, select: { id: true, name: true, slug: true } });
+  const active =
+    dashboards.find((x) => x.slug === searchParams.tab) ??
+    dashboards.find((x) => x.id === searchParams.tab) ??
+    dashboards[0];
+  return { title: active ? `${active.name} · HomePlace` : "HomePlace" };
+}
+
+/**
  * The home page: tabs of tiles on a draggable board.
  *
  * Which tab is open and whether the layout is being edited both live in the
@@ -34,12 +49,23 @@ export default async function DashboardPage({
   const editable = canEdit(user);
   const editing = editable && searchParams.edit === "1";
 
+  // Self-healing for data written before slugs and positions existed. Both are
+  // no-ops after the first run.
+  await ensureSlugs();
+
   const dashboards = await prisma.dashboard.findMany({ orderBy: { order: "asc" } });
-  const active = dashboards.find((x) => x.id === searchParams.tab) ?? dashboards[0];
+  // The tab is addressed by its slug; ids still resolve so old bookmarks and
+  // links from elsewhere keep working.
+  const active =
+    dashboards.find((x) => x.slug === searchParams.tab) ??
+    dashboards.find((x) => x.id === searchParams.tab) ??
+    dashboards[0];
 
   if (!active) {
     return <EmptyState title={d.dashboard.empty} hint={d.dashboard.emptyHint} />;
   }
+
+  await ensureLayout(active.id);
 
   const items = await prisma.item.findMany({
     where: { dashboardId: active.id, parentId: null },
@@ -52,6 +78,14 @@ export default async function DashboardPage({
   const statuses = await statusFor(ids);
 
   // Only fetched when it can be used: the container picker in the add dialog.
+  // Which containers already have a tile anywhere — the picker sends those to
+  // the end of the grid instead of hiding them.
+  const placed = new Set(
+    (await prisma.item.findMany({ where: { containerName: { not: null } }, select: { containerName: true } })).map(
+      (i) => i.containerName!
+    )
+  );
+
   const containers: ContainerOption[] =
     editable && dockerHosts().length > 0
       ? (await listContainers()).map((c) => ({
@@ -59,11 +93,17 @@ export default async function DashboardPage({
           hostKey: c.hostKey,
           hostLabel: c.hostLabel,
           state: c.state,
+          image: c.image,
           suggestedUrl: c.suggestedUrl,
           icon: c.declared?.icon,
           group: c.declared?.group,
+          onDashboard: placed.has(c.name),
         }))
       : [];
+
+  // Off by default: the pack is fetched from the public internet, and a LAN-only
+  // panel should not depend on that.
+  const iconPack = await getSetting<boolean>("icons.pack", false);
 
   const folders = items.filter((i) => i.kind === "folder").map((i) => ({ id: i.id, title: i.title }));
 
@@ -88,7 +128,7 @@ export default async function DashboardPage({
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <Tabs
           d={d}
-          dashboards={dashboards.map((x) => ({ id: x.id, name: x.name }))}
+          dashboards={dashboards.map((x) => ({ id: x.id, name: x.name, slug: x.slug ?? x.id }))}
           activeId={active.id}
           canEdit={editable}
         />
@@ -106,7 +146,7 @@ export default async function DashboardPage({
               }}
             />
             <Link
-              href={`/?tab=${active.id}${editing ? "" : "&edit=1"}`}
+              href={`/?tab=${active.slug ?? active.id}${editing ? "" : "&edit=1"}`}
               className={`rounded-control px-3 py-1.5 text-sm font-medium transition-colors ${
                 editing ? "bg-accent/10 text-accent" : "text-muted hover:bg-raised hover:text-text"
               }`}
@@ -123,7 +163,15 @@ export default async function DashboardPage({
       ) : (
         <Board layout={items.map(({ id, x, y, w, h }) => ({ id, x, y, w, h }))} editing={editing}>
           {items.map((item) => (
-            <Tile key={item.id} item={item} statuses={statuses} d={d} editing={editing} canEdit={editable} />
+            <Tile
+              key={item.id}
+              item={item}
+              statuses={statuses}
+              d={d}
+              editing={editing}
+              canEdit={editable}
+              iconPack={iconPack}
+            />
           ))}
         </Board>
       )}

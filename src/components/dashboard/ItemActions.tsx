@@ -2,16 +2,20 @@
 
 import { useState, useTransition } from "react";
 import type { Item } from "@prisma/client";
-import { moveItem, deleteItem } from "@/actions/dashboard";
+import { deleteItem } from "@/actions/dashboard";
 import { ItemDialog } from "./ItemDialog";
 import type { Dictionary } from "@/i18n";
 
 /**
- * The controls that appear on a tile in edit mode.
+ * Edit and delete, shown on a tile in edit mode.
  *
- * Reordering is two arrows rather than drag-and-drop: it works on a phone, it
- * works from the keyboard, and there is no half-dropped state to recover from
- * if a request fails.
+ * `pointer-events-auto` matters: in edit mode the whole tile is covered by a
+ * drag surface and its contents are made inert, so these two buttons have to
+ * opt back in — otherwise the pencil is there but nothing happens when it is
+ * clicked.
+ *
+ * There are no move arrows any more. Moving a tile is dragging it, and a second
+ * way to do the same thing was only in the way.
  */
 export function ItemActions({ item, d }: { item: Item; d: Dictionary }) {
   const [editing, setEditing] = useState(false);
@@ -19,13 +23,7 @@ export function ItemActions({ item, d }: { item: Item; d: Dictionary }) {
 
   return (
     <>
-      <div className="absolute right-1.5 top-1.5 z-10 flex gap-0.5 rounded-control border border-line bg-surface/95 p-0.5 shadow-card">
-        <IconButton label={d.dashboard.moveUp} disabled={pending} onClick={() => startTransition(() => void moveItem(item.id, "up"))}>
-          ↑
-        </IconButton>
-        <IconButton label={d.dashboard.moveDown} disabled={pending} onClick={() => startTransition(() => void moveItem(item.id, "down"))}>
-          ↓
-        </IconButton>
+      <div className="pointer-events-auto absolute right-1.5 top-1.5 z-20 flex gap-0.5 rounded-control border border-line bg-surface/95 p-0.5 shadow-card">
         <IconButton label={d.common.edit} disabled={pending} onClick={() => setEditing(true)}>
           ✎
         </IconButton>
@@ -65,11 +63,14 @@ function IconButton({
   return (
     <button
       type="button"
+      // The drag surface is listening on the tile; without stopping the event
+      // here, pressing a button would also start a drag.
+      onPointerDown={(e) => e.stopPropagation()}
       onClick={onClick}
       disabled={disabled}
       title={label}
       aria-label={label}
-      className={`h-6 w-6 rounded text-xs transition-colors disabled:opacity-40 ${
+      className={`h-7 w-7 rounded text-xs transition-colors disabled:opacity-40 ${
         danger ? "text-danger hover:bg-danger/10" : "text-muted hover:bg-raised hover:text-text"
       }`}
     >

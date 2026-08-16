@@ -10,6 +10,7 @@ import {
   testTelegram,
   rotateNowPlayingToken,
   disableNowPlaying,
+  setIconPack,
   type TestResult,
 } from "@/actions/integrations";
 import { importConfig } from "@/actions/config";
@@ -47,11 +48,13 @@ export function IntegrationForms({
   display,
   nowPlayingToken,
   appUrl,
+  iconPack,
 }: {
   d: Dictionary;
   display: Display;
   nowPlayingToken: string;
   appUrl: string;
+  iconPack: boolean;
 }) {
   return (
     <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
@@ -59,6 +62,7 @@ export function IntegrationForms({
       <ProxmoxForm d={d} value={display.proxmox} />
       <TelegramForm d={d} value={display.telegram} />
       <NowPlayingCard d={d} token={nowPlayingToken} appUrl={appUrl} />
+      <IconsCard d={d} enabled={iconPack} />
       <ConfigCard d={d} />
     </div>
   );
@@ -399,6 +403,35 @@ function NowPlayingCard({ d, token, appUrl }: { d: Dictionary; token: string; ap
             </>
           )}
         </div>
+      </div>
+    </Card>
+  );
+}
+
+// ───────────────────────────────── Icons ─────────────────────────────────
+
+function IconsCard({ d, enabled }: { d: Dictionary; enabled: boolean }) {
+  const [on, setOn] = useState(enabled);
+  const [pending, startTransition] = useTransition();
+
+  return (
+    <Card>
+      <CardHeader title={d.settings.icons} action={<Badge tone={on ? "ok" : "neutral"}>{on ? "on" : "off"}</Badge>} />
+      <div className="flex flex-col gap-2 p-4">
+        <p className="text-xs text-muted">{d.settings.iconsHint}</p>
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={on}
+            disabled={pending}
+            onChange={(e) => {
+              const next = e.target.checked;
+              setOn(next);
+              startTransition(() => void setIconPack(next));
+            }}
+          />
+          {d.settings.iconsPack}
+        </label>
       </div>
     </Card>
   );

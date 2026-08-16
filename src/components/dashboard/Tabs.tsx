@@ -21,7 +21,7 @@ export function Tabs({
   canEdit,
 }: {
   d: Dictionary;
-  dashboards: { id: string; name: string }[];
+  dashboards: { id: string; name: string; slug: string }[];
   activeId: string;
   canEdit: boolean;
 }) {
@@ -37,9 +37,13 @@ export function Tabs({
         {dashboards.map((dash) => (
           <Link
             key={dash.id}
-            href={`/?tab=${dash.id}`}
-            className={`whitespace-nowrap rounded-control px-3 py-1.5 text-sm font-medium transition-colors ${
-              dash.id === activeId ? "bg-raised text-text" : "text-muted hover:bg-raised hover:text-text"
+            href={`/?tab=${dash.slug}`}
+            // The active tab is the one thing on this row that has to be
+            // unmistakable — it names the board you are looking at.
+            className={`whitespace-nowrap rounded-control border px-3 py-1.5 text-sm font-medium transition-colors ${
+              dash.id === activeId
+                ? "border-accent/40 bg-accent/10 text-accent"
+                : "border-transparent text-muted hover:bg-raised hover:text-text"
             }`}
           >
             {dash.name}

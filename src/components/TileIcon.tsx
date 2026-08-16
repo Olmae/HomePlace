@@ -16,11 +16,14 @@ export function TileIcon({
   title,
   color,
   size = "md",
+  fallback,
 }: {
   icon?: string | null;
   title: string;
   color?: string | null;
   size?: "sm" | "md" | "lg";
+  /** Shown when `icon` is an image that fails to load — usually an emoji. */
+  fallback?: string;
 }) {
   const [failed, setFailed] = useState(false);
   const box = { sm: "h-5 w-5 text-xs", md: "h-7 w-7 text-base", lg: "h-10 w-10 text-2xl" }[size];
@@ -47,7 +50,7 @@ export function TileIcon({
       style={color ? { backgroundColor: `${color}22`, color } : undefined}
       aria-hidden
     >
-      {!isUrl && icon ? icon : title.slice(0, 1).toUpperCase()}
+      {!isUrl && icon ? icon : fallback || title.slice(0, 1).toUpperCase()}
     </span>
   );
 }

@@ -5,7 +5,8 @@ import type { Item } from "@prisma/client";
 import { Dialog } from "@/components/Dialog";
 import { Field, Input, Select, Textarea, Button } from "@/components/form";
 import { createItem, updateItem, type ItemInput } from "@/actions/dashboard";
-import { autoIcon } from "@/lib/icons";
+import { autoIcon, GLYPH } from "@/lib/icons";
+import { TileIcon } from "@/components/TileIcon";
 import type { Dictionary } from "@/i18n";
 
 export type ContainerOption = {
@@ -13,9 +14,12 @@ export type ContainerOption = {
   hostKey: string;
   hostLabel: string;
   state: string;
+  image?: string;
   suggestedUrl?: string;
   icon?: string;
   group?: string;
+  /** Already has a tile somewhere — shown last and marked. */
+  onDashboard?: boolean;
 };
 
 type Kind = "service" | "link" | "folder" | "widget";
@@ -174,16 +178,13 @@ export function ItemDialog({
         )}
 
         {kind === "service" && (
-          <Field label={d.dashboard.addContainer} hint={containers.length === 0 ? d.containers.noDocker : undefined}>
-            <Select value={form.containerName} onChange={(e) => pickContainer(e.target.value)}>
-              <option value="">—</option>
-              {containers.map((c) => (
-                <option key={`${c.hostKey}/${c.name}`} value={c.name}>
-                  {c.name} · {c.hostLabel} · {c.state}
-                </option>
-              ))}
-            </Select>
-          </Field>
+          <ContainerPicker
+            d={d}
+            containers={containers}
+            selected={form.containerName}
+            onPick={pickContainer}
+            onOwn={() => setKind("link")}
+          />
         )}
 
         <Field label={d.dashboard.tileTitle}>
@@ -399,6 +400,88 @@ export function ItemDialog({
         </div>
       </div>
     </Dialog>
+  );
+}
+
+/**
+ * Containers as a grid of tiles rather than a dropdown.
+ *
+ * You pick a container by recognising it, and a list of thirty names in a
+ * select is the one shape that makes that hard. The first cell adds something
+ * of your own — anything not running here, or not a container at all — and the
+ * ones already on a dashboard sit at the end, marked, so they are still
+ * reachable without being in the way.
+ */
+function ContainerPicker({
+  d,
+  containers,
+  selected,
+  onPick,
+  onOwn,
+}: {
+  d: Dictionary;
+  containers: ContainerOption[];
+  selected: string;
+  onPick: (name: string) => void;
+  onOwn: () => void;
+}) {
+  const sorted = [...containers].sort((a, b) => {
+    if (!!a.onDashboard !== !!b.onDashboard) return a.onDashboard ? 1 : -1;
+    // Running first among the rest: a stopped container is rarely the one
+    // being looked for.
+    if ((a.state === "running") !== (b.state === "running")) return a.state === "running" ? -1 : 1;
+    return a.name.localeCompare(b.name);
+  });
+
+  return (
+    <div>
+      <span className="mb-1 block text-xs font-medium text-muted">{d.dashboard.addContainer}</span>
+      <div className="grid max-h-72 grid-cols-2 gap-2 overflow-y-auto pr-1 sm:grid-cols-3">
+        <button
+          type="button"
+          onClick={onOwn}
+          className="flex flex-col items-center justify-center gap-1 rounded-control border border-dashed border-line px-2 py-3 text-center transition-colors hover:border-accent hover:bg-raised"
+        >
+          <span className="text-lg leading-none" aria-hidden>
+            +
+          </span>
+          <span className="text-xs font-medium">{d.dashboard.ownService}</span>
+        </button>
+
+        {sorted.map((c) => {
+          const active = c.name === selected;
+          return (
+            <button
+              key={`${c.hostKey}/${c.name}`}
+              type="button"
+              onClick={() => onPick(c.name)}
+              title={`${c.name} · ${c.hostLabel} · ${c.state}`}
+              className={`flex items-center gap-2 rounded-control border px-2 py-2 text-left transition-colors ${
+                active ? "border-accent bg-accent/10" : "border-line hover:bg-raised"
+              } ${c.onDashboard ? "opacity-55" : ""}`}
+            >
+              <TileIcon
+                icon={c.icon || autoIcon({ name: c.name, image: c.image })}
+                title={c.name}
+                size="sm"
+                fallback={GLYPH.container}
+              />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-xs font-medium">{c.name}</span>
+                <span className="block truncate text-[10px] text-faint">
+                  {c.onDashboard ? d.containers.onDashboard : c.state}
+                </span>
+              </span>
+              <span
+                className={`h-1.5 w-1.5 shrink-0 rounded-full ${c.state === "running" ? "bg-ok" : "bg-faint"}`}
+                aria-hidden
+              />
+            </button>
+          );
+        })}
+      </div>
+      {containers.length === 0 && <p className="mt-1 text-xs text-faint">{d.containers.noDocker}</p>}
+    </div>
   );
 }
 
