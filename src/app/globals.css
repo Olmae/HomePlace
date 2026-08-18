@@ -9,6 +9,7 @@
   list of variable values, nothing else — which is what lets a user swap light,
   dark or an accent without touching a single component.
 
+
   Resolution order:
     1. `<html data-theme="light|dark">` — an explicit choice, always wins.
     2. no attribute → follow the OS via prefers-color-scheme.
