@@ -5,6 +5,7 @@ import { listContainers, statsForContainers } from "@/lib/docker";
 import { settings } from "@/lib/config";
 import { resolvedDockerHosts, prometheusConfig } from "@/lib/integrations";
 import { containerHistory } from "@/lib/containerHistory";
+import { containerRangesDb } from "@/lib/metricStore";
 import { queryRange, Q } from "@/lib/prometheus";
 import { dict } from "@/i18n";
 import { EmptyState, Card, Badge } from "@/components/ui";
@@ -71,7 +72,14 @@ export default async function ContainersPage() {
       if (name) trends.set(name, { cpu: trends.get(name)?.cpu ?? [], memory: series.points });
     }
   } else {
-    for (const container of running) trends.set(container.name, containerHistory(container.name));
+    // Persisted history first — it survives restarts and reaches back further —
+    // falling back to the in-memory samples for a container too freshly started
+    // to have a row yet.
+    const persisted = await containerRangesDb(180);
+    for (const container of running) {
+      const db = persisted.get(container.name);
+      trends.set(container.name, db && db.cpu.length > 1 ? db : containerHistory(container.name));
+    }
   }
 
   const placedNames = new Set(placed.map((p) => p.containerName!));

@@ -6,6 +6,8 @@ import { processAlerts } from "./alerts";
 import { evaluateRules } from "./rules";
 import { processReminders } from "./reminders";
 import { sampleContainers } from "./containerHistory";
+import { sampleContainersToDb, pruneMetrics } from "./metricStore";
+import { prometheusConfig } from "./integrations";
 
 /**
  * The availability prober.
@@ -55,7 +57,11 @@ async function tick(): Promise<void> {
     // Cheap enough to ride along on the same tick, and it is what gives the
     // containers page a history without Prometheus.
     await sampleContainers();
+    // The durable version, only when there is no Prometheus doing this better:
+    // a coarse per-minute sample kept a week, so a chart survives a restart.
+    if (!(await prometheusConfig())) await sampleContainersToDb();
     await pruneOldChecks();
+    await pruneMetrics();
   } catch (e) {
     console.error("monitor tick failed:", e);
   } finally {

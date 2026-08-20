@@ -189,6 +189,20 @@ model UptimeCheck {
   @@index([itemId, at])
 }
 
+// A coarse, persisted history of what each container costs, for installations
+// with no Prometheus. One row per container per minute, kept a week and pruned
+// on the monitor tick — enough for a day's chart without the million-rows-a-week
+// that a fifteen-second sample would be.
+model MetricSample {
+  id     String   @id @default(cuid())
+  name   String
+  at     DateTime @default(now())
+  cpu    Float
+  memory Float
+
+  @@index([name, at])
+}
+
 // A change worth remembering: a service went down, came back, a container was
 // restarted, someone logged in. The feed on the dashboard reads this table.
 model Event {
