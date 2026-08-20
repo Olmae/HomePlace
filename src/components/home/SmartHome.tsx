@@ -437,10 +437,35 @@ function HomeGroupDialog({
     return set;
   }, [config.groups, existing?.id]);
 
-  const sorted = useMemo(() => [...entities].sort((a, b) => nameOf(a).localeCompare(nameOf(b))), [entities, nameOf]);
+  const [pick, setPick] = useState("");
+
+  // The picker is grouped the way the house is thought about — lights with
+  // lights, sensors with sensors — and searchable, so a group is assembled by
+  // category instead of hunted for down one long alphabetical list.
+  const categories = useMemo(() => {
+    const needle = pick.trim().toLowerCase();
+    const shown = entities.filter((e) => !needle || `${nameOf(e)} ${e.id} ${e.area ?? ""}`.toLowerCase().includes(needle));
+    const map = new Map<string, Entity[]>();
+    for (const e of shown) {
+      const list = map.get(e.domain);
+      if (list) list.push(e);
+      else map.set(e.domain, [e]);
+    }
+    return [...map.entries()]
+      .map(([domain, list]) => ({ domain, list: list.sort((a, b) => nameOf(a).localeCompare(nameOf(b))) }))
+      .sort((a, b) => b.list.length - a.list.length || a.domain.localeCompare(b.domain));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entities, pick, config.names]);
 
   function toggleMember(id: string) {
     setMembers((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  }
+
+  /** Add or remove a whole category at once — every one not already spoken for. */
+  function toggleCategory(list: Entity[]) {
+    const free = list.filter((e) => !takenElsewhere.has(e.id)).map((e) => e.id);
+    const allIn = free.every((id) => members.includes(id));
+    setMembers((prev) => (allIn ? prev.filter((id) => !free.includes(id)) : [...new Set([...prev, ...free])]));
   }
 
   function save() {
@@ -471,20 +496,57 @@ function HomeGroupDialog({
           <Input value={icon} onChange={(e) => setIcon(e.target.value)} placeholder="🛋️" />
         </Field>
         <Field label={d.home.groupMembers} hint={d.home.groupMembersHint}>
-          <div className="max-h-56 space-y-0.5 overflow-y-auto rounded-control border border-line p-1">
-            {sorted.map((e) => {
-              const taken = takenElsewhere.has(e.id);
+          <Input
+            value={pick}
+            onChange={(e) => setPick(e.target.value)}
+            placeholder={d.common.search}
+            className="mb-2 w-full"
+          />
+          <div className="max-h-64 space-y-3 overflow-y-auto rounded-control border border-line p-2">
+            {categories.length === 0 && <p className="px-1 py-2 text-xs text-muted">{d.widgets.noData}</p>}
+            {categories.map(({ domain, list }) => {
+              const free = list.filter((e) => !takenElsewhere.has(e.id));
+              const allIn = free.length > 0 && free.every((e) => members.includes(e.id));
               return (
-                <label
-                  key={e.id}
-                  className={`flex items-center gap-2 rounded-control px-2 py-1 text-sm ${
-                    taken ? "opacity-40" : "hover:bg-raised"
-                  }`}
-                >
-                  <input type="checkbox" checked={members.includes(e.id)} disabled={taken} onChange={() => toggleMember(e.id)} />
-                  <span className="truncate">{nameOf(e)}</span>
-                  <span className="ml-auto font-mono text-[10px] text-faint">{e.area ?? e.domain}</span>
-                </label>
+                <div key={domain}>
+                  <div className="mb-1 flex items-center gap-1.5 px-1">
+                    <span aria-hidden>{domainIcon(domain)}</span>
+                    <span className="text-xs font-semibold capitalize">{domain.replace(/_/g, " ")}</span>
+                    <span className="text-[11px] text-muted">· {list.length}</span>
+                    {free.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => toggleCategory(list)}
+                        title={allIn ? d.home.allOff : d.home.allOn}
+                        className="ml-auto rounded-control border border-line px-1.5 py-0.5 text-[11px] text-muted transition-colors hover:bg-raised hover:text-text"
+                      >
+                        {allIn ? "−" : "+"}
+                      </button>
+                    )}
+                  </div>
+                  <div className="space-y-0.5">
+                    {list.map((e) => {
+                      const taken = takenElsewhere.has(e.id);
+                      return (
+                        <label
+                          key={e.id}
+                          className={`flex items-center gap-2 rounded-control px-2 py-1 text-sm ${
+                            taken ? "opacity-40" : "cursor-pointer hover:bg-raised"
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={members.includes(e.id)}
+                            disabled={taken}
+                            onChange={() => toggleMember(e.id)}
+                          />
+                          <span className="truncate">{nameOf(e)}</span>
+                          {e.area && <span className="ml-auto font-mono text-[10px] text-faint">{e.area}</span>}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
               );
             })}
           </div>

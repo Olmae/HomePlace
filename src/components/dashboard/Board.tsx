@@ -114,9 +114,14 @@ export function Board({
           : undefined;
       setDropTarget(target?.id ?? null);
 
-      const next = resolveCollisions(proposed, drag!.id, locked);
-      latest.current = next;
-      setBoxes(next);
+      // Only the dragged tile moves while the pointer is down; the rest of the
+      // board holds still. Reflowing every tile on every pixel — the old
+      // behaviour — meant a small nudge shoved the whole board around and it
+      // was impossible to tell where anything would end up. The push-aside now
+      // happens once, on release, so the drag reads as a preview of one tile
+      // over a static board.
+      latest.current = proposed;
+      setBoxes(proposed);
     }
 
     function onUp() {
@@ -131,9 +136,12 @@ export function Board({
         void moveIntoFolder(draggedId, filing);
         return;
       }
-      // Save what is on screen. Plain call, no setState updater: the ref
-      // already holds the final positions.
-      void saveLayout(latest.current.map(({ id, x, y, w, h }) => ({ id, x, y, w, h })));
+      // Settle now: push aside whatever the dragged tile was dropped onto, in
+      // one step, then save the result.
+      const settled = resolveCollisions(latest.current, draggedId, locked);
+      latest.current = settled;
+      setBoxes(settled);
+      void saveLayout(settled.map(({ id, x, y, w, h }) => ({ id, x, y, w, h })));
     }
 
     window.addEventListener("pointermove", onMove);
@@ -228,9 +236,9 @@ export function Board({
               ["--row" as string]: `${box.y + 1} / span ${box.h}`,
               ["--h" as string]: String(box.h),
             }}
-            className={`hp-cell relative ${dragging ? "z-20 opacity-90" : ""} ${
-              editing ? "touch-none select-none focus-within:z-10" : ""
-            }`}
+            className={`hp-cell group/cell relative ${
+              dragging ? "z-30 scale-[1.02] opacity-95 drop-shadow-2xl transition-transform" : ""
+            } ${editing ? "touch-none select-none focus-within:z-10" : ""}`}
           >
             {/* Drag surface and keyboard handle, edit mode only — one element,
                 not two. As two, the focusable layer covered the drag layer and

@@ -7,15 +7,18 @@ import { ItemDialog } from "./ItemDialog";
 import type { Dictionary } from "@/i18n";
 
 /**
- * Edit and delete, shown on a tile in edit mode.
+ * Edit, pin and delete, on a tile in edit mode.
+ *
+ * The toolbar used to sit on the tile permanently and cover the very corner you
+ * were trying to see the widget's live preview in. Now it is hidden until the
+ * tile is hovered (or focused), so the board reads clean while you arrange it
+ * and the controls appear only when you reach for them. Touch devices, which
+ * have no hover, keep it visible — there is nowhere else for it to come from.
  *
  * `pointer-events-auto` matters: in edit mode the whole tile is covered by a
- * drag surface and its contents are made inert, so these two buttons have to
- * opt back in — otherwise the pencil is there but nothing happens when it is
+ * drag surface and its contents are made inert, so these buttons have to opt
+ * back in — otherwise the pencil is there but nothing happens when it is
  * clicked.
- *
- * There are no move arrows any more. Moving a tile is dragging it, and a second
- * way to do the same thing was only in the way.
  */
 export function ItemActions({ item, d }: { item: Item; d: Dictionary }) {
   const [editing, setEditing] = useState(false);
@@ -23,7 +26,7 @@ export function ItemActions({ item, d }: { item: Item; d: Dictionary }) {
 
   return (
     <>
-      <div className="pointer-events-auto absolute right-1.5 top-1.5 z-20 flex gap-0.5 rounded-control border border-line bg-surface/95 p-0.5 shadow-card">
+      <div className="pointer-events-auto absolute right-1.5 top-1.5 z-20 flex gap-0.5 rounded-control border border-line bg-surface/95 p-0.5 opacity-0 shadow-card transition-opacity duration-150 focus-within:opacity-100 group-hover/cell:opacity-100 [@media(hover:none)]:opacity-100">
         <IconButton
           label={item.locked ? d.dashboard.unpin : d.dashboard.pin}
           active={item.locked}

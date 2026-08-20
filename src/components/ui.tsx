@@ -35,6 +35,7 @@ export function CardHeader({
   title,
   action,
   icon,
+  iconFallback,
 }: {
   title: ReactNode;
   action?: ReactNode;
@@ -44,11 +45,15 @@ export function CardHeader({
    * word by word, and a column headed by marks is read at a glance.
    */
   icon?: string;
+  /** Shown when `icon` is an image that fails to load — usually the emoji. */
+  iconFallback?: string;
 }) {
   return (
     <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-2.5">
       <h2 className="flex min-w-0 items-center gap-2 text-sm font-semibold tracking-tight">
-        {icon && <TileIcon icon={icon} title={typeof title === "string" ? title : "?"} size="sm" />}
+        {icon && (
+          <TileIcon icon={icon} title={typeof title === "string" ? title : "?"} size="sm" fallback={iconFallback} />
+        )}
         <span className="truncate">{title}</span>
       </h2>
       {action}

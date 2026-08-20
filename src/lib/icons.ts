@@ -180,7 +180,33 @@ export function guessIcon(input: { name?: string; image?: string; url?: string }
  */
 export function iconPackUrl(input: { name?: string; image?: string; url?: string }): string {
   const key = guessKey(input);
-  return key ? `https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/png/${key}.png` : "";
+  return serviceLogo(key);
+}
+
+/**
+ * Where the community icon pack's slug differs from the key HomePlace uses for a
+ * service. Everything not listed uses its key verbatim, which is right far more
+ * often than not.
+ */
+const LOGO_SLUG: Record<string, string> = {
+  homeassistant: "home-assistant",
+  hass: "home-assistant",
+  pbs: "proxmox-backup-server",
+  proxmox: "proxmox",
+  qbittorrent: "qbittorrent",
+};
+
+/**
+ * The real logo for a known service, by key — the actual product mark rather
+ * than the stand-in emoji. Used by the service widgets so their header reads as
+ * "Jellyfin", not "🎬". Always paired with the emoji as a fallback: on a LAN
+ * with no route out the image will not load, and `TileIcon` swaps to the emoji
+ * on its own.
+ */
+export function serviceLogo(key: string | undefined): string {
+  if (!key) return "";
+  const slug = LOGO_SLUG[key] ?? key;
+  return `https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/png/${slug}.png`;
 }
 
 /**

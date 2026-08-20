@@ -79,8 +79,6 @@ type Answer = { ok: boolean; error?: string; players?: Player[] };
 /** The same picture by two routes: through the panel, and straight from HA. */
 type Cover = { proxied?: string; direct?: string };
 
-const POLL_SECONDS = 10;
-
 /** Where this browser remembers the wall it likes. */
 const WALL_KEY = "homeplace:media-wall";
 
@@ -176,17 +174,50 @@ export function MediaPlayerWidget({
     });
   }, []);
 
-  // Polling rather than a refresh of the page: the dashboard around this tile
-  // has nothing to say every ten seconds, and re-rendering it would cost a page
-  // of payload to move one progress bar.
-  useEffect(() => {
-    const timer = setInterval(() => {
-      void readMediaPlayers(ids.current).then((r) => {
-        if (r.ok && r.players) merge(r.players as Player[]);
-      });
-    }, POLL_SECONDS * 1000);
-    return () => clearInterval(timer);
+  /** Apply a change to one player at once, before the speaker has confirmed it. */
+  const patch = useCallback((id: string, changes: Partial<Player>) => {
+    setPlayers((prev) => prev.map((p) => (p.id === id ? { ...p, ...changes } : p)));
+  }, []);
+
+  const readNow = useCallback(async () => {
+    const r = await readMediaPlayers(ids.current);
+    if (r.ok && r.players) merge(r.players as Player[]);
   }, [merge]);
+
+  // Whether anything is playing, read by the poll loop without re-subscribing.
+  const anyPlaying = useRef(false);
+  useEffect(() => {
+    anyPlaying.current = players.some(isPlaying);
+  }, [players]);
+
+  /*
+   * Polling that follows the music.
+   *
+   * A stopped speaker changes state rarely, so asking every ten seconds is
+   * waste; a playing one can change track any second, and a ten-second poll is
+   * why the new track's clock only started moving after a visible pause. So it
+   * asks every four seconds while something plays and every twenty when nothing
+   * does, and not at all while the tab is hidden — a dashboard left open on a
+   * second monitor should not keep a speaker's API busy all day.
+   */
+  useEffect(() => {
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout>;
+
+    const tick = async () => {
+      if (typeof document === "undefined" || document.visibilityState === "visible") {
+        await readNow();
+      }
+      if (stopped) return;
+      timer = setTimeout(tick, (anyPlaying.current ? 4 : 20) * 1000);
+    };
+
+    timer = setTimeout(tick, (anyPlaying.current ? 4 : 20) * 1000);
+    return () => {
+      stopped = true;
+      clearTimeout(timer);
+    };
+  }, [readNow]);
 
   function run(action: () => Promise<Answer>) {
     if (!canControl) return;
@@ -198,7 +229,41 @@ export function MediaPlayerWidget({
     });
   }
 
-  const command = (id: string, cmd: Cmd) => run(() => sendMediaCommand(id, cmd));
+  /**
+   * A command, shown before it is confirmed.
+   *
+   * The speaker is the truth, but the round trip to Home Assistant and back is
+   * long enough that a play button that does nothing until it returns feels
+   * broken — you press again. So the obvious effect of each command is applied
+   * locally at once and the speaker's real answer replaces it a moment later; a
+   * track change also triggers an immediate re-read so its new clock and cover
+   * arrive without waiting for the next poll.
+   */
+  const command = (id: string, cmd: Cmd) => {
+    const p = players.find((x) => x.id === id);
+    if (p) {
+      const optimistic: Partial<Player> = {
+        play_pause: { state: isPlaying(p) ? "paused" : "playing", positionAt: Date.now() },
+        stop: { state: "idle" },
+        turn_on: { state: "idle" },
+        turn_off: { state: "off" },
+        mute: { muted: true },
+        unmute: { muted: false },
+        shuffle_on: { shuffle: true },
+        shuffle_off: { shuffle: false },
+        repeat_off: { repeat: "off" as const },
+        repeat_all: { repeat: "all" as const },
+        repeat_one: { repeat: "one" as const },
+        next: {},
+        previous: {},
+      }[cmd];
+      if (optimistic) patch(id, optimistic);
+    }
+    run(() => sendMediaCommand(id, cmd));
+    // A skip lands on a new track; read it back promptly so the position, the
+    // title and the cover are the new ones rather than the last poll's.
+    if (cmd === "next" || cmd === "previous") setTimeout(() => void readNow(), 700);
+  };
 
   const setValue = (id: string, what: "volume" | "seek" | "source", value: number | string) =>
     run(() => setMediaValue(id, what, value));
@@ -242,7 +307,7 @@ export function MediaPlayerWidget({
           }
         />
 
-        <div ref={bodyRef} className="flex min-h-0 flex-1 flex-col gap-3 p-4">
+        <div ref={bodyRef} className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4">
           {/* The player switcher is the first thing to go when the tile is
               short: it is the least-used control and costs a whole row. */}
           {players.length > 1 && !compact && (
@@ -283,9 +348,10 @@ export function MediaPlayerWidget({
             like={like ? { ...like, praised, onSay: () => say(player.id) } : null}
           />
 
-          {/* Volume is dropped on a short tile too; it opens full screen for the
-              rare moment the dashboard is where you set the loudness. */}
-          {player.can.volumeSet && !compact && (
+          {/* Volume stays whatever the tile's shape — a remote without it is
+              half a remote. On a short tile the body scrolls to reach it rather
+              than dropping it. */}
+          {player.can.volumeSet && (
             <Volume
               d={d}
               player={player}

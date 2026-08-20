@@ -11,6 +11,7 @@ import { dict } from "@/i18n";
 import { Card, CardHeader, Meter, Badge, EmptyState, SectionTitle } from "@/components/ui";
 import { Sparkline } from "@/components/Sparkline";
 import { HoverChart } from "@/components/HoverChart";
+import { ContainerLoadChart } from "@/components/containers/ContainerLoadChart";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import { bytes, percent, duration } from "@/lib/format";
 
@@ -540,8 +541,30 @@ async function ContainersView({ d, range }: { d: ReturnType<typeof dict>; range:
 
   if (names.length === 0) return <NoData d={d} />;
 
+  const cpuAll = [...cpuBy.entries()].map(([name, points]) => ({ name: name ?? "?", points }));
+  const memAll = [...memBy.entries()].map(([name, points]) => ({ name: name ?? "?", points }));
+
   return (
-    <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+    <div className="space-y-3">
+      {/* The overall picture first: every container stacked into one band, so
+          the total load and who is under it are read at a glance, with a
+          hover that names the heaviest at any instant. */}
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+        <Card>
+          <CardHeader title={d.monitoring.cpu} action={<span className="text-[11px] text-faint">{names.length}</span>} />
+          <div className="p-3">
+            <ContainerLoadChart series={cpuAll} unit="percent" />
+          </div>
+        </Card>
+        <Card>
+          <CardHeader title={d.monitoring.memory} action={<span className="text-[11px] text-faint">{names.length}</span>} />
+          <div className="p-3">
+            <ContainerLoadChart series={memAll} unit="bytes" />
+          </div>
+        </Card>
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
       {names.map((name) => {
         const cpu = cpuBy.get(name);
         const mem = memBy.get(name);
@@ -576,6 +599,7 @@ async function ContainersView({ d, range }: { d: ReturnType<typeof dict>; range:
           </Card>
         );
       })}
+      </div>
     </div>
   );
 }
