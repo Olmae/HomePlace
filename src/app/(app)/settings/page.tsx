@@ -24,6 +24,7 @@ import { BackupCard } from "./BackupCard";
 import { listBackups } from "@/lib/backup";
 import { StatusPageCard } from "./StatusPageCard";
 import { normalizeStatusPage, STATUS_PAGE_KEY, EMPTY_STATUS_PAGE } from "@/lib/statusPage";
+import { KumaImportCard } from "./KumaImportCard";
 import { servicesForDisplay } from "@/lib/services";
 import { currentNowPlayingToken } from "@/actions/integrations";
 
@@ -299,6 +300,7 @@ async function SystemSection({ d, userId }: { d: ReturnType<typeof dict>; userId
         only="system"
       />
       <StatusPageCard d={d} initial={normalizeStatusPage(statusRaw)} items={checkable} />
+      <KumaImportCard d={d} />
       <BackupCard d={d} initial={backups} />
     </div>
   );
