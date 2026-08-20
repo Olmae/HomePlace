@@ -652,6 +652,8 @@ export const en = {
     fmtRelative: "Time ago",
     fmtRaw: "Raw",
     resetName: "Reset name",
+    history: "History",
+    noHistory: "No recent history",
   },
   metrics: {
     preset: "Common",

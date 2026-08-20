@@ -651,6 +651,8 @@ export const ru: Dictionary = {
     fmtRelative: "Сколько назад",
     fmtRaw: "Как есть",
     resetName: "Сбросить имя",
+    history: "История",
+    noHistory: "Недавней истории нет",
   },
   metrics: {
     preset: "Частое",

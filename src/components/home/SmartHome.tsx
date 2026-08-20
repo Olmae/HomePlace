@@ -1,10 +1,11 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { Card, Badge } from "@/components/ui";
 import { Input, Select, Button, Field } from "@/components/form";
 import { Dialog } from "@/components/Dialog";
-import { toggleEntity, setGroupState, saveHomeConfig } from "@/actions/services";
+import { toggleEntity, setGroupState, saveHomeConfig, entityHistory } from "@/actions/services";
+import type { HaHistoryPoint } from "@/lib/services";
 import { prettyName, formatValue, VALUE_FORMATS, type ValueFormat } from "@/lib/haFormat";
 import {
   groupEntities,
@@ -65,6 +66,7 @@ export function SmartHome({
 
   const [config, setConfig] = useState<HomeConfig>(initialConfig);
   const [editingEntity, setEditingEntity] = useState<Entity | null>(null);
+  const [deviceOpen, setDeviceOpen] = useState<Entity | null>(null);
   const [editingGroup, setEditingGroup] = useState<HomeBucket<Entity> | null>(null);
   const [creatingGroup, setCreatingGroup] = useState(false);
 
@@ -212,16 +214,14 @@ export function SmartHome({
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
                   {bucket.items.map((entity) => {
                     const on = isOn(entity);
-                    const clickable = canControl && entity.toggleable;
+                    const canToggle = canControl && entity.toggleable;
 
                     return (
                       <Card
                         key={entity.id}
-                        className={`group relative flex flex-col gap-1 p-3 transition-colors ${
-                          clickable ? "cursor-pointer hover:border-accent" : ""
-                        } ${on && entity.toggleable ? "border-accent/40 bg-accent/5" : ""} ${
-                          busy === entity.id && pending ? "opacity-60" : ""
-                        }`}
+                        className={`group relative flex cursor-pointer flex-col gap-1 p-3 transition-colors hover:border-accent ${
+                          on && entity.toggleable ? "border-accent/40 bg-accent/5" : ""
+                        } ${busy === entity.id && pending ? "opacity-60" : ""}`}
                       >
                         {canControl && (
                           <button
@@ -234,41 +234,55 @@ export function SmartHome({
                           </button>
                         )}
 
-                        <button
-                          type="button"
-                          onClick={() => flip(entity)}
-                          disabled={!clickable}
-                          className="flex w-full items-start gap-2 text-left disabled:cursor-default"
-                        >
-                          <span className="text-lg leading-none" aria-hidden>
-                            {domainIcon(entity.domain)}
-                          </span>
-                          <span className="min-w-0 flex-1">
-                            <span className="block truncate text-xs font-medium">{nameOf(entity)}</span>
-                            <span className="block truncate text-[10px] text-faint">{entity.id}</span>
-                          </span>
+                        <div className="flex w-full items-start gap-2">
+                          {/* Clicking the device opens its panel — the controls
+                              and its recent history — while the pill stays a
+                              one-tap on/off. */}
+                          <button
+                            type="button"
+                            onClick={() => setDeviceOpen(entity)}
+                            className="flex min-w-0 flex-1 items-start gap-2 text-left"
+                          >
+                            <span className="text-lg leading-none" aria-hidden>
+                              {domainIcon(entity.domain)}
+                            </span>
+                            <span className="block min-w-0 flex-1 truncate text-xs font-medium">{nameOf(entity)}</span>
+                          </button>
+
                           {entity.toggleable && (
-                            <span
-                              className={`h-4 w-7 shrink-0 rounded-full transition-colors ${on ? "bg-accent" : "bg-line"}`}
-                              aria-hidden
+                            <button
+                              type="button"
+                              onClick={() => flip(entity)}
+                              disabled={!canToggle}
+                              aria-label={on ? d.home.allOff : d.home.allOn}
+                              className="shrink-0 disabled:cursor-default"
                             >
                               <span
-                                className={`mt-[2px] block h-3 w-3 rounded-full bg-surface transition-transform ${
-                                  on ? "translate-x-[14px]" : "translate-x-[2px]"
-                                }`}
-                              />
-                            </span>
+                                className={`block h-4 w-7 rounded-full transition-colors ${on ? "bg-accent" : "bg-line"}`}
+                                aria-hidden
+                              >
+                                <span
+                                  className={`mt-[2px] block h-3 w-3 rounded-full bg-surface transition-transform ${
+                                    on ? "translate-x-[14px]" : "translate-x-[2px]"
+                                  }`}
+                                />
+                              </span>
+                            </button>
                           )}
-                        </button>
+                        </div>
 
-                        <div className="flex flex-wrap items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setDeviceOpen(entity)}
+                          className="flex flex-wrap items-center gap-1 text-left"
+                        >
                           <Badge tone={on && entity.toggleable ? "accent" : "neutral"}>{valueOf(entity)}</Badge>
                           {Object.entries(entity.attributes ?? {}).map(([key, value]) => (
                             <span key={key} className="text-[10px] text-faint">
                               {shortAttribute(key)} {value}
                             </span>
                           ))}
-                        </div>
+                        </button>
                       </Card>
                     );
                   })}
@@ -290,6 +304,26 @@ export function SmartHome({
             persist(next);
             setEditingEntity(null);
           }}
+        />
+      )}
+
+      {/* The device panel: control it here, and read its recent history. */}
+      {deviceOpen && (
+        <DeviceDialog
+          d={d}
+          entity={deviceOpen}
+          name={nameOf(deviceOpen)}
+          value={valueOf(deviceOpen)}
+          formatState={(s) =>
+            formatValue(s, deviceOpen.unit, config.formats[deviceOpen.id] ?? "auto", deviceOpen.deviceClass)
+          }
+          canControl={canControl}
+          onToggle={() => flip(deviceOpen)}
+          onCustomize={() => {
+            setEditingEntity(deviceOpen);
+            setDeviceOpen(null);
+          }}
+          onClose={() => setDeviceOpen(null)}
         />
       )}
 
@@ -572,6 +606,118 @@ function HomeGroupDialog({
       </div>
     </Dialog>
   );
+}
+
+/**
+ * One device, opened.
+ *
+ * The card is a glance; this is the whole thing — the current value, the switch
+ * where it has one, its attributes, and the log Home Assistant keeps of it: the
+ * light going on and off, the sensor's readings, the washing machine's run.
+ * The log reads time-first, left to right, the way a log is read.
+ */
+function DeviceDialog({
+  d,
+  entity,
+  name,
+  value,
+  formatState,
+  canControl,
+  onToggle,
+  onCustomize,
+  onClose,
+}: {
+  d: Dictionary;
+  entity: Entity;
+  name: string;
+  value: string;
+  formatState: (state: string) => string;
+  canControl: boolean;
+  onToggle: () => void;
+  onCustomize: () => void;
+  onClose: () => void;
+}) {
+  const [history, setHistory] = useState<HaHistoryPoint[] | null>(null);
+  const on = isOn(entity);
+
+  useEffect(() => {
+    let cancelled = false;
+    setHistory(null);
+    void entityHistory(entity.id).then((h) => {
+      if (!cancelled) setHistory(h);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [entity.id]);
+
+  return (
+    <Dialog open onClose={onClose} title={name} wide>
+      <div className="space-y-4">
+        <div className="flex items-center justify-between gap-3 rounded-control border border-line bg-raised px-3 py-2.5">
+          <div className="min-w-0">
+            <p className="truncate text-lg font-semibold tabular-nums">{value}</p>
+            <p className="truncate font-mono text-[11px] text-faint">{entity.id}</p>
+          </div>
+          {entity.toggleable && canControl && (
+            <Button variant={on ? "primary" : "quiet"} onClick={onToggle}>
+              {on ? d.home.allOff : d.home.allOn}
+            </Button>
+          )}
+        </div>
+
+        {entity.attributes && Object.keys(entity.attributes).length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {Object.entries(entity.attributes).map(([key, val]) => (
+              <Badge key={key}>
+                {key.replace(/_/g, " ")}: {val}
+              </Badge>
+            ))}
+          </div>
+        )}
+
+        <div>
+          <p className="mb-2 text-xs font-medium text-muted">{d.home.history}</p>
+          {history === null ? (
+            <p className="text-sm text-muted">{d.common.loading}</p>
+          ) : history.length === 0 ? (
+            <p className="text-sm text-muted">{d.home.noHistory}</p>
+          ) : (
+            <ul className="max-h-72 divide-y divide-line overflow-y-auto rounded-control border border-line">
+              {history.map((h, i) => (
+                <li key={i} className="flex items-baseline gap-3 px-3 py-1.5">
+                  {/* Time first — a log is read left to right, oldest thing you
+                      look for is "when". */}
+                  <span className="w-24 shrink-0 font-mono text-[11px] tabular-nums text-faint">{historyTime(h.at)}</span>
+                  <span className="truncate text-sm">{formatState(h.state)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <div className="flex items-center justify-between pt-1">
+          {canControl ? (
+            <Button variant="quiet" onClick={onCustomize}>
+              {d.home.customize}
+            </Button>
+          ) : (
+            <span />
+          )}
+          <Button variant="quiet" onClick={onClose}>
+            {d.common.close}
+          </Button>
+        </div>
+      </div>
+    </Dialog>
+  );
+}
+
+/** "DD.MM HH:MM" — compact and unambiguous for a scrollable log. */
+function historyTime(at: string): string {
+  const t = Date.parse(at);
+  if (!Number.isFinite(t)) return "";
+  return new Date(t).toLocaleString([], { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
 }
 
 /** "on", "open", "home" and "playing" all mean the same thing on a card. */

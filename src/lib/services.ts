@@ -538,6 +538,42 @@ export async function haStates(ids?: string[]): Promise<HaEntity[] | null> {
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
+export type HaHistoryPoint = { state: string; at: string };
+
+/**
+ * One entity's recent history — the light going on and off, the sensor's
+ * readings, the washing machine's run.
+ *
+ * Home Assistant keeps this in its recorder and hands it back over plain HTTP.
+ * `minimal_response` and `significant_changes_only` keep it to the transitions
+ * worth showing rather than every recorded sample, which is what makes it a
+ * readable log instead of a wall of numbers.
+ */
+export async function haHistory(entityId: string, hours = 24): Promise<HaHistoryPoint[]> {
+  const cfg = await haConfig();
+  if (!cfg) return [];
+
+  const start = new Date(Date.now() - hours * 3600_000).toISOString();
+  try {
+    const res = await fetch(
+      `${cfg.url}/api/history/period/${encodeURIComponent(start)}?filter_entity_id=${encodeURIComponent(
+        entityId
+      )}&minimal_response&significant_changes_only`,
+      { headers: { authorization: `Bearer ${cfg.token}` }, cache: "no-store", signal: AbortSignal.timeout(10000) }
+    );
+    if (!res.ok) return [];
+
+    const data = (await res.json()) as Array<Array<{ state?: string; last_changed?: string; last_updated?: string }>>;
+    const series = data[0] ?? [];
+    return series
+      .map((p) => ({ state: String(p.state ?? ""), at: String(p.last_changed ?? p.last_updated ?? "") }))
+      .filter((p) => p.at && p.state && p.state !== "unavailable" && p.state !== "unknown")
+      .reverse(); // newest first
+  } catch {
+    return [];
+  }
+}
+
 /**
  * A media player, in full.
  *

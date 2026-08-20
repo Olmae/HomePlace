@@ -18,6 +18,8 @@ import {
   haStates,
   haToggle,
   haSetState,
+  haHistory,
+  type HaHistoryPoint,
   type JellyfinSettings,
   type QbitSettings,
   type ArrInstance,
@@ -125,6 +127,12 @@ export async function toggleEntity(entityId: string): Promise<ServiceResult> {
   const result = await haToggle(entityId);
   revalidatePath("/");
   return result;
+}
+
+/** One entity's recent history from Home Assistant, for the device panel. */
+export async function entityHistory(entityId: string): Promise<HaHistoryPoint[]> {
+  await requireRole("admin");
+  return haHistory(entityId);
 }
 
 /** Turn a whole group of entities on or off in one call. */
