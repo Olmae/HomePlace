@@ -8,9 +8,22 @@ import {
   testNtfy,
   saveWebhookSettings,
   testWebhook,
+  saveEmailSettings,
+  testEmail,
   type TestResult,
 } from "@/actions/integrations";
 import type { Dictionary } from "@/i18n";
+
+type EmailDisplay = {
+  enabled: boolean;
+  host: string;
+  port: number;
+  secure: boolean;
+  user: string;
+  from: string;
+  to: string;
+  hasPass: boolean;
+};
 
 /**
  * The notification routes that are not Telegram.
@@ -23,16 +36,103 @@ export function NotifierForms({
   d,
   ntfy,
   webhook,
+  email,
 }: {
   d: Dictionary;
   ntfy: { enabled: boolean; url: string; topic: string; hasToken: boolean };
   webhook: { enabled: boolean; url: string; hasToken: boolean };
+  email: EmailDisplay;
 }) {
   return (
     <>
       <NtfyCard d={d} value={ntfy} />
+      <EmailCard d={d} value={email} />
       <WebhookCard d={d} value={webhook} />
     </>
+  );
+}
+
+function EmailCard({ d, value }: { d: Dictionary; value: EmailDisplay }) {
+  const [form, setForm] = useState({ ...value, pass: "" });
+  const [result, setResult] = useState<TestResult | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  return (
+    <Card>
+      <CardHeader
+        title={d.settings.email}
+        action={<Badge tone={value.enabled ? "ok" : "neutral"}>{value.enabled ? "on" : "off"}</Badge>}
+      />
+      <div className="flex flex-col gap-3 p-4">
+        <p className="text-xs text-muted">{d.settings.emailHint}</p>
+
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={form.enabled} onChange={(e) => setForm({ ...form, enabled: e.target.checked })} />
+          {d.common.enabled}
+        </label>
+
+        <div className="grid grid-cols-3 gap-3">
+          <div className="col-span-2">
+            <Field label={d.settings.emailHost}>
+              <Input value={form.host} onChange={(e) => setForm({ ...form, host: e.target.value })} placeholder="smtp.gmail.com" className="font-mono text-xs" />
+            </Field>
+          </div>
+          <Field label={d.settings.emailPort}>
+            <Input type="number" value={form.port} onChange={(e) => setForm({ ...form, port: Number(e.target.value) })} />
+          </Field>
+        </div>
+
+        <label className="flex items-center gap-2 text-xs text-muted">
+          <input type="checkbox" checked={form.secure} onChange={(e) => setForm({ ...form, secure: e.target.checked })} />
+          {d.settings.emailSecure}
+        </label>
+
+        <div className="grid grid-cols-2 gap-3">
+          <Field label={d.settings.emailUser}>
+            <Input value={form.user} onChange={(e) => setForm({ ...form, user: e.target.value })} className="font-mono text-xs" />
+          </Field>
+          <Field label={d.settings.token} hint={value.hasPass ? d.settings.secretKept : d.common.optional}>
+            <Input
+              type="password"
+              value={form.pass}
+              onChange={(e) => setForm({ ...form, pass: e.target.value })}
+              placeholder={value.hasPass ? "••••••••" : ""}
+            />
+          </Field>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <Field label={d.settings.emailFrom} hint={d.common.optional}>
+            <Input value={form.from} onChange={(e) => setForm({ ...form, from: e.target.value })} className="font-mono text-xs" />
+          </Field>
+          <Field label={d.settings.emailTo}>
+            <Input value={form.to} onChange={(e) => setForm({ ...form, to: e.target.value })} placeholder="you@example.com" className="font-mono text-xs" />
+          </Field>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3">
+          <Button
+            variant="primary"
+            disabled={pending}
+            onClick={() => startTransition(async () => setResult(await saveEmailSettings(form)))}
+          >
+            {d.common.save}
+          </Button>
+          <Button
+            disabled={pending}
+            onClick={() =>
+              startTransition(async () => {
+                await saveEmailSettings(form);
+                setResult(await testEmail());
+              })
+            }
+          >
+            {d.common.test}
+          </Button>
+          <Result result={result} d={d} />
+        </div>
+      </div>
+    </Card>
   );
 }
 

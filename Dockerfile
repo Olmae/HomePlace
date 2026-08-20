@@ -55,6 +55,11 @@ COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
 # the server chunks rather than leaving it in node_modules, so the script needs
 # its own copy.
 COPY --from=builder /app/node_modules/bcryptjs ./node_modules/bcryptjs
+
+# nodemailer is marked external (it reaches for node: built-ins webpack will not
+# inline), so it is required at runtime and needs its own copy in the image.
+COPY --from=builder /app/node_modules/nodemailer ./node_modules/nodemailer
+
 COPY --from=builder /app/scripts ./scripts
 
 COPY docker-entrypoint.sh /docker-entrypoint.sh

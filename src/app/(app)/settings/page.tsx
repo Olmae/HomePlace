@@ -206,7 +206,7 @@ async function AlertsSection({ d, userId }: { d: ReturnType<typeof dict>; userId
       <NotifyPolicyForm d={d} policy={normalizePolicy(policyRaw)} />
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
         <PushCard d={d} count={pushCount} />
-        <NotifierForms d={d} ntfy={notifiers.ntfy} webhook={notifiers.webhook} />
+        <NotifierForms d={d} ntfy={notifiers.ntfy} webhook={notifiers.webhook} email={notifiers.email} />
       </div>
     </div>
   );

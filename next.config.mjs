@@ -9,7 +9,7 @@ const nextConfig = {
     // Kept out of the bundle and required at runtime instead. undici reaches
     // for node: built-ins that webpack refuses to inline, and bundling a copy
     // of the HTTP stack into a server that already has one is pointless anyway.
-    serverComponentsExternalPackages: ["undici", "fetch-socks", "socks"],
+    serverComponentsExternalPackages: ["undici", "fetch-socks", "socks", "nodemailer"],
   },
 
   /**

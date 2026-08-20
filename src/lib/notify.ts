@@ -40,7 +40,20 @@ export type WebhookSettings = {
   token: string;
 };
 
-const KEY = { ntfy: "integration.ntfy", webhook: "integration.webhook" };
+export type EmailSettings = {
+  enabled: boolean;
+  host: string;
+  port: number;
+  /** Implicit TLS (port 465). Off means plain or STARTTLS (587/25). */
+  secure: boolean;
+  user: string;
+  pass: string;
+  from: string;
+  /** One or more recipients, comma-separated. */
+  to: string;
+};
+
+const KEY = { ntfy: "integration.ntfy", webhook: "integration.webhook", email: "integration.email" };
 
 const NTFY_DEFAULTS: NtfySettings = { enabled: false, url: "https://ntfy.sh", topic: "", token: "" };
 const WEBHOOK_DEFAULTS: WebhookSettings = { enabled: false, url: "", token: "" };
@@ -62,6 +75,62 @@ export async function saveNtfy(input: Partial<NtfySettings>): Promise<void> {
     // An empty field means "keep the stored token", as everywhere else.
     token: input.token ? await encrypt(input.token) : existing?.token ?? "",
   });
+}
+
+const EMAIL_DEFAULTS: EmailSettings = { enabled: false, host: "", port: 587, secure: false, user: "", pass: "", from: "", to: "" };
+
+export async function emailConfig(): Promise<EmailSettings | null> {
+  const stored = await getSetting<EmailSettings | null>(KEY.email, null);
+  if (!stored?.host || !stored.to) return null;
+  return { ...EMAIL_DEFAULTS, ...stored, pass: stored.pass ? await decrypt(stored.pass) : "" };
+}
+
+export async function saveEmail(input: Partial<EmailSettings>): Promise<void> {
+  const existing = await getSetting<EmailSettings | null>(KEY.email, null);
+  await setSetting(KEY.email, {
+    ...EMAIL_DEFAULTS,
+    ...existing,
+    ...input,
+    host: (input.host ?? existing?.host ?? "").trim(),
+    port: Number(input.port ?? existing?.port ?? 587) || 587,
+    from: (input.from ?? existing?.from ?? "").trim(),
+    to: (input.to ?? existing?.to ?? "").trim(),
+    user: (input.user ?? existing?.user ?? "").trim(),
+    // Empty means "keep the stored password", as with every other secret here.
+    pass: input.pass ? await encrypt(input.pass) : existing?.pass ?? "",
+  });
+}
+
+/**
+ * Email, through the operator's own SMTP.
+ *
+ * Every other route is fire-and-forget over HTTP; email is the one that also
+ * works when the household has nothing else — a relay on the LAN, or a provider
+ * that only speaks SMTP. nodemailer handles the protocol; a `from` defaults to
+ * the user when it is left blank.
+ */
+export async function sendEmail(cfg: EmailSettings, message: Notification): Promise<boolean> {
+  try {
+    const nodemailer = (await import("nodemailer")).default;
+    const transport = nodemailer.createTransport({
+      host: cfg.host,
+      port: cfg.port,
+      secure: cfg.secure,
+      auth: cfg.user ? { user: cfg.user, pass: cfg.pass } : undefined,
+      // A home relay routinely carries a self-signed certificate.
+      tls: { rejectUnauthorized: false },
+    });
+    await transport.sendMail({
+      from: cfg.from || cfg.user,
+      to: cfg.to,
+      subject: message.title,
+      text: message.body,
+    });
+    return true;
+  } catch (e) {
+    console.error("email delivery failed:", e instanceof Error ? e.message : e);
+    return false;
+  }
 }
 
 export async function webhookConfig(): Promise<WebhookSettings | null> {
@@ -110,6 +179,7 @@ export type DeliveryResult = {
   telegram: boolean;
   ntfy: boolean;
   webhook: boolean;
+  email: boolean;
   quiet: boolean;
   /** The policy withheld this kind of event from notifications. */
   suppressed: boolean;
@@ -122,7 +192,7 @@ export async function notifyPolicy(): Promise<NotifyPolicy> {
 /** Send to every configured route. Never throws — a notifier that can take the
  *  monitor down with it is worse than a missed message. */
 export async function notify(message: Notification): Promise<DeliveryResult> {
-  const result: DeliveryResult = { push: 0, telegram: false, ntfy: false, webhook: false, quiet: false, suppressed: false };
+  const result: DeliveryResult = { push: 0, telegram: false, ntfy: false, webhook: false, email: false, quiet: false, suppressed: false };
 
   // The policy decides what a phone hears; the event has already been recorded.
   if (message.type) {
@@ -139,7 +209,7 @@ export async function notify(message: Notification): Promise<DeliveryResult> {
     return result;
   }
 
-  const [ntfy, webhook] = await Promise.all([ntfyConfig(), webhookConfig()]);
+  const [ntfy, webhook, email] = await Promise.all([ntfyConfig(), webhookConfig(), emailConfig()]);
 
   const jobs: Promise<void>[] = [];
 
@@ -178,6 +248,16 @@ export async function notify(message: Notification): Promise<DeliveryResult> {
       sendWebhook(webhook, message)
         .then((ok) => {
           result.webhook = ok;
+        })
+        .catch(() => {})
+    );
+  }
+
+  if (email?.enabled) {
+    jobs.push(
+      sendEmail(email, message)
+        .then((ok) => {
+          result.email = ok;
         })
         .catch(() => {})
     );
@@ -263,7 +343,7 @@ function escapeHtml(s: string): string {
 
 /** What the settings page shows: addresses visible, secrets masked. */
 export async function notifiersForDisplay() {
-  const [ntfy, webhook] = await Promise.all([ntfyConfig(), webhookConfig()]);
+  const [ntfy, webhook, email] = await Promise.all([ntfyConfig(), webhookConfig(), emailConfig()]);
   return {
     ntfy: {
       enabled: ntfy?.enabled ?? false,
@@ -275,6 +355,16 @@ export async function notifiersForDisplay() {
       enabled: webhook?.enabled ?? false,
       url: webhook?.url ?? "",
       hasToken: !!webhook?.token,
+    },
+    email: {
+      enabled: email?.enabled ?? false,
+      host: email?.host ?? "",
+      port: email?.port ?? EMAIL_DEFAULTS.port,
+      secure: email?.secure ?? false,
+      user: email?.user ?? "",
+      from: email?.from ?? "",
+      to: email?.to ?? "",
+      hasPass: !!email?.pass,
     },
   };
 }

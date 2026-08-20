@@ -9,7 +9,7 @@ import { prometheusHealth } from "@/lib/prometheus";
 import { proxmoxHealth } from "@/lib/proxmox";
 import { sendWith } from "@/lib/telegram";
 import { saveGoogleConfig, unlinkAccount } from "@/lib/google";
-import { saveNtfy, ntfyConfig, sendNtfy, saveWebhook, webhookConfig, sendWebhook } from "@/lib/notify";
+import { saveNtfy, ntfyConfig, sendNtfy, saveWebhook, webhookConfig, sendWebhook, saveEmail, emailConfig, sendEmail, type EmailSettings } from "@/lib/notify";
 
 /**
  * Configuring the integrations from the settings page.
@@ -174,4 +174,20 @@ export async function testWebhook(): Promise<TestResult> {
   if (!cfg) return { ok: false, error: "no webhook address" };
   const ok = await sendWebhook(cfg, { title: "HomePlace", body: "Test notification — the webhook is working.", severity: "info" });
   return ok ? { ok: true } : { ok: false, error: "the endpoint did not answer with a success status" };
+}
+
+/** Email through the household's own SMTP server. */
+export async function saveEmailSettings(input: Partial<EmailSettings>): Promise<TestResult> {
+  await requireRole("admin");
+  await saveEmail(input);
+  revalidatePath("/settings");
+  return { ok: true };
+}
+
+export async function testEmail(): Promise<TestResult> {
+  await requireRole("admin");
+  const cfg = await emailConfig();
+  if (!cfg) return { ok: false, error: "email is not configured" };
+  const ok = await sendEmail(cfg, { title: "HomePlace", body: "Test notification — email is working.", severity: "info" });
+  return ok ? { ok: true } : { ok: false, error: "the SMTP server rejected the message" };
 }
