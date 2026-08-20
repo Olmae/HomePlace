@@ -10,10 +10,32 @@ import { nodes, guests, disks, storages } from "@/lib/proxmox";
 import { dict } from "@/i18n";
 import { Card, CardHeader, Meter, Badge, EmptyState, SectionTitle } from "@/components/ui";
 import { Sparkline } from "@/components/Sparkline";
+import { HoverChart } from "@/components/HoverChart";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import { bytes, percent, duration } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
+
+/**
+ * How far back the charts reach. A single choice drives every range query on
+ * the page, kept in the URL so "the window I always look at" survives a
+ * bookmark and a refresh. `points` is tuned per range so a week does not ask
+ * Prometheus for thousands of samples nobody can see.
+ */
+const RANGES = [
+  { key: "15m", minutes: 15, points: 90 },
+  { key: "1h", minutes: 60, points: 120 },
+  { key: "3h", minutes: 180, points: 150 },
+  { key: "12h", minutes: 720, points: 180 },
+  { key: "24h", minutes: 1440, points: 200 },
+  { key: "7d", minutes: 10080, points: 240 },
+] as const;
+
+type RangeKey = (typeof RANGES)[number]["key"];
+
+function resolveRange(key?: string) {
+  return RANGES.find((r) => r.key === key) ?? RANGES[2];
+}
 
 /**
  * Monitoring.
@@ -23,9 +45,14 @@ export const dynamic = "force-dynamic";
  * — physical disks, SMART, guests. Which view is open is a URL parameter, so
  * "the page I always look at" is a bookmark.
  */
-export default async function MonitoringPage({ searchParams }: { searchParams: { host?: string } }) {
+export default async function MonitoringPage({
+  searchParams,
+}: {
+  searchParams: { host?: string; range?: string };
+}) {
   const user = await pageUser();
   const d = dict(user.locale);
+  const range = resolveRange(searchParams.range);
 
   const hasProm = (await prometheusConfig()) !== null;
   const hasPve = (await proxmoxConfig()) !== null;
@@ -53,6 +80,14 @@ export default async function MonitoringPage({ searchParams }: { searchParams: {
     ...(hasPve ? [{ key: "proxmox", label: "Proxmox" }] : []),
   ];
 
+  // A link that keeps the host but swaps the range, and one that keeps the
+  // range but swaps the host — so neither switcher throws away the other.
+  const withRange = (r: RangeKey) => `/monitoring?host=${encodeURIComponent(view)}&range=${r}`;
+  const withHost = (h: string) => `/monitoring?host=${encodeURIComponent(h)}&range=${range.key}`;
+
+  // The range only means something where there are charts to stretch.
+  const showRange = view !== "proxmox" && hasProm;
+
   return (
     <>
       <AutoRefresh seconds={30} />
@@ -63,7 +98,7 @@ export default async function MonitoringPage({ searchParams }: { searchParams: {
           {tabs.map((tab) => (
             <Link
               key={tab.key}
-              href={`/monitoring?host=${encodeURIComponent(tab.key)}`}
+              href={withHost(tab.key)}
               className={`whitespace-nowrap rounded-control px-3 py-1.5 font-mono text-xs transition-colors ${
                 view === tab.key ? "bg-raised text-text" : "text-muted hover:bg-raised hover:text-text"
               }`}
@@ -74,16 +109,47 @@ export default async function MonitoringPage({ searchParams }: { searchParams: {
         </div>
       </div>
 
-      {view === "overview" && <Overview d={d} instances={instances} hasPve={hasPve} />}
+      {showRange && (
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <span className="text-xs text-muted">{d.monitoring.range}</span>
+          <div className="flex items-center gap-1 rounded-control border border-line p-0.5">
+            {RANGES.map((r) => (
+              <Link
+                key={r.key}
+                href={withRange(r.key)}
+                className={`rounded-[6px] px-2.5 py-1 font-mono text-xs transition-colors ${
+                  range.key === r.key ? "bg-raised text-text" : "text-muted hover:text-text"
+                }`}
+              >
+                {d.monitoring[`range${r.key}` as keyof typeof d.monitoring] as string}
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {view === "overview" && <Overview d={d} instances={instances} hasPve={hasPve} range={range} />}
       {view === "proxmox" && hasPve && <ProxmoxView d={d} />}
-      {view !== "overview" && view !== "proxmox" && <HostView d={d} instance={view} />}
+      {view !== "overview" && view !== "proxmox" && <HostView d={d} instance={view} range={range} />}
     </>
   );
 }
 
+type Range = (typeof RANGES)[number];
+
 // ───────────────────────────────── Overview ──────────────────────────────
 
-async function Overview({ d, instances, hasPve }: { d: ReturnType<typeof dict>; instances: string[]; hasPve: boolean }) {
+async function Overview({
+  d,
+  instances,
+  hasPve,
+  range,
+}: {
+  d: ReturnType<typeof dict>;
+  instances: string[];
+  hasPve: boolean;
+  range: Range;
+}) {
   return (
     <div className="space-y-6">
       {instances.length > 0 && (
@@ -91,7 +157,7 @@ async function Overview({ d, instances, hasPve }: { d: ReturnType<typeof dict>; 
           <SectionTitle>{d.monitoring.host}</SectionTitle>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
             {instances.map((instance) => (
-              <HostSummary key={instance} d={d} instance={instance} />
+              <HostSummary key={instance} d={d} instance={instance} range={range} />
             ))}
           </div>
         </section>
@@ -107,28 +173,35 @@ async function Overview({ d, instances, hasPve }: { d: ReturnType<typeof dict>; 
   );
 }
 
-async function HostSummary({ d, instance }: { d: ReturnType<typeof dict>; instance: string }) {
-  const [cpu, mem, up, history] = await Promise.all([
+async function HostSummary({ d, instance, range }: { d: ReturnType<typeof dict>; instance: string; range: Range }) {
+  const [cpu, mem, memUsed, memTotal, up, history] = await Promise.all([
     queryOne(Q.cpuPercent(instance)),
     queryOne(Q.memoryPercent(instance)),
+    queryOne(Q.memoryUsedBytes(instance)),
+    queryOne(Q.memoryTotalBytes(instance)),
     queryOne(Q.uptimeSeconds(instance)),
-    queryRange(Q.cpuPercent(instance), 60, 60),
+    queryRange(Q.cpuPercent(instance), range.minutes, range.points),
   ]);
 
   return (
     <Card>
       <CardHeader
-        title={<span className="font-mono text-xs">{instance}</span>}
+        title={
+          <Link href={withHostLink(instance, range)} className="font-mono text-xs hover:text-accent">
+            {instance}
+          </Link>
+        }
         action={up ? <span className="font-mono text-[11px] text-faint">{duration(up)}</span> : null}
       />
       <div className="space-y-3 p-4">
         <Row label={d.monitoring.cpu} value={percent(cpu)} meter={cpu ?? 0} />
-        <Row label={d.monitoring.memory} value={percent(mem)} meter={mem ?? 0} />
+        <Row
+          label={d.monitoring.memory}
+          value={memUsed !== null && memTotal !== null ? `${bytes(memUsed)} / ${bytes(memTotal)}` : percent(mem)}
+          meter={mem ?? 0}
+        />
         {history[0] && <Sparkline points={history[0].points} min={0} max={100} />}
-        <Link
-          href={`/monitoring?host=${encodeURIComponent(instance)}`}
-          className="inline-block text-xs text-accent hover:underline"
-        >
+        <Link href={withHostLink(instance, range)} className="inline-block text-xs text-accent hover:underline">
           {d.common.next} →
         </Link>
       </div>
@@ -136,18 +209,44 @@ async function HostSummary({ d, instance }: { d: ReturnType<typeof dict>; instan
   );
 }
 
+function withHostLink(instance: string, range: Range) {
+  return `/monitoring?host=${encodeURIComponent(instance)}&range=${range.key}`;
+}
+
 // ─────────────────────────────── Single host ─────────────────────────────
 
-async function HostView({ d, instance }: { d: ReturnType<typeof dict>; instance: string }) {
-  const [cpuHistory, memHistory, sizes, avail, temps, rx, tx, load, up] = await Promise.all([
-    queryRange(Q.cpuPercent(instance), 180),
-    queryRange(Q.memoryPercent(instance), 180),
+async function HostView({ d, instance, range }: { d: ReturnType<typeof dict>; instance: string; range: Range }) {
+  const [
+    cpuHistory,
+    memHistory,
+    swapHistory,
+    diskReadHistory,
+    diskWriteHistory,
+    sizes,
+    avail,
+    temps,
+    rx,
+    tx,
+    load1,
+    load5,
+    load15,
+    cores,
+    up,
+  ] = await Promise.all([
+    queryRange(Q.cpuPercent(instance), range.minutes, range.points),
+    queryRange(Q.memoryPercent(instance), range.minutes, range.points),
+    queryRange(Q.swapPercent(instance), range.minutes, range.points),
+    queryRange(Q.diskReadBytes(instance), range.minutes, range.points),
+    queryRange(Q.diskWriteBytes(instance), range.minutes, range.points),
     query(Q.filesystems(instance)),
     query(Q.filesystemsFree(instance)),
     query(Q.temperatures(instance)),
     query(Q.networkRx(instance)),
     query(Q.networkTx(instance)),
     queryOne(Q.load1(instance)),
+    queryOne(Q.load5(instance)),
+    queryOne(Q.load15(instance)),
+    queryOne(Q.cpuCount(instance)),
     queryOne(Q.uptimeSeconds(instance)),
   ]);
 
@@ -167,6 +266,9 @@ async function HostView({ d, instance }: { d: ReturnType<typeof dict>; instance:
     .filter((f) => f.total > 0)
     .sort((a, b) => b.total - a.total);
 
+  const hasSwap = (swapHistory[0]?.points ?? []).some(([, v]) => Number.isFinite(v) && v > 0);
+  const hasDiskIo = (diskReadHistory[0]?.points.length ?? 0) > 1 || (diskWriteHistory[0]?.points.length ?? 0) > 1;
+
   return (
     <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
       <Card>
@@ -174,21 +276,67 @@ async function HostView({ d, instance }: { d: ReturnType<typeof dict>; instance:
           title={d.monitoring.cpu}
           action={
             <span className="font-mono text-xs text-faint">
-              {load !== null ? `load ${load.toFixed(2)}` : ""} {up ? `· ${duration(up)}` : ""}
+              {load1 !== null
+                ? `${d.monitoring.load} ${load1.toFixed(2)} / ${(load5 ?? 0).toFixed(2)} / ${(load15 ?? 0).toFixed(2)}${
+                    cores ? ` · ${cores} ${d.monitoring.cores}` : ""
+                  }`
+                : ""}
+              {up ? ` · ${duration(up)}` : ""}
             </span>
           }
         />
         <div className="p-4">
-          {cpuHistory[0] ? <Sparkline points={cpuHistory[0].points} min={0} max={100} /> : <NoData d={d} />}
+          {cpuHistory[0] ? (
+            <HoverChart d={d} points={cpuHistory[0].points} unit="percent" min={0} max={100} />
+          ) : (
+            <NoData d={d} />
+          )}
         </div>
       </Card>
 
       <Card>
         <CardHeader title={d.monitoring.memory} />
         <div className="p-4">
-          {memHistory[0] ? <Sparkline points={memHistory[0].points} min={0} max={100} tone="ok" /> : <NoData d={d} />}
+          {memHistory[0] ? (
+            <HoverChart d={d} points={memHistory[0].points} unit="percent" min={0} max={100} tone="ok" />
+          ) : (
+            <NoData d={d} />
+          )}
         </div>
       </Card>
+
+      {hasSwap && (
+        <Card>
+          <CardHeader title={d.monitoring.swap} />
+          <div className="p-4">
+            <HoverChart d={d} points={swapHistory[0].points} unit="percent" min={0} max={100} tone="warn" />
+          </div>
+        </Card>
+      )}
+
+      {hasDiskIo && (
+        <Card className={hasSwap ? "" : "lg:col-span-2"}>
+          <CardHeader title={d.monitoring.diskIo} />
+          <div className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2">
+            <div>
+              <p className="mb-1 text-[11px] text-muted">↓ {d.monitoring.read}</p>
+              {diskReadHistory[0] ? (
+                <HoverChart d={d} points={diskReadHistory[0].points} unit="bytesPerSecond" min={0} />
+              ) : (
+                <NoData d={d} />
+              )}
+            </div>
+            <div>
+              <p className="mb-1 text-[11px] text-muted">↑ {d.monitoring.write}</p>
+              {diskWriteHistory[0] ? (
+                <HoverChart d={d} points={diskWriteHistory[0].points} unit="bytesPerSecond" min={0} tone="danger" />
+              ) : (
+                <NoData d={d} />
+              )}
+            </div>
+          </div>
+        </Card>
+      )}
 
       <Card className="lg:col-span-2">
         <CardHeader title={d.monitoring.disks} />
@@ -336,7 +484,12 @@ async function GuestTable({ d }: { d: ReturnType<typeof dict> }) {
                       className={`inline-block h-1.5 w-1.5 rounded-full ${g.status === "running" ? "bg-ok" : "bg-faint"}`}
                       aria-hidden
                     />
-                    <span className="font-medium">{g.name || g.vmid}</span>
+                    <Link
+                      href={`/monitoring/guest/${encodeURIComponent(g.node)}/${g.type}/${g.vmid}`}
+                      className="font-medium hover:text-accent"
+                    >
+                      {g.name || g.vmid}
+                    </Link>
                     <span className="font-mono text-[11px] text-faint">{g.type}</span>
                   </span>
                 </td>

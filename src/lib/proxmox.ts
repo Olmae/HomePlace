@@ -140,6 +140,107 @@ export async function storages(): Promise<PveStorage[]> {
   }));
 }
 
+export type PveGuestStatus = {
+  vmid: number;
+  name: string;
+  status: string;
+  uptime: number;
+  cpu: number;
+  cpus: number;
+  mem: number;
+  maxmem: number;
+  disk: number;
+  maxdisk: number;
+  diskread: number;
+  diskwrite: number;
+  netin: number;
+  netout: number;
+  ha?: unknown;
+};
+
+/**
+ * Live status of one guest — the numbers Proxmox refreshes every couple of
+ * seconds. This is what the "open the VM" view leads with; still read-only,
+ * still no start/stop, that belongs in the Proxmox UI.
+ */
+export async function guestStatus(node: string, type: string, vmid: number): Promise<PveGuestStatus | null> {
+  const kind = type === "lxc" ? "lxc" : "qemu";
+  const r = await pve<Record<string, unknown>>(
+    `/nodes/${encodeURIComponent(node)}/${kind}/${vmid}/status/current`
+  );
+  if (!r) return null;
+  return {
+    vmid,
+    name: String(r.name ?? ""),
+    status: String(r.status ?? "unknown"),
+    uptime: Number(r.uptime ?? 0),
+    cpu: Number(r.cpu ?? 0),
+    cpus: Number(r.cpus ?? 0),
+    mem: Number(r.mem ?? 0),
+    maxmem: Number(r.maxmem ?? 0),
+    disk: Number(r.disk ?? 0),
+    maxdisk: Number(r.maxdisk ?? 0),
+    diskread: Number(r.diskread ?? 0),
+    diskwrite: Number(r.diskwrite ?? 0),
+    netin: Number(r.netin ?? 0),
+    netout: Number(r.netout ?? 0),
+    ha: r.ha,
+  };
+}
+
+/**
+ * The guest's configuration — a flat bag of keys Proxmox writes verbatim
+ * (cores, memory, the disk and net lines, the OS type). Returned as-is so the
+ * view can pick out what is worth showing without this file knowing every key
+ * Proxmox has ever defined.
+ */
+export async function guestConfig(node: string, type: string, vmid: number): Promise<Record<string, string>> {
+  const kind = type === "lxc" ? "lxc" : "qemu";
+  const r = await pve<Record<string, unknown>>(`/nodes/${encodeURIComponent(node)}/${kind}/${vmid}/config`);
+  if (!r) return {};
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(r)) out[k] = typeof v === "string" ? v : String(v);
+  return out;
+}
+
+export type PveRrdPoint = {
+  time: number;
+  cpu: number;
+  mem: number;
+  maxmem: number;
+  netin: number;
+  netout: number;
+  diskread: number;
+  diskwrite: number;
+};
+
+/**
+ * Proxmox's own history for one guest, so the detail view has charts without a
+ * Prometheus in the loop. `timeframe` is one of hour/day/week/month/year.
+ */
+export async function guestRrd(
+  node: string,
+  type: string,
+  vmid: number,
+  timeframe = "hour"
+): Promise<PveRrdPoint[]> {
+  const kind = type === "lxc" ? "lxc" : "qemu";
+  const rows = await pve<Record<string, unknown>[]>(
+    `/nodes/${encodeURIComponent(node)}/${kind}/${vmid}/rrddata?timeframe=${encodeURIComponent(timeframe)}&cf=AVERAGE`
+  );
+  if (!rows) return [];
+  return rows.map((r) => ({
+    time: Number(r.time ?? 0) * 1000,
+    cpu: Number(r.cpu ?? 0) * 100,
+    mem: Number(r.mem ?? 0),
+    maxmem: Number(r.maxmem ?? 0),
+    netin: Number(r.netin ?? 0),
+    netout: Number(r.netout ?? 0),
+    diskread: Number(r.diskread ?? 0),
+    diskwrite: Number(r.diskwrite ?? 0),
+  }));
+}
+
 export async function proxmoxHealth(): Promise<{ ok: boolean; error?: string }> {
   const cfg = await proxmoxConfig();
   if (!cfg) return { ok: false, error: "not configured" };

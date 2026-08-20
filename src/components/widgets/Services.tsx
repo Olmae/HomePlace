@@ -1,4 +1,5 @@
 import { Card, CardHeader, Meter, Badge } from "@/components/ui";
+import { SERVICE_ICONS } from "@/lib/icons";
 import { jellyfinState, qbitState, arrState, pbsState, haStates } from "@/lib/services";
 import { HaControls } from "./HaControls";
 import { bytes, duration, ago } from "@/lib/format";
@@ -34,7 +35,7 @@ export async function JellyfinWidget({ title, d }: { title: string; d: Dictionar
 
   return (
     <Card className="flex h-full flex-col">
-      <CardHeader
+      <CardHeader icon={SERVICE_ICONS["jellyfin"]}
         title={title}
         action={
           state.transcoding > 0 ? (
@@ -106,7 +107,7 @@ export async function QbitWidget({ title, d }: { title: string; d: Dictionary })
 
   return (
     <Card className="h-full">
-      <CardHeader
+      <CardHeader icon={SERVICE_ICONS["qbittorrent"]}
         title={title}
         action={
           <span className="font-mono text-[11px] tabular-nums text-faint">
@@ -147,7 +148,7 @@ export async function ArrWidget({ title, d }: { title: string; d: Dictionary }) 
 
   return (
     <Card className="h-full">
-      <CardHeader title={title} />
+      <CardHeader icon={SERVICE_ICONS["sonarr"]} title={title} />
       <div className="space-y-3 p-4">
         {instances.map((instance) => (
           <div key={instance.label}>
@@ -188,7 +189,7 @@ export async function PbsWidget({ title, d }: { title: string; d: Dictionary }) 
 
   return (
     <Card className="h-full">
-      <CardHeader
+      <CardHeader icon={SERVICE_ICONS["pbs"]}
         title={title}
         action={
           newest ? (
@@ -246,7 +247,7 @@ export async function HomeAssistantWidget({
 
   return (
     <Card className="h-full">
-      <CardHeader title={title} />
+      <CardHeader icon={SERVICE_ICONS["homeassistant"]} title={title} />
       <div className="p-2">
         {entities.length === 0 && <p className="p-2 text-sm text-muted">{d.services.pickEntities}</p>}
         {/* The switching itself is a client component: the rest of this card is

@@ -11,7 +11,10 @@ import type { Dictionary } from "@/i18n";
  * a wall calendar exists for. This draws the month, marks the days that have
  * something on them, and lists whatever is on the selected day underneath.
  *
- * Personal by construction: it reads the calendar of whoever is looking.
+ * Personal by construction: it reads the calendar of whoever is looking — and a
+ * calendar is a calendar with or without one. Google is an optional source of
+ * marks on the days, not the reason the widget exists: unlinked, the month is
+ * still drawn and still browsable, with a quiet offer to connect an account.
  */
 export async function CalendarWidget({
   config,
@@ -25,27 +28,29 @@ export async function CalendarWidget({
   userId: string;
 }) {
   const account = await linkedAccount(userId);
-  if (!account) {
-    return (
-      <Card className="h-full">
-        <CardHeader title={title} />
-        <div className="p-4">
-          <p className="text-sm text-muted">{d.widgets.calendarNotLinked}</p>
-          <a href="/settings?section=integrations" className="mt-1 inline-block text-xs text-accent hover:underline">
-            {d.nav.settings} →
-          </a>
-        </div>
-      </Card>
-    );
-  }
 
   // A month of events rather than a handful: the grid needs to know which days
   // are busy, and a day cannot be marked from a list of the next eight things.
-  const events = await upcomingEvents(userId, 45, 250);
+  const events = account ? await upcomingEvents(userId, 45, 250) : null;
 
   return (
     <Card className="flex h-full flex-col">
-      <CardHeader title={title} action={<span className="truncate text-[11px] text-faint">{account.email}</span>} />
+      <CardHeader
+        title={title}
+        action={
+          account ? (
+            <span className="truncate text-[11px] text-faint">{account.email}</span>
+          ) : (
+            <a
+              href="/settings?section=integrations"
+              className="shrink-0 text-[11px] text-muted transition-colors hover:text-accent"
+              title={d.widgets.calendarNotLinked}
+            >
+              {d.widgets.calendarLink}
+            </a>
+          )
+        }
+      />
       <CalendarGrid
         d={d}
         events={(events ?? []).map((e) => ({

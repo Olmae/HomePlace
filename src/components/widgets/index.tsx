@@ -10,6 +10,8 @@ import { NowPlayingWidget } from "./NowPlaying";
 import { WeatherWidget } from "./Weather";
 import { CalendarWidget } from "./Calendar";
 import { JellyfinWidget, QbitWidget, ArrWidget, PbsWidget, HomeAssistantWidget } from "./Services";
+import { MediaPlayerWidget } from "./MediaPlayer";
+import { haConfig, haMediaPlayers } from "@/lib/services";
 import { RemindersWidget } from "./Reminders";
 import { Gauge } from "@/components/Gauge";
 import { Chart } from "@/components/Chart";
@@ -34,9 +36,11 @@ export type WidgetProps = {
   d: Dictionary;
   /** Who is looking — the calendar is personal to them. */
   userId?: string;
+  /** Whether this viewer may operate the house, not only watch it. */
+  canControl?: boolean;
 };
 
-export async function Widget({ widget, config, title, d, userId }: WidgetProps) {
+export async function Widget({ widget, config, title, d, userId, canControl = false }: WidgetProps) {
   switch (widget) {
     case "system":
       return <SystemWidget config={config} title={title} d={d} />;
@@ -87,6 +91,8 @@ export async function Widget({ widget, config, title, d, userId }: WidgetProps) 
       return <PbsWidget title={title} d={d} />;
     case "homeassistant":
       return <HomeAssistantWidget config={config} title={title} d={d} />;
+    case "mediaplayer":
+      return <MediaWidget config={config} title={title} d={d} canControl={canControl} />;
     case "reminders":
       return userId ? (
         <RemindersList title={title} d={d} userId={userId} />
@@ -605,6 +611,81 @@ async function LoadWidget({ config, title, d }: { config: Record<string, unknown
       </div>
     </Card>
   );
+}
+
+// ─────────────────────────────── Media player ────────────────────────────
+
+/**
+ * The speaker's remote.
+ *
+ * The first paint comes from the server, like every other widget, so the tile is
+ * already showing the cover when the page arrives; the client component takes
+ * over from there and polls, because a remote that is ten seconds stale is a
+ * remote you press twice.
+ *
+ * With no entities configured it adopts whichever player is playing — a house
+ * usually has one thing making noise, and asking which is a question the panel
+ * can answer itself.
+ */
+async function MediaWidget({
+  config,
+  title,
+  d,
+  canControl,
+}: {
+  config: Record<string, unknown>;
+  title: string;
+  d: Dictionary;
+  canControl: boolean;
+}) {
+  if (!(await haConfig())) {
+    return <NotConfigured title={title} message={d.home.notConfigured} hint={d.home.notConfiguredHint} />;
+  }
+
+  const chosen = lines(config.entities);
+  const players = await haMediaPlayers(chosen.length > 0 ? chosen : undefined);
+
+  if (!players || players.length === 0) {
+    return (
+      <Card className="h-full">
+        <CardHeader title={title} icon="🔊" />
+        <p className="p-4 text-sm text-muted">{d.media.noPlayers}</p>
+      </Card>
+    );
+  }
+
+  // Unconfigured: whatever is playing leads, and a house with nothing playing
+  // gets its first player rather than an empty tile.
+  const shown =
+    chosen.length > 0
+      ? players
+      : [...players].sort((a, b) => Number(b.state === "playing") - Number(a.state === "playing")).slice(0, 4);
+
+  // The like button exists only once the operator has said what "like" means on
+  // their speaker; there is no sensible default for a phrase in someone else's
+  // language spoken to someone else's assistant.
+  const phrase = str(config.likePhrase);
+  const like = phrase
+    ? { service: str(config.likeService) ?? "media_player.play_media", phrase, label: str(config.likeLabel) }
+    : null;
+
+  return (
+    <MediaPlayerWidget
+      d={d}
+      title={title}
+      players={shown}
+      canControl={canControl}
+      background={background(config.background)}
+      like={like}
+    />
+  );
+}
+
+/** The wall behind the full-screen player, as configured. */
+function background(value: unknown): "drift" | "aurora" | "waves" | "beams" | "pulse" | "still" {
+  const known = ["drift", "aurora", "waves", "beams", "pulse", "still"] as const;
+  const found = known.find((k) => k === value);
+  return found ?? "drift";
 }
 
 // ─────────────────────────────────── Note ────────────────────────────────

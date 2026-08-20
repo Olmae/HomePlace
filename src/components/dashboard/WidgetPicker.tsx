@@ -27,6 +27,7 @@ export type WidgetKind =
   | "arr"
   | "pbs"
   | "homeassistant"
+  | "mediaplayer"
   | "weather"
   | "calendar"
   | "reminders"
@@ -35,11 +36,12 @@ export type WidgetKind =
   | "slideshow"
   | "nowplaying";
 
-type Category = { key: "monitoring" | "services" | "home" | "atmosphere"; widgets: WidgetKind[] };
+type Category = { key: "monitoring" | "services" | "smarthome" | "home" | "atmosphere"; widgets: WidgetKind[] };
 
 const CATEGORIES: Category[] = [
   { key: "monitoring", widgets: ["system", "disks", "load", "chart", "gauge", "uptimestrip", "containers", "proxmox"] },
-  { key: "services", widgets: ["jellyfin", "qbittorrent", "arr", "pbs", "homeassistant"] },
+  { key: "services", widgets: ["jellyfin", "qbittorrent", "arr", "pbs"] },
+  { key: "smarthome", widgets: ["homeassistant", "mediaplayer"] },
   { key: "home", widgets: ["weather", "calendar", "reminders", "clock", "notes"] },
   { key: "atmosphere", widgets: ["slideshow", "nowplaying"] },
 ];
@@ -48,16 +50,45 @@ export function WidgetPicker({
   d,
   value,
   onChange,
+  collapsed = false,
 }: {
   d: Dictionary;
   value: string;
   onChange: (widget: WidgetKind) => void;
+  /**
+   * Start showing only what is already chosen.
+   *
+   * Editing a tile is almost never about turning a clock into a disk graph: the
+   * kind is settled and the fields below it are the reason the dialog is open.
+   * The grid of twenty is one button away, and out of the way until then.
+   */
+  collapsed?: boolean;
 }) {
   const [category, setCategory] = useState<Category["key"]>(
     CATEGORIES.find((c) => c.widgets.includes(value as WidgetKind))?.key ?? "monitoring"
   );
+  const [replacing, setReplacing] = useState(false);
 
   const shown = CATEGORIES.find((c) => c.key === category)!;
+  const chosen = CATEGORIES.some((c) => c.widgets.includes(value as WidgetKind));
+
+  if (collapsed && chosen && !replacing) {
+    return (
+      <div className="flex items-center gap-3 rounded-control border border-line p-2">
+        <span className="w-24 shrink-0">
+          <Preview kind={value as WidgetKind} />
+        </span>
+        <span className="min-w-0 flex-1 text-sm font-medium">{d.widgets[value as WidgetKind]}</span>
+        <button
+          type="button"
+          onClick={() => setReplacing(true)}
+          className="shrink-0 rounded-control border border-line px-3 py-1.5 text-xs font-medium text-muted transition-colors hover:bg-raised hover:text-text"
+        >
+          {d.widgets.replace}
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-3">
@@ -81,7 +112,10 @@ export function WidgetPicker({
           <button
             key={widget}
             type="button"
-            onClick={() => onChange(widget)}
+            onClick={() => {
+              onChange(widget);
+              setReplacing(false);
+            }}
             className={`flex flex-col gap-2 rounded-control border p-2 text-left transition-colors ${
               widget === value ? "border-accent bg-accent/10" : "border-line hover:bg-raised"
             }`}
@@ -209,6 +243,27 @@ function Preview({ kind }: { kind: WidgetKind }) {
           {[true, false, true].map((on, i) => (
             <span key={i} className={`h-6 flex-1 rounded ${on ? "bg-accent/40" : "bg-line"}`} />
           ))}
+        </span>
+      );
+
+    case "mediaplayer":
+      return (
+        <span className={`${frame} flex-row items-center gap-2`}>
+          <span className="h-9 w-9 shrink-0 rounded bg-gradient-to-br from-accent/50 to-ok/30" />
+          <span className="flex flex-1 flex-col gap-1">
+            <span className="h-1.5 w-full rounded bg-line" />
+            <span className="flex items-center gap-1">
+              <span className="text-[10px] leading-none" aria-hidden>
+                ⏮
+              </span>
+              <span className="text-xs leading-none text-accent" aria-hidden>
+                ▶
+              </span>
+              <span className="text-[10px] leading-none" aria-hidden>
+                ⏭
+              </span>
+            </span>
+          </span>
         </span>
       );
 

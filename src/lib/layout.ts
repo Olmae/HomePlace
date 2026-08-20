@@ -117,6 +117,44 @@ export function readingOrder<T extends Box>(boxes: T[]): T[] {
   return [...boxes].sort((a, b) => a.y - b.y || a.x - b.x);
 }
 
+/**
+ * Move a tile one place along the reading order, by trading positions with the
+ * neighbour it passes.
+ *
+ * This is what reordering means on a phone, where the board is a single column
+ * and dragging is off: there is no second dimension to drag in, so "up" and
+ * "down" have to be an operation of their own rather than a gesture. Trading
+ * rectangles rather than shifting everything keeps the wide layout intact — the
+ * two tiles swap places on the desktop board as well, which is exactly what the
+ * phone showed happening.
+ */
+export function swapInReadingOrder(
+  boxes: Box[],
+  id: string,
+  direction: -1 | 1,
+  locked: Set<string> = new Set()
+): Box[] {
+  if (locked.has(id)) return boxes;
+
+  const order = readingOrder(boxes);
+  const at = order.findIndex((b) => b.id === id);
+  const mine = order[at];
+  const other = order[at + direction];
+  // A pinned neighbour is skipped over rather than swapped with: it asked to
+  // stay where it is.
+  if (!mine || !other || locked.has(other.id)) return boxes;
+
+  const swapped = boxes.map((b) =>
+    b.id === mine.id
+      ? clampBox({ ...b, x: other.x, y: other.y })
+      : b.id === other.id
+        ? clampBox({ ...b, x: mine.x, y: mine.y })
+        : b
+  );
+
+  return resolveCollisions(swapped, id, locked);
+}
+
 /** First free row for a new tile of the given width. */
 export function nextFreeSlot(boxes: Box[], w: number, h: number): { x: number; y: number } {
   const width = Math.max(1, Math.min(COLUMNS, w));

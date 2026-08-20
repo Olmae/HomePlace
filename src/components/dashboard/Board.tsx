@@ -1,7 +1,7 @@
 "use client";
 
 import { Children, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { COLUMNS, clampBox, resolveCollisions, readingOrder, overlaps, type Box } from "@/lib/layout";
+import { COLUMNS, clampBox, resolveCollisions, readingOrder, overlaps, swapInReadingOrder, type Box } from "@/lib/layout";
 import { saveLayout, moveIntoFolder } from "@/actions/dashboard";
 import type { Dictionary } from "@/i18n";
 
@@ -173,9 +173,33 @@ export function Board({
     [locked, saveSoon]
   );
 
+  /**
+   * Reordering without a pointer.
+   *
+   * On a phone the board is one column and dragging is off, which left edit mode
+   * with nothing it could actually do there — tiles could be added and deleted
+   * but never rearranged. These two buttons are that missing operation.
+   */
+  const shift = useCallback(
+    (id: string, direction: -1 | 1) => {
+      const next = swapInReadingOrder(latest.current, id, direction, locked);
+      if (next === latest.current) return;
+      latest.current = next;
+      setBoxes(next);
+      saveSoon(next);
+    },
+    [locked, saveSoon]
+  );
+
   const order = useMemo(() => {
     const index = new Map(boxes.map((b, i) => [b.id, i]));
     return readingOrder(boxes).map((b) => index.get(b.id)!);
+  }, [boxes]);
+
+  /** Where the tile sits in the single-column order, for the arrow buttons. */
+  const place = useMemo(() => {
+    const sorted = readingOrder(boxes);
+    return new Map(sorted.map((b, i) => [b.id, { at: i, last: sorted.length - 1 }]));
   }, [boxes]);
 
   return (
@@ -208,9 +232,17 @@ export function Board({
               editing ? "touch-none select-none focus-within:z-10" : ""
             }`}
           >
+            {/* Drag surface and keyboard handle, edit mode only — one element,
+                not two. As two, the focusable layer covered the drag layer and
+                swallowed every pointerdown meant for it: edit mode looked
+                enabled and no tile could be moved with the mouse at all.
+
+                The tile's own controls sit above this (z-20 in ItemActions) and
+                re-enable pointer events for themselves, so edit and delete stay
+                clickable while the rest of the tile is a handle. Focusable only
+                while editing, so tabbing through the dashboard normally still
+                lands on the links rather than on the layout. */}
             {editing && (
-              // Focusable only while editing, so tabbing through the dashboard
-              // normally still lands on the links rather than on the layout.
               <div
                 tabIndex={0}
                 role="application"
@@ -227,16 +259,7 @@ export function Board({
                   e.preventDefault();
                   nudge(box.id, delta[0], delta[1], e.shiftKey);
                 }}
-                className="absolute inset-0 z-[6] rounded-card focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-              />
-            )}
-            {/* Drag surface, edit mode only. The tile's own controls sit above
-                it (z-20 in ItemActions) and re-enable pointer events for
-                themselves, so edit and delete stay clickable while the rest of
-                the tile is a drag handle. */}
-            {editing && (
-              <div
-                className={`absolute inset-0 z-[5] rounded-card ring-1 ring-inset ${
+                className={`absolute inset-0 z-[5] rounded-card ring-1 ring-inset focus:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
                   locked.has(box.id)
                     ? "cursor-not-allowed ring-warn/40"
                     : "cursor-grab ring-accent/30 active:cursor-grabbing"
@@ -247,6 +270,32 @@ export function Board({
                   setDrag({ kind: "move", id: box.id, startX: e.clientX, startY: e.clientY, origin: box });
                 }}
               />
+            )}
+
+            {/* Phones get arrows instead: one column has no second dimension to
+                drag in, and a drag there would fight the scroll. Hidden from md
+                up, where the pointer can do it directly. */}
+            {editing && !locked.has(box.id) && (
+              <div className="absolute bottom-1 left-1 z-10 flex gap-1 md:hidden">
+                <button
+                  type="button"
+                  aria-label={d.dashboard.moveUp}
+                  disabled={(place.get(box.id)?.at ?? 0) === 0}
+                  onClick={() => shift(box.id, -1)}
+                  className="flex h-7 w-7 items-center justify-center rounded-full border border-line bg-surface/90 text-xs text-muted disabled:opacity-30"
+                >
+                  ↑
+                </button>
+                <button
+                  type="button"
+                  aria-label={d.dashboard.moveDown}
+                  disabled={(place.get(box.id)?.at ?? 0) === (place.get(box.id)?.last ?? 0)}
+                  onClick={() => shift(box.id, 1)}
+                  className="flex h-7 w-7 items-center justify-center rounded-full border border-line bg-surface/90 text-xs text-muted disabled:opacity-30"
+                >
+                  ↓
+                </button>
+              </div>
             )}
 
             {/* No `pointer-events-none` here. The drag surface above already

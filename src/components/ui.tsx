@@ -1,4 +1,5 @@
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
+import { TileIcon } from "./TileIcon";
 
 /**
  * The shared shapes of the interface.
@@ -12,13 +13,17 @@ export function Card({
   children,
   className = "",
   as: Tag = "div",
+  style,
 }: {
   children: ReactNode;
   className?: string;
   as?: "div" | "section" | "li" | "article";
+  /** For the cards that carry a variable of their own, such as a colour. */
+  style?: CSSProperties;
 }) {
   return (
     <Tag
+      style={style}
       className={`rounded-card border border-line bg-surface shadow-card transition-colors ${className}`}
     >
       {children}
@@ -26,10 +31,26 @@ export function Card({
   );
 }
 
-export function CardHeader({ title, action }: { title: ReactNode; action?: ReactNode }) {
+export function CardHeader({
+  title,
+  action,
+  icon,
+}: {
+  title: ReactNode;
+  action?: ReactNode;
+  /**
+   * A mark for the card — an emoji or an image URL. Widgets from a service put
+   * that service's icon here: a column of cards headed only by text is read
+   * word by word, and a column headed by marks is read at a glance.
+   */
+  icon?: string;
+}) {
   return (
     <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-2.5">
-      <h2 className="text-sm font-semibold tracking-tight">{title}</h2>
+      <h2 className="flex min-w-0 items-center gap-2 text-sm font-semibold tracking-tight">
+        {icon && <TileIcon icon={icon} title={typeof title === "string" ? title : "?"} size="sm" />}
+        <span className="truncate">{title}</span>
+      </h2>
       {action}
     </div>
   );
@@ -108,7 +129,7 @@ export function SectionTitle({ children, hint }: { children: ReactNode; hint?: s
   );
 }
 
-// The tile icon lives in its own file because it needs a load handler to fall
-// back when a favicon does not resolve — re-exported here so components keep
-// importing their building blocks from one place.
-export { TileIcon } from "./TileIcon";
+// Re-exported so components keep importing their building blocks from one
+// place; it lives in its own file because it needs a load handler to fall back
+// when a favicon does not resolve.
+export { TileIcon };

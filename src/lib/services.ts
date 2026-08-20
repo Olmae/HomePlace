@@ -412,6 +412,10 @@ export type HaEntity = {
   unit?: string;
   domain: string;
   toggleable: boolean;
+  /** Room, when Home Assistant knows one. */
+  area?: string;
+  /** Extra attributes worth showing: brightness, temperature, battery. */
+  attributes?: Record<string, string>;
 };
 
 export async function haConfig(): Promise<HaSettings | null> {
@@ -427,6 +431,69 @@ export async function saveHa(input: HaSettings | null): Promise<void> {
     url: trim(input.url),
     token: input.token ? await encrypt(input.token) : existing?.token ?? "",
   });
+}
+
+/**
+ * Which room an entity is in.
+ *
+ * Home Assistant only exposes areas through its websocket API, which is a lot of
+ * machinery for one label. The template endpoint answers the same question over
+ * plain HTTP, and the answers are cached for a few minutes because furniture
+ * does not move often.
+ */
+const areaCache = new Map<string, string>();
+let areasFetchedAt = 0;
+
+export async function haAreas(): Promise<string[]> {
+  const cfg = await haConfig();
+  if (!cfg) return [];
+  if (Date.now() - areasFetchedAt < 300_000 && areaCache.size > 0) {
+    return [...new Set(areaCache.values())].sort();
+  }
+
+  try {
+    const res = await fetch(`${cfg.url}/api/template`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${cfg.token}`, "content-type": "application/json" },
+      // One template renders the whole entity → area mapping in a single call.
+      body: JSON.stringify({
+        template: "{% for s in states %}{{ s.entity_id }}|{{ area_name(s.entity_id) or '' }}\n{% endfor %}",
+      }),
+      cache: "no-store",
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!res.ok) return [];
+
+    const text = await res.text();
+    areaCache.clear();
+    for (const line of text.split("\n")) {
+      const [id, area] = line.split("|");
+      if (id && area && area.trim() && area.trim() !== "None") areaCache.set(id.trim(), area.trim());
+    }
+    areasFetchedAt = Date.now();
+    return [...new Set(areaCache.values())].sort();
+  } catch {
+    return [];
+  }
+}
+
+function areaOf(entityId: string): string | undefined {
+  return areaCache.get(entityId);
+}
+
+/**
+ * The handful of attributes worth putting on a card.
+ *
+ * An entity can carry forty of them; showing all forty makes a wall of noise,
+ * and showing none loses the brightness of a lamp and the battery of a sensor.
+ */
+function interesting(attributes: Record<string, any>): Record<string, string> {
+  const keep = ["brightness", "current_temperature", "temperature", "humidity", "battery_level", "media_title"];
+  const out: Record<string, string> = {};
+  for (const key of keep) {
+    if (attributes[key] !== undefined && attributes[key] !== null) out[key] = String(attributes[key]);
+  }
+  return out;
 }
 
 /** Domains a tile may switch. Everything else is read-only, deliberately. */
@@ -456,9 +523,280 @@ export async function haStates(ids?: string[]): Promise<HaEntity[] | null> {
         unit: e.attributes?.unit_of_measurement ? String(e.attributes.unit_of_measurement) : undefined,
         domain,
         toggleable: TOGGLEABLE.has(domain),
+        area: areaOf(id),
+        attributes: interesting(e.attributes ?? {}),
       };
     })
     .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/**
+ * A media player, in full.
+ *
+ * Home Assistant already knows what is playing, on what, how loud and how far
+ * through — everything a remote needs. Reading it here is what lets the panel be
+ * the remote, instead of sending people back to Home Assistant for the one thing
+ * they open it for most often.
+ */
+export type HaMediaPlayer = {
+  id: string;
+  name: string;
+  state: string;
+  title?: string;
+  artist?: string;
+  album?: string;
+  /** Absolute URL of the cover art, ready for an <img>. */
+  art?: string;
+  volume?: number;
+  muted?: boolean;
+  /** Seconds. The position advances on its own from `positionAt`. */
+  position?: number;
+  duration?: number;
+  positionAt?: number;
+  source?: string;
+  sources: string[];
+  /** Shuffle and repeat, where the player has them. */
+  shuffle?: boolean;
+  repeat?: "off" | "all" | "one";
+  /** Which buttons this player actually obeys, from its feature bitmask. */
+  can: {
+    pause: boolean;
+    play: boolean;
+    stop: boolean;
+    next: boolean;
+    previous: boolean;
+    volumeSet: boolean;
+    volumeMute: boolean;
+    seek: boolean;
+    selectSource: boolean;
+    turnOn: boolean;
+    turnOff: boolean;
+    shuffle: boolean;
+    repeat: boolean;
+  };
+};
+
+/**
+ * Capabilities arrive as a bitmask, and a remote offering a button the speaker
+ * cannot obey is worse than one that hides it.
+ * https://developers.home-assistant.io/docs/core/entity/media-player
+ */
+const MEDIA_FEATURES = {
+  pause: 1,
+  seek: 2,
+  volumeSet: 4,
+  volumeMute: 8,
+  previous: 16,
+  next: 32,
+  turnOn: 128,
+  turnOff: 256,
+  selectSource: 2048,
+  stop: 4096,
+  play: 16384,
+  shuffleSet: 32768,
+  repeatSet: 262144,
+};
+
+export async function haMediaPlayers(ids?: string[]): Promise<HaMediaPlayer[] | null> {
+  const cfg = await haConfig();
+  if (!cfg) return null;
+
+  const all = await get<Record<string, any>[]>({
+    url: `${cfg.url}/api/states`,
+    headers: { authorization: `Bearer ${cfg.token}` },
+  });
+  if (!all) return null;
+
+  const wanted = ids && ids.length > 0 ? new Set(ids) : null;
+
+  return all
+    .filter((e) => String(e.entity_id).startsWith("media_player.") && (!wanted || wanted.has(String(e.entity_id))))
+    .map((e) => {
+      const a = e.attributes ?? {};
+      const features = Number(a.supported_features ?? 0);
+      const has = (bit: number) => (features & bit) !== 0;
+
+      return {
+        id: String(e.entity_id),
+        name: String(a.friendly_name ?? e.entity_id),
+        state: String(e.state ?? "unknown"),
+        title: a.media_title ? String(a.media_title) : undefined,
+        artist: a.media_artist ? String(a.media_artist) : undefined,
+        album: a.media_album_name ? String(a.media_album_name) : undefined,
+        // The picture is a path on the Home Assistant host and carries its own
+        // signed token; the browser needs it absolute.
+        art: a.entity_picture ? absoluteHaUrl(cfg.url, String(a.entity_picture)) : undefined,
+        volume: a.volume_level === undefined ? undefined : Number(a.volume_level),
+        muted: a.is_volume_muted === undefined ? undefined : Boolean(a.is_volume_muted),
+        position: a.media_position === undefined ? undefined : Number(a.media_position),
+        duration: a.media_duration === undefined ? undefined : Number(a.media_duration),
+        positionAt: a.media_position_updated_at ? Date.parse(String(a.media_position_updated_at)) : undefined,
+        source: a.source ? String(a.source) : undefined,
+        sources: Array.isArray(a.source_list) ? a.source_list.map(String) : [],
+        shuffle: a.shuffle === undefined ? undefined : Boolean(a.shuffle),
+        repeat: a.repeat === "all" || a.repeat === "one" ? a.repeat : a.repeat === undefined ? undefined : "off",
+        can: {
+          pause: has(MEDIA_FEATURES.pause),
+          play: has(MEDIA_FEATURES.play),
+          stop: has(MEDIA_FEATURES.stop),
+          next: has(MEDIA_FEATURES.next),
+          previous: has(MEDIA_FEATURES.previous),
+          volumeSet: has(MEDIA_FEATURES.volumeSet),
+          volumeMute: has(MEDIA_FEATURES.volumeMute),
+          seek: has(MEDIA_FEATURES.seek),
+          selectSource: has(MEDIA_FEATURES.selectSource),
+          turnOn: has(MEDIA_FEATURES.turnOn),
+          turnOff: has(MEDIA_FEATURES.turnOff),
+          shuffle: has(MEDIA_FEATURES.shuffleSet),
+          repeat: has(MEDIA_FEATURES.repeatSet),
+        },
+      };
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function absoluteHaUrl(base: string, path: string): string {
+  return /^https?:\/\//i.test(path) ? path : `${base}${path.startsWith("/") ? "" : "/"}${path}`;
+}
+
+export type MediaCommand =
+  | "play"
+  | "pause"
+  | "play_pause"
+  | "stop"
+  | "next"
+  | "previous"
+  | "volume_up"
+  | "volume_down"
+  | "mute"
+  | "unmute"
+  | "turn_on"
+  | "turn_off"
+  | "shuffle_on"
+  | "shuffle_off"
+  | "repeat_off"
+  | "repeat_all"
+  | "repeat_one";
+
+/**
+ * One command to one player.
+ *
+ * The allowlist is the boundary: this panel may be open on a kitchen tablet, and
+ * "call any Home Assistant service with any payload" is not something it should
+ * be able to do.
+ */
+export async function haMediaCommand(
+  entityId: string,
+  command: MediaCommand
+): Promise<{ ok: boolean; error?: string }> {
+  if (!entityId.startsWith("media_player.")) return { ok: false, error: "not a media player" };
+
+  // Shuffle and repeat are one service each with a payload, rather than a
+  // service per state — kept apart from the table for that reason.
+  if (command === "shuffle_on" || command === "shuffle_off") {
+    return haCall("media_player", "shuffle_set", { entity_id: entityId, shuffle: command === "shuffle_on" });
+  }
+  if (command === "repeat_off" || command === "repeat_all" || command === "repeat_one") {
+    return haCall("media_player", "repeat_set", { entity_id: entityId, repeat: command.slice("repeat_".length) });
+  }
+
+  const services: Record<Exclude<MediaCommand, "shuffle_on" | "shuffle_off" | "repeat_off" | "repeat_all" | "repeat_one">, string> = {
+    play: "media_play",
+    pause: "media_pause",
+    play_pause: "media_play_pause",
+    stop: "media_stop",
+    next: "media_next_track",
+    previous: "media_previous_track",
+    volume_up: "volume_up",
+    volume_down: "volume_down",
+    mute: "volume_mute",
+    unmute: "volume_mute",
+    turn_on: "turn_on",
+    turn_off: "turn_off",
+  };
+
+  const data: Record<string, unknown> = { entity_id: entityId };
+  if (command === "mute") data.is_volume_muted = true;
+  if (command === "unmute") data.is_volume_muted = false;
+
+  return haCall("media_player", services[command], data);
+}
+
+/** Volume, seeking and source — the commands that carry a value. */
+/**
+ * The one command the panel does not know the meaning of.
+ *
+ * A speaker's own vocabulary is not in the media_player interface: "like this
+ * track" is a Yandex station thing, said by sending it the phrase, and every
+ * other assistant has its own. So the operator configures the service and the
+ * phrase in the widget, and this sends it.
+ *
+ * It stays a narrow hole, not a general "call anything" endpoint: the service
+ * must be a plain `domain.service` pair, and the entity is always the player the
+ * widget is showing — a payload cannot reach anything else in the house.
+ */
+export async function haMediaSay(
+  entityId: string,
+  service: string,
+  phrase: string
+): Promise<{ ok: boolean; error?: string }> {
+  if (!entityId.startsWith("media_player.")) return { ok: false, error: "not a media player" };
+  if (!/^[a-z_]+\.[a-z_]+$/.test(service)) return { ok: false, error: "not a service name" };
+  if (!phrase.trim()) return { ok: false, error: "no command to send" };
+
+  const [domain, name] = service.split(".");
+  // play_media is the documented way to hand a Yandex station a phrase; other
+  // integrations take it as `command`. Both are sent, and the one the service
+  // does not know about is ignored by Home Assistant rather than refused.
+  const data =
+    name === "play_media"
+      ? { entity_id: entityId, media_content_id: phrase, media_content_type: "command" }
+      : { entity_id: entityId, command: phrase };
+
+  return haCall(domain, name, data);
+}
+
+export async function haMediaSet(
+  entityId: string,
+  what: "volume" | "seek" | "source",
+  value: number | string
+): Promise<{ ok: boolean; error?: string }> {
+  if (!entityId.startsWith("media_player.")) return { ok: false, error: "not a media player" };
+
+  if (what === "volume") {
+    return haCall("media_player", "volume_set", {
+      entity_id: entityId,
+      volume_level: Math.max(0, Math.min(1, Number(value))),
+    });
+  }
+  if (what === "seek") {
+    return haCall("media_player", "media_seek", { entity_id: entityId, seek_position: Math.max(0, Number(value)) });
+  }
+  return haCall("media_player", "select_source", { entity_id: entityId, source: String(value) });
+}
+
+/** The one place that calls a Home Assistant service. */
+async function haCall(
+  domain: string,
+  service: string,
+  data: Record<string, unknown>
+): Promise<{ ok: boolean; error?: string }> {
+  const cfg = await haConfig();
+  if (!cfg) return { ok: false, error: "home assistant is not configured" };
+
+  try {
+    const res = await fetch(`${cfg.url}/api/services/${domain}/${service}`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${cfg.token}`, "content-type": "application/json" },
+      body: JSON.stringify(data),
+      cache: "no-store",
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
 }
 
 /**

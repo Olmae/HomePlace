@@ -7,6 +7,7 @@ import {
   compactVertically,
   readingOrder,
   nextFreeSlot,
+  swapInReadingOrder,
   COLUMNS,
   type Box,
 } from "../src/lib/layout";
@@ -76,6 +77,31 @@ test("compactVertically: pinned tiles keep their row", () => {
 test("readingOrder: top to bottom, then left to right", () => {
   const order = readingOrder([box("c", 6, 1), box("a", 0, 0), box("b", 3, 0)]).map((b) => b.id);
   assert.deepEqual(order, ["a", "b", "c"]);
+});
+
+test("swapInReadingOrder: a tile trades places with the one above it", () => {
+  const result = swapInReadingOrder([box("a", 0, 0), box("b", 3, 0), box("c", 0, 1)], "c", -1);
+  const order = readingOrder(result).map((r) => r.id);
+  assert.deepEqual(order, ["a", "c", "b"]);
+});
+
+test("swapInReadingOrder: the ends of the list stay put", () => {
+  const before = [box("a", 0, 0), box("b", 0, 1)];
+  assert.equal(swapInReadingOrder(before, "a", -1), before);
+  assert.equal(swapInReadingOrder(before, "b", 1), before);
+});
+
+test("swapInReadingOrder: a pinned neighbour is not shoved aside", () => {
+  const before = [box("pinned", 0, 0), box("b", 0, 1)];
+  assert.equal(swapInReadingOrder(before, "b", -1, new Set(["pinned"])), before);
+});
+
+test("swapInReadingOrder: tiles of different sizes do not end up overlapping", () => {
+  const result = swapInReadingOrder([box("tall", 0, 0, 6, 3), box("short", 0, 3, 6, 1)], "short", -1);
+  const tall = result.find((b) => b.id === "tall")!;
+  const short = result.find((b) => b.id === "short")!;
+  assert.equal(overlaps(tall, short), false);
+  assert.equal(readingOrder(result)[0].id, "short");
 });
 
 test("nextFreeSlot: fills the gap beside an existing tile", () => {

@@ -1,11 +1,12 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { prisma, getSetting, setSetting } from "@/lib/db";
+import { prisma, setSetting } from "@/lib/db";
 import { requireRole } from "@/lib/auth";
 import { settings } from "@/lib/config";
 import { readingOrder, nextFreeSlot, compactVertically, resolveCollisions } from "@/lib/layout";
 import { uniqueSlug } from "@/lib/slug";
+import { normalizeGroups, type ContainerGroupConfig } from "@/lib/containerGroups";
 
 /**
  * Everything that changes the dashboard layout.
@@ -83,7 +84,7 @@ export async function deleteDashboard(id: string): Promise<void> {
 export type ItemInput = {
   dashboardId: string;
   parentId?: string | null;
-  kind: "service" | "link" | "folder" | "widget";
+  kind: "service" | "link" | "folder" | "widget" | "section";
   title: string;
   subtitle?: string | null;
   icon?: string | null;
@@ -155,6 +156,13 @@ export async function updateItem(id: string, input: Partial<ItemInput>): Promise
       ...(input.url !== undefined ? { url: normalizeUrl(input.url) } : {}),
       ...(input.internalUrl !== undefined ? { internalUrl: normalizeUrl(input.internalUrl) } : {}),
       ...(input.newTab !== undefined ? { newTab: input.newTab } : {}),
+      ...(input.kind !== undefined ? { kind: input.kind } : {}),
+      // Rebinding a tile to another container, or to none, was impossible until
+      // these three were here: the dialog offered the choice and the update
+      // quietly dropped it. Same for changing which widget a widget tile is.
+      ...(input.containerName !== undefined ? { containerName: input.containerName } : {}),
+      ...(input.hostKey !== undefined ? { hostKey: input.hostKey } : {}),
+      ...(input.widget !== undefined ? { widget: input.widget } : {}),
       ...(input.checkKind !== undefined ? { checkKind: input.checkKind } : {}),
       ...(input.checkUrl !== undefined ? { checkUrl: normalizeUrl(input.checkUrl) } : {}),
       ...(input.checkInterval !== undefined ? { checkInterval: clampInterval(input.checkInterval) } : {}),
@@ -331,12 +339,17 @@ export async function addServiceWidget(widget: string, title: string): Promise<{
   return { ok: true, dashboard: dashboard.slug ?? dashboard.id };
 }
 
-/** Containers the user chose not to see in the discovery list. */
-export async function hideContainer(name: string, hidden: boolean): Promise<void> {
+/**
+ * Save the whole container-group configuration.
+ *
+ * The client owns the shape — it holds the automatic groups it resolved from
+ * Compose plus whatever the operator added by hand — and hands the merged
+ * result back in one call. It is normalised here so a malformed payload cannot
+ * poison the setting that the containers page reads on every load.
+ */
+export async function saveContainerGroups(config: ContainerGroupConfig): Promise<void> {
   await requireRole("admin");
-  const list = await getSetting<string[]>("containers.hidden", []);
-  const next = hidden ? Array.from(new Set([...list, name])) : list.filter((n) => n !== name);
-  await setSetting("containers.hidden", next);
+  await setSetting("containers.groups", normalizeGroups(config));
   revalidatePath("/containers");
 }
 
@@ -350,6 +363,7 @@ function clampInterval(seconds: number | undefined): number {
 
 /** Widgets need room to say anything; links are fine as small tiles. */
 function defaultWidth(kind: string): number {
+  if (kind === "section") return 12;
   return kind === "widget" ? 4 : 3;
 }
 

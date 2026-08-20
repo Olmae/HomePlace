@@ -9,7 +9,6 @@
   list of variable values, nothing else — which is what lets a user swap light,
   dark or an accent without touching a single component.
 
-
   Resolution order:
     1. `<html data-theme="light|dark">` — an explicit choice, always wins.
     2. no attribute → follow the OS via prefers-color-scheme.
@@ -183,6 +182,358 @@ body {
     grid-row: var(--row);
     min-height: 0;
   }
+}
+
+/* The spiral around the player's progress bar.
+
+   The path is periodic, so sliding it left by exactly one period lands on a
+   curve identical to where it started — which reads as a turn without anything
+   actually rotating, and stays on the compositor. Paused when the music is. */
+@keyframes hp-helix {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-36px);
+  }
+}
+
+.hp-helix {
+  animation: hp-helix 2.6s linear infinite;
+}
+
+.hp-helix[data-spinning="false"] {
+  animation-play-state: paused;
+}
+
+/* Motion that decorates rather than informs is the first thing to go. */
+@media (prefers-reduced-motion: reduce) {
+  .hp-helix {
+    animation: none;
+  }
+}
+
+/* The blurred cover behind the full-screen player.
+
+   Slow and small on purpose: enough that the wall is alive, not enough that
+   anyone watching the track name has to fight it. */
+@keyframes hp-drift {
+  0% {
+    transform: scale(1.08) translate3d(-1.5%, -1%, 0);
+  }
+  50% {
+    transform: scale(1.16) translate3d(1.5%, 1.5%, 0);
+  }
+  100% {
+    transform: scale(1.08) translate3d(-1.5%, -1%, 0);
+  }
+}
+
+.hp-drift {
+  animation: hp-drift 38s ease-in-out infinite;
+  will-change: transform;
+}
+
+/* ────────────────────────── The walls behind the player ──────────────────────
+   Four moving ones, all built from the cover's own colours (--art, --art-2,
+   --art-3) and all on the compositor: transforms, opacity and gradients only.
+   The same markup is rendered at 4rem square in the picker, which is why every
+   size below is followed by a .hp-preview override — a 70vmin light inside a
+   thumbnail would be a flat wash of colour. */
+
+/* Aurora: soft lights, each on its own path and timing, so they meet and part
+   instead of pulsing in step. */
+.hp-aurora {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(60px);
+  will-change: transform;
+}
+
+.hp-aurora-1 {
+  width: 70vmin;
+  height: 70vmin;
+  top: -10%;
+  left: -5%;
+  background: radial-gradient(closest-side, rgb(var(--art) / 0.6), transparent);
+  animation: hp-aurora-1 23s ease-in-out infinite;
+}
+
+.hp-aurora-2 {
+  width: 60vmin;
+  height: 60vmin;
+  bottom: -12%;
+  right: -8%;
+  background: radial-gradient(closest-side, rgb(var(--art-2) / 0.55), transparent);
+  animation: hp-aurora-2 31s ease-in-out infinite;
+}
+
+.hp-aurora-3 {
+  width: 50vmin;
+  height: 50vmin;
+  top: 35%;
+  left: 45%;
+  background: radial-gradient(closest-side, rgb(var(--art-3) / 0.5), transparent);
+  animation: hp-aurora-3 41s ease-in-out infinite;
+}
+
+@keyframes hp-aurora-1 {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(26vmin, 18vmin, 0) scale(1.35);
+  }
+}
+
+@keyframes hp-aurora-2 {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1.15);
+  }
+  50% {
+    transform: translate3d(-24vmin, -20vmin, 0) scale(0.85);
+  }
+}
+
+@keyframes hp-aurora-3 {
+  0%,
+  100% {
+    transform: translate3d(-8vmin, 6vmin, 0) scale(0.9);
+  }
+  50% {
+    transform: translate3d(16vmin, -16vmin, 0) scale(1.4);
+  }
+}
+
+/* Waves: discs far wider than the screen, rounded almost to circles and turning.
+   Only the edge crosses the frame, and a turning near-circle whose radius is not
+   constant reads as a swell rising and falling. */
+.hp-wave {
+  position: absolute;
+  left: -75%;
+  width: 250%;
+  height: 250%;
+  will-change: transform;
+}
+
+.hp-wave-1 {
+  top: 38%;
+  border-radius: 44% 46% 40% 42%;
+  background: rgb(var(--art) / 0.42);
+  animation: hp-spin 19s linear infinite;
+}
+
+.hp-wave-2 {
+  top: 46%;
+  border-radius: 41% 43% 47% 45%;
+  background: rgb(var(--art-2) / 0.36);
+  animation: hp-spin-back 27s linear infinite;
+}
+
+.hp-wave-3 {
+  top: 55%;
+  border-radius: 47% 42% 44% 46%;
+  background: rgb(var(--art-3) / 0.3);
+  animation: hp-spin 37s linear infinite;
+}
+
+@keyframes hp-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes hp-spin-back {
+  from {
+    transform: rotate(360deg);
+  }
+  to {
+    transform: rotate(0deg);
+  }
+}
+
+/* Beams: one cone of light per colour, swept round from the centre and blurred
+   until no edge is left — light crossing a room, not a spinning wheel. */
+.hp-beams {
+  background: conic-gradient(
+    from 0deg,
+    transparent 0deg,
+    rgb(var(--art) / 0.55) 40deg,
+    transparent 90deg,
+    rgb(var(--art-2) / 0.5) 160deg,
+    transparent 220deg,
+    rgb(var(--art-3) / 0.55) 290deg,
+    transparent 340deg
+  );
+  filter: blur(50px);
+  animation: hp-spin 44s linear infinite;
+  will-change: transform;
+}
+
+/* Pulse: a gradient twice the size of its box, slid across it and breathing, so
+   the colour keeps arriving from somewhere. */
+.hp-pulse {
+  background: linear-gradient(
+    115deg,
+    rgb(var(--art) / 0.55),
+    rgb(var(--art-2) / 0.5) 35%,
+    rgb(var(--art-3) / 0.55) 65%,
+    rgb(var(--art) / 0.55)
+  );
+  background-size: 300% 300%;
+  animation: hp-pulse 21s ease-in-out infinite;
+  will-change: background-position, opacity;
+}
+
+@keyframes hp-pulse {
+  0% {
+    background-position: 0% 50%;
+    opacity: 0.6;
+  }
+  50% {
+    background-position: 100% 50%;
+    opacity: 0.95;
+  }
+  100% {
+    background-position: 0% 50%;
+    opacity: 0.6;
+  }
+}
+
+/* The same walls at thumbnail size. Lengths in vmin and blurs in tens of pixels
+   are meaningless in a 4rem square; percentages of the square are not. */
+.hp-preview .hp-aurora {
+  filter: blur(10px);
+}
+.hp-preview .hp-aurora-1 {
+  width: 85%;
+  height: 85%;
+}
+.hp-preview .hp-aurora-2 {
+  width: 75%;
+  height: 75%;
+}
+.hp-preview .hp-aurora-3 {
+  width: 65%;
+  height: 65%;
+}
+.hp-preview .hp-beams {
+  filter: blur(8px);
+}
+.hp-preview img {
+  filter: blur(4px) !important;
+}
+
+@keyframes hp-aurora-preview-1 {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(30%, 22%, 0) scale(1.35);
+  }
+}
+@keyframes hp-aurora-preview-2 {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1.15);
+  }
+  50% {
+    transform: translate3d(-28%, -24%, 0) scale(0.85);
+  }
+}
+@keyframes hp-aurora-preview-3 {
+  0%,
+  100% {
+    transform: translate3d(-10%, 8%, 0) scale(0.9);
+  }
+  50% {
+    transform: translate3d(20%, -20%, 0) scale(1.4);
+  }
+}
+
+.hp-preview .hp-aurora-1 {
+  animation-name: hp-aurora-preview-1;
+}
+.hp-preview .hp-aurora-2 {
+  animation-name: hp-aurora-preview-2;
+}
+.hp-preview .hp-aurora-3 {
+  animation-name: hp-aurora-preview-3;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hp-drift,
+  .hp-aurora,
+  .hp-wave,
+  .hp-beams,
+  .hp-pulse {
+    animation: none;
+  }
+}
+
+/* The volume slider.
+
+   A range input styled by hand because the native one carries the operating
+   system's accent colour into a panel that has its own, and because the thumb
+   has to stay big enough to catch with a thumb on a kitchen tablet. */
+.hp-range {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 1.25rem;
+  background: transparent;
+  cursor: pointer;
+}
+
+.hp-range:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+/* The played part of the track is painted in, from --fill set by the component.
+   It has to live on the pseudo-element: a background on the input itself is
+   covered by the track the browser draws over it. */
+.hp-range::-webkit-slider-runnable-track {
+  height: 0.25rem;
+  border-radius: 9999px;
+  background: linear-gradient(
+    to right,
+    rgb(var(--art, var(--accent))) var(--fill, 0%),
+    rgb(var(--line)) var(--fill, 0%)
+  );
+}
+
+.hp-range::-moz-range-track {
+  height: 0.25rem;
+  border-radius: 9999px;
+  background: linear-gradient(
+    to right,
+    rgb(var(--art, var(--accent))) var(--fill, 0%),
+    rgb(var(--line)) var(--fill, 0%)
+  );
+}
+
+.hp-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  margin-top: -0.3125rem;
+  height: 0.875rem;
+  width: 0.875rem;
+  border-radius: 9999px;
+  background: rgb(var(--art, var(--accent)));
+}
+
+.hp-range::-moz-range-thumb {
+  height: 0.875rem;
+  width: 0.875rem;
+  border: 0;
+  border-radius: 9999px;
+  background: rgb(var(--art, var(--accent)));
 }
 
 /* A dashboard background photo sits behind everything and is dimmed and blurred

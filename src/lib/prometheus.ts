@@ -98,7 +98,23 @@ export const Q = {
   memoryUsedBytes: (instance?: string) =>
     `node_memory_MemTotal_bytes${sel(instance, true)} - node_memory_MemAvailable_bytes${sel(instance, true)}`,
   memoryTotalBytes: (instance?: string) => `node_memory_MemTotal_bytes${sel(instance, true)}`,
+  // Swap: reported as a percentage of what swap exists, so a machine with no
+  // swap simply has no series and the card hides itself.
+  swapPercent: (instance?: string) =>
+    `100 * (1 - node_memory_SwapFree_bytes${sel(instance, true)} / (node_memory_SwapTotal_bytes${sel(instance, true)} > 0))`,
+  swapUsedBytes: (instance?: string) =>
+    `node_memory_SwapTotal_bytes${sel(instance, true)} - node_memory_SwapFree_bytes${sel(instance, true)}`,
+  swapTotalBytes: (instance?: string) => `node_memory_SwapTotal_bytes${sel(instance, true)}`,
   load1: (instance?: string) => `node_load1${sel(instance, true)}`,
+  load5: (instance?: string) => `node_load5${sel(instance, true)}`,
+  load15: (instance?: string) => `node_load15${sel(instance, true)}`,
+  /** Logical CPU count, so a load average can be shown against the cores it has. */
+  cpuCount: (instance?: string) => `count by (instance) (node_cpu_seconds_total{mode="idle"${sel(instance)}})`,
+  /** Disk throughput across the real block devices, loop and ram excluded. */
+  diskReadBytes: (instance?: string) =>
+    `sum(rate(node_disk_read_bytes_total{device!~"loop.*|ram.*|dm-.*"${sel(instance)}}[2m]))`,
+  diskWriteBytes: (instance?: string) =>
+    `sum(rate(node_disk_written_bytes_total{device!~"loop.*|ram.*|dm-.*"${sel(instance)}}[2m]))`,
   uptimeSeconds: (instance?: string) => `time() - node_boot_time_seconds${sel(instance, true)}`,
   /** Filesystem usage, one series per mount point. tmpfs and overlays excluded. */
   filesystems: (instance?: string) =>
@@ -133,6 +149,62 @@ function sel(instance?: string, standalone = false): string {
 function escape(v: string): string {
   return v.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 }
+
+/**
+ * What this Prometheus actually has.
+ *
+ * Writing PromQL from memory is a skill; picking from a list is not. These two
+ * feed the widget dialog, so a chart can be built by choosing a metric and a
+ * machine rather than by recalling the exact spelling of
+ * `node_memory_MemAvailable_bytes`.
+ */
+export async function metricNames(prefix = ""): Promise<string[]> {
+  if (!(await prometheusConfig())) return [];
+  try {
+    const data = await promFetch("/api/v1/label/__name__/values", {});
+    const all = Array.isArray(data) ? (data as string[]) : [];
+    const filtered = prefix ? all.filter((name) => name.includes(prefix)) : all;
+    return filtered.sort().slice(0, 500);
+  } catch {
+    return [];
+  }
+}
+
+/** Machines reporting to this Prometheus, for the instance picker. */
+export async function instanceNames(): Promise<string[]> {
+  const rows = await query("up");
+  return [...new Set(rows.map((r) => r.metric.instance).filter(Boolean))].sort();
+}
+
+/**
+ * Ready-made questions, in the words someone would use to ask them.
+ *
+ * The list is what a home server is actually asked, and each entry carries the
+ * query, the unit and sensible gauge bounds — so choosing "disk usage" produces
+ * a working tile with no further decisions.
+ */
+export const METRIC_PRESETS: {
+  key: string;
+  query: (instance?: string) => string;
+  unit: "percent" | "bytes" | "number";
+  max?: number;
+}[] = [
+  { key: "cpu", query: (i) => Q.cpuPercent(i), unit: "percent", max: 100 },
+  { key: "memory", query: (i) => Q.memoryPercent(i), unit: "percent", max: 100 },
+  { key: "memoryUsed", query: (i) => Q.memoryUsedBytes(i), unit: "bytes" },
+  { key: "load", query: (i) => Q.load1(i), unit: "number" },
+  {
+    key: "diskUsed",
+    query: (i) =>
+      `100 - (min(node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"${i ? `,instance="${i}"` : ""}}) / min(node_filesystem_size_bytes{fstype!~"tmpfs|overlay"${i ? `,instance="${i}"` : ""}}) * 100)`,
+    unit: "percent",
+    max: 100,
+  },
+  { key: "temperature", query: (i) => `max(${Q.temperatures(i)})`, unit: "number", max: 90 },
+  { key: "networkIn", query: (i) => `sum(${Q.networkRx(i)})`, unit: "bytes" },
+  { key: "networkOut", query: (i) => `sum(${Q.networkTx(i)})`, unit: "bytes" },
+  { key: "uptime", query: (i) => Q.uptimeSeconds(i), unit: "number" },
+];
 
 export async function prometheusHealth(): Promise<{ ok: boolean; error?: string }> {
   const cfg = await prometheusConfig();

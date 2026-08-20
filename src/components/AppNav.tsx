@@ -27,6 +27,7 @@ export function AppNav({
     { href: "/", label: d.nav.dashboard },
     { href: "/monitoring", label: d.nav.monitoring },
     { href: "/containers", label: d.nav.containers },
+    { href: "/home", label: d.nav.home },
     { href: "/events", label: d.nav.events },
   ];
 

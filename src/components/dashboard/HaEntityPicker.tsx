@@ -19,16 +19,23 @@ export function HaEntityPicker({
   d,
   value,
   onChange,
+  only,
 }: {
   d: Dictionary;
   /** Selected entity ids, in the order they should appear on the tile. */
   value: string[];
   onChange: (ids: string[]) => void;
+  /**
+   * One domain, when the widget can only use that kind — the media player tile
+   * has nothing to do with a temperature sensor, and offering all six hundred
+   * entities would make the one useful list impossible to find.
+   */
+  only?: string;
 }) {
   const [entities, setEntities] = useState<Entity[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
-  const [domain, setDomain] = useState("");
+  const [domain, setDomain] = useState(only ?? "");
   const [pending, startTransition] = useTransition();
 
   useEffect(() => {
@@ -47,16 +54,18 @@ export function HaEntityPicker({
     return [...new Set(entities.map((e) => e.domain))].sort();
   }, [entities]);
 
+  const pool = useMemo(() => (entities ?? []).filter((e) => (only ? e.domain === only : true)), [entities, only]);
+
   const shown = useMemo(() => {
     if (!entities) return [];
     const needle = query.trim().toLowerCase();
-    return entities
+    return pool
       .filter((e) => (domain ? e.domain === domain : true))
       .filter((e) => (needle ? `${e.name} ${e.id}`.toLowerCase().includes(needle) : true))
       // Chosen ones first, so a long list does not hide what is already picked.
       .sort((a, b) => Number(value.includes(b.id)) - Number(value.includes(a.id)))
       .slice(0, 120);
-  }, [entities, query, domain, value]);
+  }, [entities, pool, query, domain, value]);
 
   function toggle(id: string) {
     onChange(value.includes(id) ? value.filter((x) => x !== id) : [...value, id]);
@@ -79,18 +88,20 @@ export function HaEntityPicker({
     <div className="flex flex-col gap-2">
       <div className="flex gap-2">
         <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={d.common.search} className="flex-1" />
-        <Select value={domain} onChange={(e) => setDomain(e.target.value)} className="w-36">
-          <option value="">{d.services.haAllDomains}</option>
-          {domains.map((dom) => (
-            <option key={dom} value={dom}>
-              {dom}
-            </option>
-          ))}
-        </Select>
+        {!only && (
+          <Select value={domain} onChange={(e) => setDomain(e.target.value)} className="w-36">
+            <option value="">{d.services.haAllDomains}</option>
+            {domains.map((dom) => (
+              <option key={dom} value={dom}>
+                {dom}
+              </option>
+            ))}
+          </Select>
+        )}
       </div>
 
       <p className="text-[11px] text-faint">
-        {value.length} / {entities.length}
+        {value.length} / {pool.length}
       </p>
 
       <ul className="max-h-64 divide-y divide-line overflow-y-auto rounded-control border border-line">

@@ -1,15 +1,34 @@
 import Link from "next/link";
 import type { Item } from "@prisma/client";
-import { Card, StatusDot, TileIcon, type StatusKind } from "@/components/ui";
+import { Card, StatusDot, TileIcon, Meter, type StatusKind } from "@/components/ui";
 import { Widget } from "@/components/widgets";
 import { ItemActions } from "./ItemActions";
 import { FolderContents } from "./FolderContents";
+import { TileControls } from "./TileControls";
 import type { TileStatus } from "@/lib/status";
-import { percent, latency } from "@/lib/format";
+import { percent, latency, bytes } from "@/lib/format";
 import { GLYPH, autoIcon, guessIcon } from "@/lib/icons";
 import type { Dictionary } from "@/i18n";
 
 type ItemWithChildren = Item & { children?: ItemWithChildren[] };
+
+/**
+ * What the container behind a tile is doing right now.
+ *
+ * Read on the page and handed in, rather than fetched here: one call per host
+ * for the whole board instead of one per tile, and the tile stays a component
+ * that renders what it is given.
+ */
+export type TileLive = {
+  id: string;
+  state: string;
+  status: string;
+  image: string;
+  ports: { internal: number; external?: number; protocol: string }[];
+  /** Percent and bytes, present only for the tiles that asked for them. */
+  cpu?: number;
+  memory?: number;
+};
 
 /**
  * One tile.
@@ -27,6 +46,7 @@ export function Tile({
   canEdit,
   iconPack = false,
   userId,
+  live,
 }: {
   item: ItemWithChildren;
   statuses: Map<string, TileStatus>;
@@ -36,6 +56,8 @@ export function Tile({
   iconPack?: boolean;
   /** Passed to widgets that show something personal, such as the calendar. */
   userId?: string;
+  /** Live container data, for the tiles configured to show any of it. */
+  live?: TileLive;
 }) {
   // Resolved here rather than stored: a tile created before icon guessing
   // existed, or one whose address changed, picks up an icon without anyone
@@ -48,13 +70,45 @@ export function Tile({
     return (
       <div className="relative h-full">
         {editing && canEdit && <ItemActions item={item} d={d} />}
-        <Widget widget={item.widget ?? "notes"} config={parseConfig(item.config)} title={item.title} d={d} userId={userId} />
+        <Widget
+          widget={item.widget ?? "notes"}
+          config={parseConfig(item.config)}
+          title={item.title}
+          d={d}
+          userId={userId}
+          canControl={canEdit}
+        />
+      </div>
+    );
+  }
+
+  if (item.kind === "section") {
+    return (
+      <div className="relative flex h-full items-end pb-1">
+        {editing && canEdit && <ItemActions item={item} d={d} />}
+        <div className="w-full border-b border-line pb-1">
+          <h2 className="flex items-center gap-2 text-sm font-semibold tracking-tight">
+            {item.icon && <TileIcon icon={item.icon} title={item.title} size="sm" />}
+            {item.title}
+          </h2>
+          {item.subtitle && <p className="text-xs text-muted">{item.subtitle}</p>}
+        </div>
       </div>
     );
   }
 
   if (item.kind === "folder") {
     const children = item.children ?? [];
+    /*
+     * What each line says besides its name.
+     *
+     * The folder is resizable, and a column of latencies squeezed against a
+     * name in a two-column-wide folder is worse than no column at all — so the
+     * detail appears only once the folder is wide enough to hold it, and the
+     * choice of what it says belongs to whoever made the folder.
+     */
+    const detail = str(parseConfig(item.config).detail);
+    const roomy = item.w >= 3;
     return (
       <Card className="relative flex h-full flex-col p-3">
         {editing && canEdit && <ItemActions item={item} d={d} />}
@@ -103,6 +157,11 @@ export function Tile({
                   fallback={guessIcon({ name: child.containerName ?? child.title, url: child.url ?? "" })}
                 />
                 <span className="min-w-0 flex-1 truncate">{child.title}</span>
+                {detail && detail !== "none" && roomy && (
+                  <span className="shrink-0 truncate font-mono text-[10px] tabular-nums text-faint">
+                    {childDetail(detail, child, statuses.get(child.id), d)}
+                  </span>
+                )}
                 {child.checkKind !== "none" && <StatusDot {...dotFor(child, statuses.get(child.id), d)} />}
               </>
             );
@@ -140,9 +199,25 @@ export function Tile({
   const href = item.url ?? item.internalUrl ?? "#";
   const isExternal = /^https?:\/\//i.test(href);
 
+  // What the tile was asked to show besides its name. Everything here is
+  // something the panel already knows about the container: the tile is where it
+  // is wanted, not where it is discovered.
+  const extras = parseConfig(item.config);
+  const shows = (key: string) => live !== undefined && extras[key] === true;
+  // Controls need an admin and a container that still exists; editing hides
+  // them so the drag surface is not fighting five buttons.
+  const withControls = shows("controls") && canEdit && !editing && !!item.hostKey && !!item.containerName;
+
+  /*
+   * A tile is a fixed box on the board, and the extras are opt-in: asking for
+   * stats, ports and an image does not make the box taller, it fills it. So the
+   * card clips instead of spilling over the tile beneath it, the header keeps
+   * its size and the extras take whatever room is left — drag the tile taller
+   * and more of them appear, which is the honest relationship between the two.
+   */
   const body = (
     <>
-      <div className="flex items-start gap-2.5">
+      <div className="flex shrink-0 items-start gap-2.5">
         <TileIcon icon={icon} title={item.title} color={item.color} fallback={emoji} />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
@@ -150,11 +225,44 @@ export function Tile({
             <StatusDot {...dot} pulse />
           </div>
           {item.subtitle && <p className="truncate text-xs text-muted">{item.subtitle}</p>}
+          {shows("image") && live!.image && (
+            <p className="truncate font-mono text-[10px] text-faint" title={live!.image}>
+              {live!.image}
+            </p>
+          )}
         </div>
       </div>
 
+      <div className="min-h-0 flex-1 overflow-hidden">
+      {shows("stats") && (live!.cpu !== undefined || live!.memory !== undefined) && (
+        <div className="mt-2 space-y-1">
+          <div className="flex items-baseline justify-between text-[10px] text-faint">
+            <span>{d.monitoring.cpu}</span>
+            <span className="font-mono tabular-nums">{percent(live!.cpu ?? null, 1)}</span>
+          </div>
+          <Meter value={live!.cpu ?? 0} />
+          <div className="flex items-baseline justify-between text-[10px] text-faint">
+            <span>{d.monitoring.memory}</span>
+            <span className="font-mono tabular-nums">{bytes(live!.memory ?? 0)}</span>
+          </div>
+        </div>
+      )}
+
+      {shows("uptime") && live!.status && <p className="mt-2 truncate text-[11px] text-faint">{live!.status}</p>}
+
+      {shows("ports") && live!.ports.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-1 overflow-hidden">
+          {live!.ports.slice(0, 4).map((p) => (
+            <span key={`${p.external}-${p.internal}`} className="rounded-control bg-raised px-1.5 text-[10px] text-muted">
+              {p.external ?? p.internal}
+            </span>
+          ))}
+        </div>
+      )}
+      </div>
+
       {item.checkKind !== "none" && (
-        <div className="mt-2.5 flex items-center justify-between text-[11px] text-faint">
+        <div className="mt-2 flex shrink-0 items-center justify-between text-[11px] text-faint">
           <span>{dot.label}</span>
           <span className="font-mono tabular-nums">
             {status?.uptime24h !== null && status?.uptime24h !== undefined
@@ -167,7 +275,7 @@ export function Tile({
   );
 
   return (
-    <Card className="group relative h-full transition-shadow hover:shadow-pop">
+    <Card className="group relative flex h-full flex-col overflow-hidden transition-shadow hover:shadow-pop">
       {editing && canEdit && <ItemActions item={item} d={d} />}
 
       {/* Attached to a container: an arrow into its detail view — logs, mounts,
@@ -187,23 +295,71 @@ export function Tile({
           href={href}
           target={item.newTab ? "_blank" : undefined}
           rel={item.newTab ? "noreferrer" : undefined}
-          className="block h-full p-3"
+          className={`flex min-h-0 flex-1 flex-col p-3 ${withControls ? "pb-0" : ""}`}
         >
           {body}
         </a>
       ) : (
-        <Link href={href} className="block h-full p-3">
+        <Link href={href} className={`flex min-h-0 flex-1 flex-col p-3 ${withControls ? "pb-0" : ""}`}>
           {body}
         </Link>
       )}
+
+      {/* Outside the link on purpose: a button inside an anchor is invalid HTML
+          and behaves differently in every browser that tries to make sense of
+          it. */}
+      {withControls && (
+        <div className="shrink-0 px-3 pb-3">
+          <TileControls d={d} hostKey={item.hostKey!} id={live!.id} name={item.containerName!} state={live!.state} />
+        </div>
+      )}
     </Card>
   );
+}
+
+/**
+ * One line's extra column inside a folder.
+ *
+ * Everything here is already known to the page — no folder line causes a
+ * request of its own — and an unknown value is an empty string rather than a
+ * dash, so a folder of links does not grow a column of punctuation.
+ */
+function childDetail(
+  detail: string,
+  child: ItemWithChildren,
+  status: TileStatus | undefined,
+  d: Dictionary
+): string {
+  switch (detail) {
+    case "status":
+      return dotFor(child, status, d).label;
+    case "latency":
+      return latency(status?.latency);
+    case "uptime":
+      return status?.uptime24h !== null && status?.uptime24h !== undefined ? percent(status.uptime24h, 1) : "";
+    case "host":
+      // The address without its scheme and path: what distinguishes two tiles
+      // called "Sonarr" is the host they point at.
+      try {
+        return child.url ? new URL(child.url).host : "";
+      } catch {
+        return "";
+      }
+    case "container":
+      return child.containerName ?? "";
+    default:
+      return "";
+  }
 }
 
 function dotFor(item: Item, status: TileStatus | undefined, d: Dictionary): { kind: StatusKind; label: string } {
   if (item.checkKind === "none") return { kind: "unknown", label: d.status.unknown };
   if (!status || status.ok === null) return { kind: "unknown", label: d.status.unknown };
   return status.ok ? { kind: "up", label: d.status.up } : { kind: "down", label: d.status.down };
+}
+
+function str(v: unknown): string {
+  return typeof v === "string" ? v : "";
 }
 
 /** Widget settings are stored as a JSON string; a broken one must not crash the page. */

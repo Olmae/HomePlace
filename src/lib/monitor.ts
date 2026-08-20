@@ -5,6 +5,7 @@ import { listContainers } from "./docker";
 import { processAlerts } from "./alerts";
 import { evaluateRules } from "./rules";
 import { processReminders } from "./reminders";
+import { sampleContainers } from "./containerHistory";
 
 /**
  * The availability prober.
@@ -51,6 +52,9 @@ async function tick(): Promise<void> {
     // everything the panel watches, and nothing to schedule separately.
     await evaluateRules();
     await processReminders();
+    // Cheap enough to ride along on the same tick, and it is what gives the
+    // containers page a history without Prometheus.
+    await sampleContainers();
     await pruneOldChecks();
   } catch (e) {
     console.error("monitor tick failed:", e);

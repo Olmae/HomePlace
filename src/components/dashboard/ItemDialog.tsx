@@ -11,6 +11,7 @@ import { IconPicker } from "@/components/IconPicker";
 import { PlacePicker } from "./PlacePicker";
 import { WidgetPicker } from "./WidgetPicker";
 import { HaEntityPicker } from "./HaEntityPicker";
+import { MetricPicker } from "./MetricPicker";
 import { ImagePicker } from "@/components/ImagePicker";
 import type { Dictionary } from "@/i18n";
 
@@ -27,7 +28,7 @@ export type ContainerOption = {
   onDashboard?: boolean;
 };
 
-type Kind = "service" | "link" | "folder" | "widget";
+type Kind = "service" | "link" | "folder" | "widget" | "section";
 
 const widgetKinds = [
   "system",
@@ -43,6 +44,7 @@ const widgetKinds = [
   "arr",
   "pbs",
   "homeassistant",
+  "mediaplayer",
   "reminders",
   "containers",
   "proxmox",
@@ -122,8 +124,23 @@ export function ItemDialog({
     blocks: Number(config.blocks ?? 40),
     days: Number(config.days ?? 7),
     entities: Array.isArray(config.entities) ? (config.entities as string[]).join("\n") : str(config.entities),
+    background: str(config.background) || "drift",
+    detail: str(config.detail) || "none",
+    likePhrase: str(config.likePhrase),
+    likeLabel: str(config.likeLabel),
+    likeService: str(config.likeService) || "media_player.play_media",
     services: Array.isArray(config.items) ? (config.items as string[]).join("\n") : str(config.items),
+    // Extras for a container tile. Off by default: a tile is a link first, and
+    // a dashboard of tiles that all sprout meters is a monitoring screen.
+    showStats: config.stats === true,
+    showControls: config.controls === true,
+    showUptime: config.uptime === true,
+    showPorts: config.ports === true,
+    showImage: config.image === true,
   });
+
+  // Set while the container of an existing tile is being swapped for another.
+  const [rebinding, setRebinding] = useState(false);
 
   function set<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
     setForm((f) => ({ ...f, [key]: value }));
@@ -194,7 +211,14 @@ export function ItemDialog({
       checkKind: kind === "widget" || kind === "folder" ? "none" : form.checkKind,
       checkInterval: Number(form.checkInterval),
       widget: kind === "widget" ? form.widget : null,
-      config: kind === "widget" ? widgetConfig() : undefined,
+      config:
+        kind === "widget"
+          ? widgetConfig()
+          : kind === "service"
+            ? extrasConfig()
+            : kind === "folder"
+              ? { detail: form.detail }
+              : undefined,
       w: Number(form.w),
     };
 
@@ -203,6 +227,23 @@ export function ItemDialog({
       else await updateItem(item!.id, payload);
       onClose();
     });
+  }
+
+  /** What a container tile shows besides its name. */
+  function extrasConfig(): Record<string, unknown> | null {
+    if (!form.containerName) return null;
+    const extras = {
+      stats: form.showStats,
+      controls: form.showControls,
+      uptime: form.showUptime,
+      ports: form.showPorts,
+      image: form.showImage,
+    };
+    // Nothing switched on is stored as no config at all, so a plain tile stays
+    // plain in the database instead of carrying five falses. Null rather than
+    // undefined: undefined means "leave what is there", which would make the
+    // last extra impossible to switch off.
+    return Object.values(extras).some(Boolean) ? extras : null;
   }
 
   function widgetConfig(): Record<string, unknown> {
@@ -232,6 +273,16 @@ export function ItemDialog({
         };
       case "homeassistant":
         return { entities: form.entities.split("\n").map((e) => e.trim()).filter(Boolean) };
+      case "mediaplayer":
+        return {
+          entities: form.entities.split("\n").map((e) => e.trim()).filter(Boolean),
+          background: form.background,
+          // An empty phrase is what turns the button off, so it is stored as
+          // written rather than as a separate flag nobody would think to unset.
+          likePhrase: form.likePhrase.trim(),
+          likeLabel: form.likeLabel.trim(),
+          likeService: form.likeService.trim(),
+        };
       case "calendar":
         // Nothing to configure: the widget shows the month, and how much of it
         // fits is decided by dragging the tile.
@@ -269,6 +320,7 @@ export function ItemDialog({
   }
 
   const isTile = kind === "service" || kind === "link";
+  const isSection = kind === "section";
   // Adding a container is a one-click step: the grid and nothing else. Editing
   // one, or adding anything else, is a form.
   const containerStep = mode === "add" && kind === "service";
@@ -280,22 +332,56 @@ export function ItemDialog({
     <Dialog open onClose={onClose} title={mode === "add" ? d.dashboard.addTitle : d.common.edit} wide>
       <div className="flex flex-col gap-4">
         {mode === "add" && (
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
             <KindCard active={kind === "service"} onClick={() => setKind("service")} title={d.dashboard.addContainer} hint={d.dashboard.addContainerHint} />
             <KindCard active={kind === "link"} onClick={() => setKind("link")} title={d.dashboard.addLink} hint={d.dashboard.addLinkHint} />
             <KindCard active={kind === "folder"} onClick={() => setKind("folder")} title={d.dashboard.addFolder} hint={d.dashboard.addFolderHint} />
             <KindCard active={kind === "widget"} onClick={() => setKind("widget")} title={d.dashboard.addWidget} hint={d.dashboard.addWidgetHint} />
+            <KindCard active={kind === "section"} onClick={() => setKind("section")} title={d.dashboard.addSection} hint={d.dashboard.addSectionHint} />
           </div>
         )}
 
-        {kind === "service" && (
-          <ContainerPicker
+        {/* Editing a tile that is already bound to a container does not ask the
+            question again: the container is shown, with one link to change it.
+            "Something of my own" belongs to adding — offering it here invited
+            turning a container tile into a plain link by accident, which loses
+            the binding that makes the tile know how to check itself. */}
+        {kind === "service" && mode === "edit" && form.containerName && !rebinding ? (
+          <BoundContainer
             d={d}
-            containers={containers}
-            selected={form.containerName}
-            onPick={pickContainer}
-            onOwn={() => setKind("link")}
+            container={containers.find((c) => c.name === form.containerName)}
+            name={form.containerName}
+            hostKey={form.hostKey}
+            onChange={() => setRebinding(true)}
           />
+        ) : (
+          kind === "service" && (
+            <ContainerPicker
+              d={d}
+              containers={containers}
+              selected={form.containerName}
+              onPick={(name) => {
+                pickContainer(name);
+                setRebinding(false);
+              }}
+              onOwn={mode === "add" ? () => setKind("link") : undefined}
+            />
+          )
+        )}
+
+        {/* What else the tile may carry. Every one of these is something the
+            panel already knows about the container and was throwing away. */}
+        {kind === "service" && form.containerName && (
+          <fieldset>
+            <legend className="mb-1 block text-xs font-medium text-muted">{d.dashboard.extras}</legend>
+            <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
+              <Extra label={d.dashboard.extraStats} hint={d.dashboard.extraStatsHint} checked={form.showStats} onChange={(v) => set("showStats", v)} />
+              <Extra label={d.dashboard.extraControls} hint={d.dashboard.extraControlsHint} checked={form.showControls} onChange={(v) => set("showControls", v)} />
+              <Extra label={d.dashboard.extraUptime} hint={d.dashboard.extraUptimeHint} checked={form.showUptime} onChange={(v) => set("showUptime", v)} />
+              <Extra label={d.dashboard.extraPorts} hint={d.dashboard.extraPortsHint} checked={form.showPorts} onChange={(v) => set("showPorts", v)} />
+              <Extra label={d.dashboard.extraImage} hint={d.dashboard.extraImageHint} checked={form.showImage} onChange={(v) => set("showImage", v)} />
+            </div>
+          </fieldset>
         )}
 
         {!containerStep && (
@@ -304,19 +390,50 @@ export function ItemDialog({
           </Field>
         )}
 
+        {isSection && (
+          <Field label={d.dashboard.tileSubtitle}>
+            <Input value={form.subtitle} onChange={(e) => set("subtitle", e.target.value)} />
+          </Field>
+        )}
+
+        {isFolder && (
+          <Field label={d.dashboard.folderDetail} hint={d.dashboard.folderDetailHint}>
+            <Select value={form.detail} onChange={(e) => set("detail", e.target.value)}>
+              <option value="none">{d.common.none}</option>
+              <option value="status">{d.dashboard.detailStatus}</option>
+              <option value="latency">{d.dashboard.detailLatency}</option>
+              <option value="uptime">{d.dashboard.detailUptime}</option>
+              <option value="host">{d.dashboard.detailHost}</option>
+              <option value="container">{d.dashboard.detailContainer}</option>
+            </Select>
+          </Field>
+        )}
+
         {kind === "widget" && (
           <>
             <Field label={d.widgets.pick}>
-              <WidgetPicker d={d} value={form.widget} onChange={(w) => set("widget", w)} />
+              <WidgetPicker d={d} value={form.widget} onChange={(w) => set("widget", w)} collapsed={mode === "edit"} />
             </Field>
 
             {form.widget === "chart" && (
               <>
-                <Field label={d.widgets.query} hint={d.widgets.queryHint}>
-                  <Input value={form.query} onChange={(e) => set("query", e.target.value)} className="font-mono" placeholder="node_load1" />
+                <Field label={d.widgets.query}>
+                  <MetricPicker
+                    d={d}
+                    query={form.query}
+                    instance={form.instance}
+                    onChange={(next) =>
+                      setForm((f) => ({
+                        ...f,
+                        query: next.query,
+                        instance: next.instance ?? f.instance,
+                        unit: next.unit ?? f.unit,
+                      }))
+                    }
+                  />
                 </Field>
                 <Field label={d.widgets.secondQuery} hint={d.widgets.secondQueryHint}>
-                  <Input value={form.query2} onChange={(e) => set("query2", e.target.value)} className="font-mono" />
+                  <Input value={form.query2} onChange={(e) => set("query2", e.target.value)} className="font-mono text-xs" />
                 </Field>
                 <div className="grid grid-cols-2 gap-3">
                   <Field label={d.widgets.unit}>
@@ -353,12 +470,20 @@ export function ItemDialog({
 
             {form.widget === "gauge" && (
               <>
-                <Field label={d.widgets.query} hint={d.widgets.queryHint}>
-                  <Input
-                    value={form.query}
-                    onChange={(e) => set("query", e.target.value)}
-                    className="font-mono text-xs"
-                    placeholder="node_load1"
+                <Field label={d.widgets.query}>
+                  <MetricPicker
+                    d={d}
+                    query={form.query}
+                    instance={form.instance}
+                    onChange={(next) =>
+                      setForm((f) => ({
+                        ...f,
+                        query: next.query,
+                        instance: next.instance ?? f.instance,
+                        unit: next.unit ?? f.unit,
+                        max: next.max ?? f.max,
+                      }))
+                    }
                   />
                 </Field>
                 <div className="grid grid-cols-2 gap-3">
@@ -432,6 +557,54 @@ export function ItemDialog({
                   onChange={(ids) => set("entities", ids.join("\n"))}
                 />
               </Field>
+            )}
+
+            {form.widget === "mediaplayer" && (
+              <>
+                <Field label={d.media.players} hint={d.media.playersHint}>
+                  <HaEntityPicker
+                    d={d}
+                    only="media_player"
+                    value={form.entities.split("\n").map((e) => e.trim()).filter(Boolean)}
+                    onChange={(ids) => set("entities", ids.join("\n"))}
+                  />
+                </Field>
+
+                <Field label={d.media.background} hint={d.media.backgroundHint}>
+                  <Select value={form.background} onChange={(e) => set("background", e.target.value)}>
+                    <option value="drift">{d.media.bgDrift}</option>
+                    <option value="aurora">{d.media.bgAurora}</option>
+                    <option value="waves">{d.media.bgWaves}</option>
+                    <option value="beams">{d.media.bgBeams}</option>
+                    <option value="pulse">{d.media.bgPulse}</option>
+                    <option value="still">{d.media.bgStill}</option>
+                  </Select>
+                </Field>
+
+                <Field label={d.media.likePhrase} hint={d.media.likePhraseHint}>
+                  <Input
+                    value={form.likePhrase}
+                    onChange={(e) => set("likePhrase", e.target.value)}
+                    placeholder="лайк"
+                  />
+                </Field>
+
+                {form.likePhrase.trim() !== "" && (
+                  <div className="grid grid-cols-2 gap-3">
+                    <Field label={d.media.likeLabel}>
+                      <Input value={form.likeLabel} onChange={(e) => set("likeLabel", e.target.value)} placeholder={d.media.like} />
+                    </Field>
+                    <Field label={d.media.likeService} hint={d.media.likeServiceHint}>
+                      <Input
+                        value={form.likeService}
+                        onChange={(e) => set("likeService", e.target.value)}
+                        className="font-mono text-xs"
+                        placeholder="media_player.play_media"
+                      />
+                    </Field>
+                  </div>
+                )}
+              </>
             )}
 
             {form.widget === "load" && (
@@ -564,7 +737,7 @@ export function ItemDialog({
           </div>
         )}
 
-        {!containerStep && !isFolder && kind !== "widget" && (
+        {!containerStep && !isFolder && !isSection && kind !== "widget" && (
         <div className="grid grid-cols-2 gap-3">
           <Field label={d.dashboard.tileWidth}>
             <Select value={String(form.w)} onChange={(e) => set("w", Number(e.target.value))}>
@@ -633,7 +806,8 @@ function ContainerPicker({
   containers: ContainerOption[];
   selected: string;
   onPick: (name: string) => void;
-  onOwn: () => void;
+  /** Omitted while editing: see the call site. */
+  onOwn?: () => void;
 }) {
   const sorted = [...containers].sort((a, b) => {
     if (!!a.onDashboard !== !!b.onDashboard) return a.onDashboard ? 1 : -1;
@@ -647,16 +821,18 @@ function ContainerPicker({
     <div>
       <span className="mb-1 block text-xs font-medium text-muted">{d.dashboard.addContainer}</span>
       <div className="grid max-h-72 grid-cols-2 gap-2 overflow-y-auto pr-1 sm:grid-cols-3">
-        <button
-          type="button"
-          onClick={onOwn}
-          className="flex flex-col items-center justify-center gap-1 rounded-control border border-dashed border-line px-2 py-3 text-center transition-colors hover:border-accent hover:bg-raised"
-        >
-          <span className="text-lg leading-none" aria-hidden>
-            +
-          </span>
-          <span className="text-xs font-medium">{d.dashboard.ownService}</span>
-        </button>
+        {onOwn && (
+          <button
+            type="button"
+            onClick={onOwn}
+            className="flex flex-col items-center justify-center gap-1 rounded-control border border-dashed border-line px-2 py-3 text-center transition-colors hover:border-accent hover:bg-raised"
+          >
+            <span className="text-lg leading-none" aria-hidden>
+              +
+            </span>
+            <span className="text-xs font-medium">{d.dashboard.ownService}</span>
+          </button>
+        )}
 
         {sorted.map((c) => {
           const active = c.name === selected;
@@ -692,6 +868,84 @@ function ContainerPicker({
       </div>
       {containers.length === 0 && <p className="mt-1 text-xs text-faint">{d.containers.noDocker}</p>}
     </div>
+  );
+}
+
+/**
+ * The container an existing tile is bound to.
+ *
+ * Shown instead of the grid when editing, because the question "which
+ * container?" was answered when the tile was made. What matters now is that the
+ * answer is visible — with the host and the current state, so a tile pointing
+ * at something that no longer exists says so — and that changing it takes one
+ * deliberate click.
+ */
+function BoundContainer({
+  d,
+  container,
+  name,
+  hostKey,
+  onChange,
+}: {
+  d: Dictionary;
+  container?: ContainerOption;
+  name: string;
+  hostKey: string;
+  onChange: () => void;
+}) {
+  const missing = !container;
+
+  return (
+    <div>
+      <span className="mb-1 block text-xs font-medium text-muted">{d.dashboard.addContainer}</span>
+      <div className="flex items-center gap-2 rounded-control border border-line p-2">
+        <TileIcon
+          icon={container?.icon || autoIcon({ name, image: container?.image })}
+          title={name}
+          size="sm"
+          fallback={GLYPH.container}
+        />
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm font-medium">{name}</span>
+          <span className="block truncate text-[11px] text-faint">
+            {missing ? d.dashboard.containerMissing : `${container.hostLabel} · ${container.state}`}
+          </span>
+        </span>
+        {!missing && (
+          <span
+            className={`h-1.5 w-1.5 shrink-0 rounded-full ${container.state === "running" ? "bg-ok" : "bg-faint"}`}
+            aria-hidden
+          />
+        )}
+        <Button size="sm" variant="quiet" onClick={onChange}>
+          {d.common.change}
+        </Button>
+      </div>
+      {hostKey && <span className="mt-1 block text-[10px] text-faint">{hostKey}</span>}
+    </div>
+  );
+}
+
+/** One switchable extra, with the reason to want it written next to it. */
+function Extra({
+  label,
+  hint,
+  checked,
+  onChange,
+}: {
+  label: string;
+  hint: string;
+  checked: boolean;
+  onChange: (value: boolean) => void;
+}) {
+  return (
+    <label className="flex cursor-pointer items-start gap-2 rounded-control border border-line px-2 py-1.5 transition-colors hover:bg-raised">
+      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className="mt-0.5" />
+      <span className="min-w-0">
+        <span className="block text-xs font-medium">{label}</span>
+        <span className="block text-[11px] leading-snug text-faint">{hint}</span>
+      </span>
+    </label>
   );
 }
 

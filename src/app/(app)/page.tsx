@@ -3,20 +3,31 @@ import { prisma, getSetting } from "@/lib/db";
 import { ensureSlugs, ensureLayout } from "@/lib/dashboards";
 import { pageUser } from "@/lib/pageUser";
 import { canEdit } from "@/lib/auth";
-import { listContainers } from "@/lib/docker";
+import { listContainers, statsForContainers } from "@/lib/docker";
 import { resolvedDockerHosts } from "@/lib/integrations";
 import { statusFor } from "@/lib/status";
 import { dict } from "@/i18n";
 import { EmptyState } from "@/components/ui";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import { Board } from "@/components/dashboard/Board";
-import { Tile } from "@/components/dashboard/Tile";
+import { Tile, type TileLive } from "@/components/dashboard/Tile";
 import { Tabs } from "@/components/dashboard/Tabs";
 import { AddButton } from "@/components/dashboard/AddButton";
 import { BackgroundButton } from "@/components/dashboard/BackgroundButton";
 import type { ContainerOption } from "@/components/dashboard/ItemDialog";
 
 export const dynamic = "force-dynamic";
+
+/** Tile settings are a JSON string; a broken one must not take the page down. */
+function parseConfig(raw: string | null): Record<string, unknown> {
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw);
+    return typeof parsed === "object" && parsed !== null ? (parsed as Record<string, unknown>) : {};
+  } catch {
+    return {};
+  }
+}
 
 /**
  * The browser tab is named after the dashboard, not after the app. With the
@@ -108,6 +119,46 @@ export default async function DashboardPage({
         }))
       : [];
 
+  /**
+   * Live data for the tiles that were configured to show some.
+   *
+   * Nobody pays for this unless a tile asked: with no extras switched on the
+   * board makes exactly the queries it always did. `listContainers` is one call
+   * per host and is already in hand for an admin; statistics are a call per
+   * container, so those are fetched only for the tiles that show them.
+   */
+  const wants = new Map<string, Record<string, unknown>>();
+  for (const item of items) {
+    if (!item.containerName || !item.hostKey) continue;
+    const extras = parseConfig(item.config);
+    if (Object.values(extras).some((v) => v === true)) wants.set(`${item.hostKey}/${item.containerName}`, extras);
+  }
+
+  const live = new Map<string, TileLive>();
+  if (wants.size > 0) {
+    const needStats: { id: string; name: string; hostKey: string }[] = [];
+    // Statistics come back keyed by name only, so the way back to the tile's
+    // host/name key is remembered here rather than guessed there.
+    const statKey = new Map<string, string>();
+
+    for (const c of await listContainers()) {
+      const key = `${c.hostKey}/${c.name}`;
+      const extras = wants.get(key);
+      if (!extras) continue;
+      live.set(key, { id: c.id, state: c.state, status: c.status, image: c.image, ports: c.ports });
+      if (extras.stats === true && c.state === "running") {
+        needStats.push({ id: c.id, name: c.name, hostKey: c.hostKey });
+        statKey.set(c.name, key);
+      }
+    }
+
+    for (const s of await statsForContainers(needStats, 12)) {
+      const key = statKey.get(s.name);
+      const entry = key ? live.get(key) : undefined;
+      if (key && entry) live.set(key, { ...entry, cpu: s.cpu, memory: s.memory });
+    }
+  }
+
   // Off by default: the pack is fetched from the public internet, and a LAN-only
   // panel should not depend on that.
   const iconPack = await getSetting<boolean>("icons.pack", false);
@@ -148,7 +199,14 @@ export default async function DashboardPage({
 
         {editable && (
           <div className="flex items-center gap-2">
-            {editing && <span className="hidden text-xs text-faint sm:inline">{d.dashboard.dragHint}</span>}
+            {/* Two hints, because edit mode is two different things: a pointer
+                board on a wide screen and a list with arrows on a phone. */}
+            {editing && (
+              <>
+                <span className="hidden text-xs text-faint md:inline">{d.dashboard.dragHint}</span>
+                <span className="text-xs text-faint md:hidden">{d.dashboard.reorderHint}</span>
+              </>
+            )}
             <BackgroundButton
               d={d}
               dashboardId={active.id}
@@ -191,6 +249,7 @@ export default async function DashboardPage({
               canEdit={editable}
               iconPack={iconPack}
               userId={user.id}
+              live={item.containerName ? live.get(`${item.hostKey}/${item.containerName}`) : undefined}
             />
           ))}
         </Board>

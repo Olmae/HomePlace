@@ -23,11 +23,21 @@ export function LiveLogs({
   hostKey,
   id,
   initial,
+  tail = 0,
+  className = "max-h-[28rem]",
 }: {
   d: Dictionary;
   hostKey: string;
   id: string;
   initial: string;
+  /**
+   * How many recent lines the follow stream should replay before it starts
+   * following. When the server already handed us the tail as `initial`, this is
+   * 0 so the same lines do not arrive twice; opened cold (the list drawer), it
+   * asks for the last couple hundred so there is something to read at once.
+   */
+  tail?: number;
+  className?: string;
 }) {
   const [lines, setLines] = useState<string[]>(() => initial.split("\n").filter(Boolean));
   const [live, setLive] = useState(true);
@@ -39,7 +49,7 @@ export function LiveLogs({
     if (!live) return;
 
     const source = new EventSource(
-      `/api/containers/${encodeURIComponent(hostKey)}/${encodeURIComponent(id)}/logs?tail=200`
+      `/api/containers/${encodeURIComponent(hostKey)}/${encodeURIComponent(id)}/logs?tail=${tail}`
     );
     setConnected(true);
 
@@ -55,7 +65,7 @@ export function LiveLogs({
       source.close();
       setConnected(false);
     };
-  }, [live, hostKey, id]);
+  }, [live, hostKey, id, tail]);
 
   useEffect(() => {
     const el = box.current;
@@ -83,7 +93,7 @@ export function LiveLogs({
           // Within a couple of lines of the bottom counts as "at the bottom".
           stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
         }}
-        className="max-h-[28rem] overflow-auto p-4 font-mono text-[11px] leading-relaxed text-muted"
+        className={`${className} overflow-auto p-4 font-mono text-[11px] leading-relaxed text-muted`}
       >
         {lines.join("\n") || "—"}
       </pre>

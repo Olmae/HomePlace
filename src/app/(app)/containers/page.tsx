@@ -3,11 +3,14 @@ import { pageUser } from "@/lib/pageUser";
 import { canEdit } from "@/lib/auth";
 import { listContainers, statsForContainers } from "@/lib/docker";
 import { settings } from "@/lib/config";
-import { resolvedDockerHosts } from "@/lib/integrations";
+import { resolvedDockerHosts, prometheusConfig } from "@/lib/integrations";
+import { containerHistory } from "@/lib/containerHistory";
+import { queryRange, Q } from "@/lib/prometheus";
 import { dict } from "@/i18n";
 import { EmptyState, Card, Badge } from "@/components/ui";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import { ContainerTable, type Row } from "@/components/containers/ContainerTable";
+import { EMPTY_GROUPS, normalizeGroups } from "@/lib/containerGroups";
 import { bytes, percent } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -33,13 +36,14 @@ export default async function ContainersPage() {
     return <EmptyState title={d.containers.noDocker} hint={d.containers.noDockerHint} />;
   }
 
-  const [containers, placed, hidden, dashboard, iconPack] = await Promise.all([
+  const [containers, placed, groupsRaw, dashboard, iconPack] = await Promise.all([
     listContainers(),
     prisma.item.findMany({ where: { containerName: { not: null } }, select: { containerName: true } }),
-    getSetting<string[]>("containers.hidden", []),
+    getSetting<unknown>("containers.groups", EMPTY_GROUPS),
     prisma.dashboard.findFirst({ orderBy: { order: "asc" }, select: { id: true } }),
     getSetting<boolean>("icons.pack", false),
   ]);
+  const groups = normalizeGroups(groupsRaw);
 
   // Statistics cost one request per container, so only running ones are asked:
   // a stopped container has nothing to report and would only add waiting.
@@ -47,8 +51,30 @@ export default async function ContainersPage() {
   const stats = await statsForContainers(running, 40);
   const statsBy = new Map(stats.map((s) => [s.name, s]));
 
+  // History for the sparklines: Prometheus knows weeks of it, and the panel's
+  // own samples cover the last twenty minutes when it does not.
+  const withPrometheus = (await prometheusConfig()) !== null;
+  const trends = new Map<string, { cpu: [number, number][]; memory: [number, number][] }>();
+
+  if (withPrometheus) {
+    // Two queries for every container at once, rather than two per container.
+    const [cpuSeries, memSeries] = await Promise.all([
+      queryRange(Q.allContainerCpu(), 60, 40),
+      queryRange(Q.allContainerMemory(), 60, 40),
+    ]);
+    for (const series of cpuSeries) {
+      const name = series.metric.name;
+      if (name) trends.set(name, { cpu: series.points, memory: trends.get(name)?.memory ?? [] });
+    }
+    for (const series of memSeries) {
+      const name = series.metric.name;
+      if (name) trends.set(name, { cpu: trends.get(name)?.cpu ?? [], memory: series.points });
+    }
+  } else {
+    for (const container of running) trends.set(container.name, containerHistory(container.name));
+  }
+
   const placedNames = new Set(placed.map((p) => p.containerName!));
-  const hiddenSet = new Set(hidden);
 
   const rows: Row[] = containers.map((c) => ({
     id: c.id,
@@ -64,10 +90,11 @@ export default async function ContainersPage() {
     suggestedUrl: c.suggestedUrl,
     icon: c.declared?.icon,
     onDashboard: placedNames.has(c.name),
-    hidden: hiddenSet.has(c.name),
     cpu: statsBy.get(c.name)?.cpu,
     memory: statsBy.get(c.name)?.memory,
     memoryLimit: statsBy.get(c.name)?.memoryLimit,
+    cpuHistory: trends.get(c.name)?.cpu,
+    memoryHistory: trends.get(c.name)?.memory,
   }));
 
   const problems = rows.filter((r) => r.state === "restarting" || r.state === "dead" || r.health === "unhealthy");
@@ -104,6 +131,7 @@ export default async function ContainersPage() {
         controlEnabled={settings.allowContainerControl()}
         dashboardId={dashboard?.id ?? null}
         iconPack={iconPack}
+        groups={groups}
       />
     </>
   );
