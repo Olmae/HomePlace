@@ -130,6 +130,12 @@ export function ItemDialog({
     likeLabel: str(config.likeLabel),
     likeService: str(config.likeService) || "media_player.play_media",
     services: Array.isArray(config.items) ? (config.items as string[]).join("\n") : str(config.items),
+    // Jellyfin: which shelf, how many posters, and whether the now-playing
+    // strip and the library counts appear.
+    jfSource: str(config.source) || "auto",
+    jfLimit: Number(config.limit ?? 12),
+    jfShowSessions: config.showSessions !== false,
+    jfShowCounts: config.showCounts !== false,
     // Extras for a container tile. Off by default: a tile is a link first, and
     // a dashboard of tiles that all sprout meters is a monitoring screen.
     showStats: config.stats === true,
@@ -270,6 +276,13 @@ export function ItemDialog({
           place: form.place,
           latitude: Number(form.latitude),
           longitude: Number(form.longitude),
+        };
+      case "jellyfin":
+        return {
+          source: form.jfSource,
+          limit: Number(form.jfLimit),
+          showSessions: form.jfShowSessions,
+          showCounts: form.jfShowCounts,
         };
       case "homeassistant":
         return { entities: form.entities.split("\n").map((e) => e.trim()).filter(Boolean) };
@@ -557,6 +570,41 @@ export function ItemDialog({
                   onChange={(ids) => set("entities", ids.join("\n"))}
                 />
               </Field>
+            )}
+
+            {form.widget === "jellyfin" && (
+              <>
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label={d.services.jfSource}>
+                    <Select value={form.jfSource} onChange={(e) => set("jfSource", e.target.value)}>
+                      <option value="auto">{d.services.jfSourceAuto}</option>
+                      <option value="nextup">{d.services.nextUp}</option>
+                      <option value="recent">{d.services.recentlyAdded}</option>
+                    </Select>
+                  </Field>
+                  <Field label={d.widgets.limit}>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={40}
+                      value={form.jfLimit}
+                      onChange={(e) => set("jfLimit", Number(e.target.value))}
+                    />
+                  </Field>
+                </div>
+                <Extra
+                  label={d.services.jfSessions}
+                  hint={d.services.jfSessionsHint}
+                  checked={form.jfShowSessions}
+                  onChange={(v) => set("jfShowSessions", v)}
+                />
+                <Extra
+                  label={d.services.jfCounts}
+                  hint={d.services.jfCountsHint}
+                  checked={form.jfShowCounts}
+                  onChange={(v) => set("jfShowCounts", v)}
+                />
+              </>
             )}
 
             {form.widget === "mediaplayer" && (

@@ -24,14 +24,31 @@ function NotSet({ title, message }: { title: string; message: string }) {
 
 // ──────────────────────────────── Jellyfin ───────────────────────────────
 
-export async function JellyfinWidget({ title, d }: { title: string; d: Dictionary }) {
+export async function JellyfinWidget({
+  title,
+  d,
+  config = {},
+}: {
+  title: string;
+  d: Dictionary;
+  config?: Record<string, unknown>;
+}) {
   const state = await jellyfinState();
   if (!state) return <NotSet title={title} message={d.services.notConfigured} />;
 
+  // Settings: which queue to show, how many posters, whether the "now playing"
+  // strip and the library counts appear at all. All optional — the defaults are
+  // the behaviour the widget always had.
+  const source: string = typeof config.source === "string" ? config.source : "auto";
+  const limit = Number.isFinite(Number(config.limit)) && Number(config.limit) > 0 ? Number(config.limit) : 12;
+  const showSessions = config.showSessions !== false;
+  const showCounts = config.showCounts !== false;
+
   // What to watch is the question this tile is asked most of the day; what is
   // playing right now only matters for the hour or two it is true.
-  const queue = state.nextUp.length > 0 ? state.nextUp : state.recent;
-  const heading = state.nextUp.length > 0 ? d.services.nextUp : d.services.recentlyAdded;
+  const wantNext = source === "nextup" || (source === "auto" && state.nextUp.length > 0);
+  const queue = (wantNext ? state.nextUp : state.recent).slice(0, limit);
+  const heading = wantNext ? d.services.nextUp : d.services.recentlyAdded;
 
   return (
     <Card className="flex h-full flex-col">
@@ -42,15 +59,15 @@ export async function JellyfinWidget({ title, d }: { title: string; d: Dictionar
             <Badge tone="warn">
               {state.transcoding} {d.services.transcoding}
             </Badge>
-          ) : (
+          ) : showCounts ? (
             <span className="text-[11px] text-faint">
               {state.counts.movies} · {state.counts.series}
             </span>
-          )
+          ) : null
         }
       />
 
-      {state.sessions.length > 0 && (
+      {showSessions && state.sessions.length > 0 && (
         <div className="space-y-2 border-b border-line p-3">
           {state.sessions.map((session, i) => (
             <div key={`${session.user}-${i}`}>

@@ -209,6 +209,24 @@ export function Tile({
   const withControls = shows("controls") && canEdit && !editing && !!item.hostKey && !!item.containerName;
 
   /*
+   * A tile made small on purpose is a launcher, not a card. Below two cells in
+   * either direction the title cannot fit without being clipped to a couple of
+   * letters — so it drops away and the icon, which is what the eye lands on
+   * anyway, takes the whole tile, with the status dot tucked in a corner.
+   */
+  const iconOnly = item.w <= 2 && item.h <= 1;
+  const compactBody = (
+    <div className="relative flex h-full flex-col items-center justify-center gap-1 text-center">
+      {item.checkKind !== "none" && (
+        <span className="absolute right-0 top-0">
+          <StatusDot {...dot} pulse />
+        </span>
+      )}
+      <TileIcon icon={icon} title={item.title} color={item.color} fallback={emoji} size="lg" />
+    </div>
+  );
+
+  /*
    * A tile is a fixed box on the board, and the extras are opt-in: asking for
    * stats, ports and an image does not make the box taller, it fills it. So the
    * card clips instead of spilling over the tile beneath it, the header keeps
@@ -297,11 +315,11 @@ export function Tile({
           rel={item.newTab ? "noreferrer" : undefined}
           className={`flex min-h-0 flex-1 flex-col p-3 ${withControls ? "pb-0" : ""}`}
         >
-          {body}
+          {iconOnly ? compactBody : body}
         </a>
       ) : (
         <Link href={href} className={`flex min-h-0 flex-1 flex-col p-3 ${withControls ? "pb-0" : ""}`}>
-          {body}
+          {iconOnly ? compactBody : body}
         </Link>
       )}
 

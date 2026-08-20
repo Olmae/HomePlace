@@ -563,6 +563,12 @@ export const en = {
     transcoding: "transcoding",
     nextUp: "Next up",
     recentlyAdded: "Recently added",
+    jfSource: "Show",
+    jfSourceAuto: "Automatic",
+    jfSessions: "Now playing",
+    jfSessionsHint: "Show who is watching, with a progress bar.",
+    jfCounts: "Library counts",
+    jfCountsHint: "Show the number of movies and series in the header.",
 
     idle: "Nothing downloading",
     inQueue: "in queue",

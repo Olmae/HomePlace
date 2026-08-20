@@ -92,6 +92,32 @@ export const BACKGROUNDS: Background[] = ["aurora", "waves", "beams", "pulse", "
 /** The operator's own button: a phrase this player understands. */
 export type Phrase = { service: string; phrase: string; label?: string };
 
+/**
+ * Watch the tile's own height and say when it is too short to be a full remote.
+ *
+ * The dashboard tile is a fixed box the operator resizes; there is no media
+ * query for "this tile is small", only for the window. A ResizeObserver on the
+ * body is what lets a two-row tile drop the volume and the source line to keep
+ * the cover and the transport, instead of spilling over the tile beneath it.
+ */
+function useCompact(threshold = 300) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [compact, setCompact] = useState(false);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver((entries) => {
+      const h = entries[0]?.contentRect.height ?? 0;
+      if (h > 0) setCompact(h < threshold);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [threshold]);
+
+  return { ref, compact };
+}
+
 export function MediaPlayerWidget({
   d,
   title,
@@ -112,6 +138,9 @@ export function MediaPlayerWidget({
   const [full, setFull] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [, startTransition] = useTransition();
+  // Below this height the tile keeps the cover and the transport and sheds the
+  // rest, so it fits instead of overflowing.
+  const { ref: bodyRef, compact } = useCompact(300);
 
   // The ids this tile was configured with, not the ones currently in state:
   // a poll must ask for the same set every time, or a player that dropped out
@@ -213,8 +242,10 @@ export function MediaPlayerWidget({
           }
         />
 
-        <div className="flex min-h-0 flex-1 flex-col gap-3 p-4">
-          {players.length > 1 && (
+        <div ref={bodyRef} className="flex min-h-0 flex-1 flex-col gap-3 p-4">
+          {/* The player switcher is the first thing to go when the tile is
+              short: it is the least-used control and costs a whole row. */}
+          {players.length > 1 && !compact && (
             <div className="flex flex-wrap gap-1">
               {players.map((p) => (
                 <button
@@ -232,7 +263,14 @@ export function MediaPlayerWidget({
             </div>
           )}
 
-          <Now d={d} player={player} art={art} onFallback={() => setProxyFailed(player?.art ?? null)} onOpen={() => setFull(true)} />
+          <Now
+            d={d}
+            player={player}
+            art={art}
+            compact={compact}
+            onFallback={() => setProxyFailed(player?.art ?? null)}
+            onOpen={() => setFull(true)}
+          />
 
           <Progress d={d} player={player} canControl={canControl} onSeek={(s) => setValue(player.id, "seek", s)} />
 
@@ -245,7 +283,9 @@ export function MediaPlayerWidget({
             like={like ? { ...like, praised, onSay: () => say(player.id) } : null}
           />
 
-          {player.can.volumeSet && (
+          {/* Volume is dropped on a short tile too; it opens full screen for the
+              rare moment the dashboard is where you set the loudness. */}
+          {player.can.volumeSet && !compact && (
             <Volume
               d={d}
               player={player}
@@ -305,10 +345,13 @@ function Art({
   art,
   className,
   onFallback,
+  animate = false,
 }: {
   art: Cover;
   className: string;
   onFallback: () => void;
+  /** Play the rise-out-of-blur entrance once per new picture. */
+  animate?: boolean;
 }) {
   const [src, setSrc] = useState(art.proxied ?? art.direct);
 
@@ -324,9 +367,12 @@ function Art({
     // eslint-disable-next-line @next/next/no-img-element -- the image optimiser
     // would have to be told about a domain the operator chooses at runtime.
     <img
+      // Keyed on the src so a new track remounts the element and the entrance
+      // animation runs again instead of only on the very first cover.
+      key={animate ? src : undefined}
       src={src}
       alt=""
-      className={className}
+      className={`${className} ${animate ? "hp-cover-in" : ""}`}
       onError={() => {
         if (src !== art.direct && art.direct) {
           setSrc(art.direct);
@@ -344,12 +390,15 @@ function Now({
   art,
   onFallback,
   onOpen,
+  compact = false,
 }: {
   d: Dictionary;
   player: Player;
   art: Cover;
   onFallback: () => void;
   onOpen: () => void;
+  /** A short tile: smaller cover, and the player/source line drops away. */
+  compact?: boolean;
 }) {
   const line = player.title ?? (isOff(player) ? d.media.off : d.media.idle);
 
@@ -359,10 +408,12 @@ function Now({
         type="button"
         onClick={onOpen}
         aria-label={d.media.fullscreen}
-        className="relative h-20 w-20 shrink-0 overflow-hidden rounded-control border border-line bg-raised transition-transform hover:scale-[1.03]"
+        className={`relative shrink-0 overflow-hidden rounded-control border border-line bg-raised transition-transform hover:scale-[1.03] ${
+          compact ? "h-14 w-14" : "h-20 w-20"
+        }`}
         style={{ boxShadow: "0 4px 18px -8px rgb(var(--art) / 0.8)" }}
       >
-        <Art art={art} className="h-full w-full object-cover" onFallback={onFallback} />
+        <Art art={art} className="h-full w-full object-cover" onFallback={onFallback} animate />
         {!art.proxied && !art.direct && (
           <span className="flex h-full w-full items-center justify-center text-2xl" aria-hidden>
             ♪
@@ -371,7 +422,7 @@ function Now({
       </button>
 
       <div className="min-w-0 flex-1">
-        <p className="truncate text-base font-semibold" title={line}>
+        <p className={`truncate font-semibold ${compact ? "text-sm" : "text-base"}`} title={line}>
           {line}
         </p>
         {player.artist && (
@@ -379,10 +430,12 @@ function Now({
             {player.artist}
           </p>
         )}
-        <p className="truncate text-[11px] text-faint">
-          {player.name}
-          {player.source ? ` · ${player.source}` : ""}
-        </p>
+        {!compact && (
+          <p className="truncate text-[11px] text-faint">
+            {player.name}
+            {player.source ? ` · ${player.source}` : ""}
+          </p>
+        )}
       </div>
     </div>
   );
@@ -719,84 +772,103 @@ function Transport({
   }
 
   const toggled = "text-[rgb(var(--art))] hover:text-[rgb(var(--art))]";
+  // An empty slot the size of a side button, so the play control stays dead
+  // centre even when a stream offers no previous or next.
+  const spacer = <span className={button} aria-hidden />;
+
+  const secondary =
+    player.can.shuffle || player.can.repeat || !!like || player.can.stop || (power && player.can.turnOff);
 
   return (
-    <div className={`flex flex-wrap items-center justify-center ${small ? "gap-2" : "gap-4"}`}>
-      {player.can.shuffle && (
+    <div className={`flex flex-col items-center ${small ? "gap-2" : "gap-3"}`}>
+      {/* Primary transport: previous · play · next, the play button always in
+          the middle. Missing side controls leave their slot, not a gap. */}
+      <div className={`flex items-center justify-center ${small ? "gap-3" : "gap-5"}`}>
+        {player.can.previous ? (
+          <button type="button" disabled={!canControl} onClick={() => onCommand("previous")} className={button} aria-label={d.media.previous}>
+            <Glyph name="previous" size={small ? 18 : 24} />
+          </button>
+        ) : (
+          spacer
+        )}
+
         <button
           type="button"
-          disabled={!canControl}
-          onClick={() => onCommand(player.shuffle ? "shuffle_off" : "shuffle_on")}
-          className={`${button} ${player.shuffle ? toggled : ""}`}
-          aria-pressed={player.shuffle ?? false}
-          aria-label={d.media.shuffle}
-          title={d.media.shuffle}
+          disabled={!canControl || !(player.can.play || player.can.pause)}
+          onClick={() => onCommand("play_pause")}
+          className={main}
+          style={mainStyle}
+          aria-label={isPlaying(player) ? d.media.pause : d.media.play}
         >
-          <Glyph name="shuffle" size={small ? 16 : 22} />
+          <Glyph name={isPlaying(player) ? "pause" : "play"} size={glyph} />
         </button>
-      )}
 
-      {player.can.previous && (
-        <button type="button" disabled={!canControl} onClick={() => onCommand("previous")} className={button} aria-label={d.media.previous}>
-          <Glyph name="previous" size={small ? 16 : 22} />
-        </button>
-      )}
+        {player.can.next ? (
+          <button type="button" disabled={!canControl} onClick={() => onCommand("next")} className={button} aria-label={d.media.next}>
+            <Glyph name="next" size={small ? 18 : 24} />
+          </button>
+        ) : (
+          spacer
+        )}
+      </div>
 
-      <button
-        type="button"
-        disabled={!canControl || !(player.can.play || player.can.pause)}
-        onClick={() => onCommand("play_pause")}
-        className={main}
-        style={mainStyle}
-        aria-label={isPlaying(player) ? d.media.pause : d.media.play}
-      >
-        <Glyph name={isPlaying(player) ? "pause" : "play"} size={glyph} />
-      </button>
+      {/* Secondary controls: shuffle, repeat, like, stop, power — wrapped and
+          centred under the transport, so a narrow tile drops them to a second
+          line instead of shoving the play button off centre. */}
+      {secondary && (
+        <div className={`flex flex-wrap items-center justify-center ${small ? "gap-1.5" : "gap-3"}`}>
+          {player.can.shuffle && (
+            <button
+              type="button"
+              disabled={!canControl}
+              onClick={() => onCommand(player.shuffle ? "shuffle_off" : "shuffle_on")}
+              className={`${button} ${player.shuffle ? toggled : ""}`}
+              aria-pressed={player.shuffle ?? false}
+              aria-label={d.media.shuffle}
+              title={d.media.shuffle}
+            >
+              <Glyph name="shuffle" size={small ? 16 : 22} />
+            </button>
+          )}
 
-      {player.can.next && (
-        <button type="button" disabled={!canControl} onClick={() => onCommand("next")} className={button} aria-label={d.media.next}>
-          <Glyph name="next" size={small ? 16 : 22} />
-        </button>
-      )}
+          {player.can.repeat && (
+            <button
+              type="button"
+              disabled={!canControl}
+              onClick={() => onCommand(player.repeat === "off" || !player.repeat ? "repeat_all" : player.repeat === "all" ? "repeat_one" : "repeat_off")}
+              className={`${button} ${player.repeat && player.repeat !== "off" ? toggled : ""}`}
+              aria-label={player.repeat === "one" ? d.media.repeatOne : d.media.repeat}
+              title={player.repeat === "one" ? d.media.repeatOne : d.media.repeat}
+            >
+              <Glyph name={player.repeat === "one" ? "repeatOne" : "repeat"} size={small ? 16 : 22} />
+            </button>
+          )}
 
-      {player.can.repeat && (
-        // One button through three states, in the order anyone would cycle
-        // them: off, the whole queue, this track.
-        <button
-          type="button"
-          disabled={!canControl}
-          onClick={() => onCommand(player.repeat === "off" || !player.repeat ? "repeat_all" : player.repeat === "all" ? "repeat_one" : "repeat_off")}
-          className={`${button} ${player.repeat && player.repeat !== "off" ? toggled : ""}`}
-          aria-label={player.repeat === "one" ? d.media.repeatOne : d.media.repeat}
-          title={player.repeat === "one" ? d.media.repeatOne : d.media.repeat}
-        >
-          <Glyph name={player.repeat === "one" ? "repeatOne" : "repeat"} size={small ? 16 : 22} />
-        </button>
-      )}
+          {like && (
+            <button
+              type="button"
+              disabled={!canControl}
+              onClick={like.onSay}
+              className={`${button} ${like.praised ? "scale-110 text-[rgb(var(--art))]" : ""} transition-transform`}
+              aria-label={like.label || d.media.like}
+              title={like.label || d.media.like}
+            >
+              <Glyph name="heart" size={small ? 17 : 23} filled={like.praised} />
+            </button>
+          )}
 
-      {like && (
-        <button
-          type="button"
-          disabled={!canControl}
-          onClick={like.onSay}
-          className={`${button} ${like.praised ? "scale-110 text-[rgb(var(--art))]" : ""} transition-transform`}
-          aria-label={like.label || d.media.like}
-          title={like.label || d.media.like}
-        >
-          <Glyph name="heart" size={small ? 17 : 23} filled={like.praised} />
-        </button>
-      )}
+          {player.can.stop && (
+            <button type="button" disabled={!canControl} onClick={() => onCommand("stop")} className={button} aria-label={d.media.stop}>
+              <Glyph name="stop" size={small ? 14 : 20} />
+            </button>
+          )}
 
-      {player.can.stop && (
-        <button type="button" disabled={!canControl} onClick={() => onCommand("stop")} className={button} aria-label={d.media.stop}>
-          <Glyph name="stop" size={small ? 14 : 20} />
-        </button>
-      )}
-
-      {power && player.can.turnOff && (
-        <button type="button" disabled={!canControl} onClick={() => onCommand("turn_off")} className={button} aria-label={d.media.turnOff}>
-          <Glyph name="power" size={small ? 16 : 22} />
-        </button>
+          {power && player.can.turnOff && (
+            <button type="button" disabled={!canControl} onClick={() => onCommand("turn_off")} className={button} aria-label={d.media.turnOff}>
+              <Glyph name="power" size={small ? 16 : 22} />
+            </button>
+          )}
+        </div>
       )}
     </div>
   );
@@ -1275,7 +1347,7 @@ function FullScreen({
             // The sleeve throws its own colour onto the wall behind it.
             style={{ boxShadow: "0 0 60px -10px rgb(var(--art) / 0.7)" }}
           >
-            <Art art={art} className="h-full w-full object-cover" onFallback={onFallback} />
+            <Art art={art} className="h-full w-full object-cover" onFallback={onFallback} animate />
             {!art.proxied && !art.direct && (
               <span className="flex h-full w-full items-center justify-center text-6xl" aria-hidden>
                 ♪

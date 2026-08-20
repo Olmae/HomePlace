@@ -82,7 +82,7 @@ export async function Widget({ widget, config, title, d, userId, canControl = fa
     case "uptimestrip":
       return <UptimeStripWidget config={config} title={title} d={d} />;
     case "jellyfin":
-      return <JellyfinWidget title={title} d={d} />;
+      return <JellyfinWidget title={title} d={d} config={config} />;
     case "qbittorrent":
       return <QbitWidget title={title} d={d} />;
     case "arr":
@@ -163,6 +163,7 @@ async function SystemWidget({ config, title, d }: { config: Record<string, unkno
   return (
     <Card className="h-full">
       <CardHeader
+        icon="🖥️"
         title={title}
         action={up ? <span className="font-mono text-xs text-faint">{duration(up)}</span> : null}
       />
@@ -227,7 +228,7 @@ async function DisksWidget({ config, title, d }: { config: Record<string, unknow
 
   return (
     <Card className="h-full">
-      <CardHeader title={title} />
+      <CardHeader icon="💾" title={title} />
       <div className="space-y-2.5 p-4">
         {rows.length === 0 && <p className="text-sm text-muted">{d.widgets.noData}</p>}
         {rows.map((r) => (
@@ -285,6 +286,7 @@ async function ChartWidget({ config, title, d }: { config: Record<string, unknow
   return (
     <Card className="h-full">
       <CardHeader
+        icon="📈"
         title={title}
         action={
           series[0]?.points.at(-1) ? (
@@ -336,7 +338,7 @@ async function ContainersWidget({ title, d }: { title: string; d: Dictionary }) 
 
   return (
     <Card className="h-full">
-      <CardHeader title={title} />
+      <CardHeader icon="🐳" title={title} />
       <div className="p-4">
         <p className="font-mono text-2xl tabular-nums">
           {running}
@@ -368,7 +370,7 @@ async function ProxmoxWidget({ title, d }: { title: string; d: Dictionary }) {
 
   return (
     <Card className="h-full">
-      <CardHeader title={title} />
+      <CardHeader icon="🗄️" title={title} />
       <div className="space-y-3 p-4">
         <div>
           <p className="font-mono text-2xl tabular-nums">
@@ -446,7 +448,7 @@ async function GaugeWidget({ config, title, d }: { config: Record<string, unknow
 
   return (
     <Card className="flex h-full flex-col">
-      <CardHeader title={title} />
+      <CardHeader icon="🎛️" title={title} />
       <div className="flex flex-1 items-center justify-center p-3">
         <Gauge
           value={value}
@@ -503,7 +505,7 @@ async function UptimeStripWidget({
 
   return (
     <Card className="h-full">
-      <CardHeader title={title} action={<span className="text-[11px] text-faint">{hours} h</span>} />
+      <CardHeader icon="📶" title={title} action={<span className="text-[11px] text-faint">{hours} h</span>} />
       <div className="space-y-2 p-4">
         {chosen.length === 0 && <p className="text-sm text-muted">{d.widgets.noData}</p>}
         {chosen.map((item) => {
@@ -590,6 +592,7 @@ async function LoadWidget({ config, title, d }: { config: Record<string, unknown
   return (
     <Card className="h-full">
       <CardHeader
+        icon="📊"
         title={title}
         action={<span className="text-[11px] text-faint">{hasPrometheus ? sortBy : `${sortBy} · docker`}</span>}
       />
@@ -693,7 +696,7 @@ function background(value: unknown): "drift" | "aurora" | "waves" | "beams" | "p
 function NotesWidget({ title, text }: { title: string; text: string }) {
   return (
     <Card className="h-full">
-      <CardHeader title={title} />
+      <CardHeader icon="📝" title={title} />
       {/* whitespace-pre-wrap keeps the line breaks the user typed; a note is a
           scratchpad, not a rich text document. */}
       <p className="whitespace-pre-wrap p-4 text-sm leading-relaxed text-muted">{text}</p>

@@ -559,6 +559,12 @@ export const ru: Dictionary = {
 
     nextUp: "Продолжить просмотр",
     recentlyAdded: "Недавно добавлено",
+    jfSource: "Показывать",
+    jfSourceAuto: "Автоматически",
+    jfSessions: "Сейчас смотрят",
+    jfSessionsHint: "Кто смотрит, с полосой прогресса.",
+    jfCounts: "Счётчики библиотеки",
+    jfCountsHint: "Число фильмов и сериалов в заголовке.",
 
     notConfigured: "Не настроено — добавьте в настройках",
     nothingPlaying: "Ничего не воспроизводится",
