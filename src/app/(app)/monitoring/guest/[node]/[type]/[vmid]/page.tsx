@@ -97,12 +97,25 @@ export default async function GuestDetailPage({
               value={`${bytes(status.mem)} / ${bytes(status.maxmem)}`}
               meter={status.maxmem > 0 ? (status.mem / status.maxmem) * 100 : 0}
             />
-            {status.maxdisk > 0 && (
+            {/* Proxmox reports real disk usage for containers, but not for VMs
+                — a VM's guest filesystem is opaque to the host — where `disk`
+                comes back as 0. Showing "0 B / 32 GiB" with an empty bar reads
+                as a broken meter; for those the honest thing is the size it was
+                given. */}
+            {status.maxdisk > 0 && status.disk > 0 && (
               <Meted
                 label={d.monitoring.guestDisk}
                 value={`${bytes(status.disk)} / ${bytes(status.maxdisk)}`}
                 meter={(status.disk / status.maxdisk) * 100}
               />
+            )}
+            {status.maxdisk > 0 && status.disk === 0 && (
+              <div className="flex items-baseline justify-between">
+                <span className="text-xs text-muted">{d.monitoring.guestDisk}</span>
+                <span className="font-mono text-sm tabular-nums">
+                  {bytes(status.maxdisk)} <span className="text-faint">{d.monitoring.allocated}</span>
+                </span>
+              </div>
             )}
             <dl className="divide-y divide-line pt-1 text-sm">
               <Row label={d.monitoring.netIn} value={bytes(status.netin)} />

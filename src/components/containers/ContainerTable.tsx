@@ -326,7 +326,7 @@ export function ContainerTable({
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder={`${d.common.search} · ${rows.length}`}
-          className="w-52"
+          className="min-w-[12rem] flex-1"
         />
         <Select value={filter} onChange={(e) => setFilter(e.target.value as typeof filter)} className="w-40">
           <option value="all">{d.containers.filterAll}</option>

@@ -354,7 +354,16 @@ export function ItemDialog({
             <KindCard active={kind === "service"} onClick={() => setKind("service")} title={d.dashboard.addContainer} hint={d.dashboard.addContainerHint} icon={<KindIcon kind="service" />} />
             <KindCard active={kind === "link"} onClick={() => setKind("link")} title={d.dashboard.addLink} hint={d.dashboard.addLinkHint} icon={<KindIcon kind="link" />} />
             <KindCard active={kind === "folder"} onClick={() => setKind("folder")} title={d.dashboard.addFolder} hint={d.dashboard.addFolderHint} icon={<KindIcon kind="folder" />} />
-            <KindCard active={kind === "widget"} onClick={() => setKind("widget")} title={d.dashboard.addWidget} hint={d.dashboard.addWidgetHint} icon={<KindIcon kind="widget" />} />
+            <KindCard
+              active={kind === "widget"}
+              onClick={() => {
+                setKind("widget");
+                if (!form.title.trim()) set("title", d.widgets[form.widget as keyof typeof d.widgets]);
+              }}
+              title={d.dashboard.addWidget}
+              hint={d.dashboard.addWidgetHint}
+              icon={<KindIcon kind="widget" />}
+            />
             <KindCard active={kind === "section"} onClick={() => setKind("section")} title={d.dashboard.addSection} hint={d.dashboard.addSectionHint} icon={<KindIcon kind="section" />} />
           </div>
         )}
@@ -430,7 +439,19 @@ export function ItemDialog({
         {kind === "widget" && (
           <>
             <Field label={d.widgets.pick}>
-              <WidgetPicker d={d} value={form.widget} onChange={(w) => set("widget", w)} collapsed={mode === "edit"} />
+              <WidgetPicker
+                d={d}
+                value={form.widget}
+                onChange={(w) => {
+                  // Fill the title from the widget's name, but only while it is
+                  // still empty or still the previous widget's auto-name — a
+                  // title the operator typed is never overwritten.
+                  const prev = d.widgets[form.widget as keyof typeof d.widgets];
+                  if (!form.title.trim() || form.title === prev) set("title", d.widgets[w]);
+                  set("widget", w);
+                }}
+                collapsed={mode === "edit"}
+              />
             </Field>
 
             {form.widget === "chart" && (

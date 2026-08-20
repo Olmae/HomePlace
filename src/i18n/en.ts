@@ -304,6 +304,7 @@ export const en = {
     guestBackLink: "Monitoring",
     diskRead: "Disk read",
     diskWrite: "Disk write",
+    allocated: "allocated",
     netIn: "Net in",
     netOut: "Net out",
   },

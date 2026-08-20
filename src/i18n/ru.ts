@@ -303,6 +303,7 @@ export const ru: Dictionary = {
     guestBackLink: "Мониторинг",
     diskRead: "Чтение с диска",
     diskWrite: "Запись на диск",
+    allocated: "выделено",
     netIn: "Входящий трафик",
     netOut: "Исходящий трафик",
   },

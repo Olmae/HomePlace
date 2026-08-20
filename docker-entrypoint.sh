@@ -16,6 +16,13 @@ PGID="${PGID:-1000}"
 mkdir -p "$DATA_DIR"
 chown -R "$PUID:$PGID" "$DATA_DIR" 2>/dev/null || true
 
+# Next.js writes its incremental/tag cache under .next/cache. The image ships
+# that folder owned by root, so the server — which runs dropped to PUID — cannot
+# create it, and every revalidate logged "EACCES: mkdir /app/.next/cache". Make
+# it writable for the runtime user so caching and revalidation actually work.
+mkdir -p /app/.next/cache
+chown -R "$PUID:$PGID" /app/.next/cache 2>/dev/null || true
+
 # The schema is applied on every start rather than through a migration history.
 # For a single-file SQLite database owned by one application this is the honest
 # trade: `db push` is idempotent, and there is no fleet of environments whose
