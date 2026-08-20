@@ -193,6 +193,7 @@ export const ru: Dictionary = {
     updateAvailable: "Доступен новый образ",
     update: "обновление",
     onlyMatches: "Только совпадения",
+    downloadLogs: "Скачать логи",
     pause: "Пауза",
     resume: "Следить",
 
@@ -586,6 +587,7 @@ export const ru: Dictionary = {
     transcoding: "транскодирует",
     idle: "Ничего не качается",
     inQueue: "в очереди",
+    upcoming: "Скоро",
     noBackups: "бэкапов нет",
     entities: "Сущности",
     entitiesHint: "По одному id в строке, например light.kitchen. Свет, розетки, сцены и скрипты можно переключать, остальное показывается только для чтения.",

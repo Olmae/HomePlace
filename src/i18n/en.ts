@@ -194,6 +194,7 @@ export const en = {
     updateAvailable: "A newer image is available",
     update: "update",
     onlyMatches: "Only matching lines",
+    downloadLogs: "Download logs",
     pause: "Pause",
     resume: "Follow",
 
@@ -587,6 +588,7 @@ export const en = {
 
     idle: "Nothing downloading",
     inQueue: "in queue",
+    upcoming: "Upcoming",
     noBackups: "no backups",
     entities: "Entities",
     entitiesHint: "One entity id per line, e.g. light.kitchen. Lights, switches, scenes and scripts can be operated; everything else is shown read-only.",

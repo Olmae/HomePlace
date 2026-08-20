@@ -186,6 +186,23 @@ export async function ArrWidget({ title, d }: { title: string; d: Dictionary }) 
                 <Meter value={entry.progress} tone="ok" />
               </div>
             ))}
+
+            {instance.upcoming.length > 0 && (
+              <div className="mt-2 space-y-0.5 border-t border-line pt-1.5">
+                <p className="text-[10px] uppercase tracking-wide text-faint">{d.services.upcoming}</p>
+                {instance.upcoming.map((u, i) => (
+                  <div key={i} className="flex items-baseline justify-between gap-2">
+                    <span className="min-w-0 flex-1 truncate text-[11px]" title={u.title}>
+                      {u.title}
+                      {u.sub && <span className="ml-1 text-faint">{u.sub}</span>}
+                    </span>
+                    <span className="shrink-0 font-mono text-[10px] tabular-nums text-faint">
+                      {new Date(u.at).toLocaleDateString([], { day: "2-digit", month: "2-digit" })}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         ))}
       </div>

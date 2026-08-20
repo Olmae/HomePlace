@@ -93,26 +93,45 @@ function Dimmer({
         <span className="w-8 text-right font-mono text-[10px] tabular-nums text-faint">{bright}%</span>
       </label>
 
-      {light.supportsColorTemp !== false && !light.supportsColor && (
-        <label className="flex items-center gap-2">
+      {/* White — through colour temperature, not RGB. A "white" made from
+          rgb(255,255,255) comes out dim and blue on most bulbs; real white is
+          kelvin. Presets for the three everyone wants, a slider for the rest. */}
+      {light.supportsColorTemp !== false && (
+        <div className="flex items-center gap-1.5">
           <span className="w-4 text-center text-[11px] text-faint" aria-hidden>
             ◐
           </span>
-          <input
-            type="range"
-            min={0}
-            max={100}
-            value={warm}
-            aria-label={d.home.warmth}
-            onChange={(e) => {
-              const v = Number(e.target.value);
-              setWarm(v);
-              send({ colorTempK: Math.round(2200 + (v / 100) * (6500 - 2200)) });
-            }}
-            className="hp-range flex-1"
-            style={{ ["--fill" as string]: `${warm}%` }}
-          />
-        </label>
+          <div className="flex flex-1 flex-wrap items-center gap-1">
+            {WHITES.map(([label, k]) => (
+              <button
+                key={k}
+                type="button"
+                title={`${label} · ${k}K`}
+                onClick={() => {
+                  setWarm(kelvinToPct(k));
+                  send({ colorTempK: k });
+                }}
+                className="h-4 w-4 rounded-full border border-line"
+                style={{ background: kelvinHex(k) }}
+              />
+            ))}
+            <input
+              type="range"
+              min={2200}
+              max={6500}
+              step={100}
+              value={pctToKelvin(warm)}
+              aria-label={d.home.warmth}
+              onChange={(e) => {
+                const k = Number(e.target.value);
+                setWarm(kelvinToPct(k));
+                send({ colorTempK: k });
+              }}
+              className="hp-range ml-1 flex-1"
+              style={{ ["--fill" as string]: `${warm}%` }}
+            />
+          </div>
+        </div>
       )}
 
       {light.supportsColor && (
@@ -149,6 +168,26 @@ function Dimmer({
       )}
     </div>
   );
+}
+
+/** The three white points people actually ask for, in kelvin. */
+const WHITES: [string, number][] = [
+  ["Warm", 2700],
+  ["Neutral", 4000],
+  ["Cool", 6500],
+];
+
+/** A swatch colour standing in for a colour temperature. */
+function kelvinHex(k: number): string {
+  return k >= 5500 ? "#dce7ff" : k >= 4500 ? "#f2f1ea" : k >= 3500 ? "#ffe4bd" : "#ffcf8a";
+}
+
+function pctToKelvin(p: number): number {
+  return Math.round(2200 + (p / 100) * (6500 - 2200));
+}
+
+function kelvinToPct(k: number): number {
+  return Math.round(((k - 2200) / (6500 - 2200)) * 100);
 }
 
 /** "255,120,60" → "#ff783c" for the native colour input. */

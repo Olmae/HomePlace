@@ -22,6 +22,7 @@ export function LiveLogs({
   d,
   hostKey,
   id,
+  name,
   initial,
   tail = 0,
   className = "max-h-[28rem]",
@@ -29,6 +30,8 @@ export function LiveLogs({
   d: Dictionary;
   hostKey: string;
   id: string;
+  /** For the download filename; falls back to the id. */
+  name?: string;
   initial: string;
   /**
    * How many recent lines the follow stream should replay before it starts
@@ -112,6 +115,9 @@ export function LiveLogs({
             )}
             <span className={`h-1.5 w-1.5 rounded-full ${connected && live ? "bg-ok" : "bg-faint"}`} aria-hidden />
             <span className="text-[11px] text-faint">{lines.length}</span>
+            <Button size="sm" variant="quiet" onClick={() => download(lines, name ?? id)} title={d.containers.downloadLogs}>
+              ⭳
+            </Button>
             <Button size="sm" variant="quiet" onClick={() => setLive((v) => !v)}>
               {live ? d.containers.pause : d.containers.resume}
             </Button>
@@ -139,6 +145,17 @@ export function LiveLogs({
       </pre>
     </Card>
   );
+}
+
+/** Save the current buffer as a .log file. */
+function download(lines: string[], name: string) {
+  const blob = new Blob([lines.join("\n")], { type: "text/plain" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${name}-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.log`;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 /** Wrap every case-insensitive occurrence of `needle` in a highlight mark. */

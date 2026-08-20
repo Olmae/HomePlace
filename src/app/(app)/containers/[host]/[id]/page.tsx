@@ -171,7 +171,7 @@ export default async function ContainerDetailPage({ params }: { params: { host: 
         {/* Logs scroll inside their own box and keep following the tail; a
             container that prints long lines must not make the page scroll. */}
         <div className="lg:col-span-3">
-          <LiveLogs d={d} hostKey={container.hostKey} id={container.id} initial={logs} />
+          <LiveLogs d={d} hostKey={container.hostKey} id={container.id} name={container.name} initial={logs} />
         </div>
 
         {container.env.length > 0 && (

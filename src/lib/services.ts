@@ -273,6 +273,8 @@ export type ArrState = {
   queue: { title: string; status: string; progress: number }[];
   queueCount: number;
   warnings: number;
+  /** What is due in the next week — episodes airing or films releasing. */
+  upcoming: { title: string; sub?: string; at: number }[];
 };
 
 export async function arrConfig(): Promise<ArrInstance[]> {
@@ -301,14 +303,24 @@ export async function saveArr(instances: ArrInstance[]): Promise<void> {
   );
 }
 
+function pad(n: number): string {
+  return String(n).padStart(2, "0");
+}
+
 export async function arrState(): Promise<ArrState[]> {
   const instances = await arrConfig();
   const results = await Promise.all(
     instances.map(async (instance) => {
       const headers = { "x-api-key": instance.apiKey };
-      const [queue, health] = await Promise.all([
+      const start = new Date().toISOString();
+      const end = new Date(Date.now() + 7 * 86400_000).toISOString();
+      const [queue, health, calendar] = await Promise.all([
         get<Record<string, any>>({ url: `${instance.url}/api/v3/queue?pageSize=20`, headers }),
         get<Record<string, any>[]>({ url: `${instance.url}/api/v3/health`, headers }),
+        get<Record<string, any>[]>({
+          url: `${instance.url}/api/v3/calendar?start=${start}&end=${end}&includeSeries=true`,
+          headers,
+        }),
       ]);
       if (!queue) return null;
 
@@ -324,6 +336,21 @@ export async function arrState(): Promise<ArrState[]> {
           // around to mean what the bar shows.
           progress: r.size > 0 ? ((r.size - (r.sizeleft ?? 0)) / r.size) * 100 : 0,
         })),
+        upcoming: (calendar ?? [])
+          .map((r: Record<string, any>) => {
+            // A Sonarr episode carries a series and an air date; a Radarr film
+            // carries its own title and a release date.
+            if (r.series || r.seriesId) {
+              const at = Date.parse(r.airDateUtc ?? r.airDate ?? "");
+              const s = r.seasonNumber != null ? `S${pad(r.seasonNumber)}E${pad(r.episodeNumber)}` : undefined;
+              return { title: String(r.series?.title ?? r.title ?? ""), sub: s, at };
+            }
+            const at = Date.parse(r.digitalRelease ?? r.physicalRelease ?? r.inCinemas ?? "");
+            return { title: String(r.title ?? ""), at };
+          })
+          .filter((u) => u.title && Number.isFinite(u.at))
+          .sort((a, b) => a.at - b.at)
+          .slice(0, 6),
       };
     })
   );

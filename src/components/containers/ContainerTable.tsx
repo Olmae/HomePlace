@@ -473,6 +473,7 @@ export function ContainerTable({
             d={d}
             hostKey={logsRow.hostKey}
             id={logsRow.id}
+            name={logsRow.name}
             initial=""
             tail={200}
             className="max-h-[55vh]"
