@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { prisma, getSetting } from "@/lib/db";
 import { ensureSlugs, ensureLayout } from "@/lib/dashboards";
 import { pageUser } from "@/lib/pageUser";
@@ -10,6 +9,7 @@ import { dict } from "@/i18n";
 import { EmptyState } from "@/components/ui";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import { Board } from "@/components/dashboard/Board";
+import { EditModeProvider, EditToggle, EditHints } from "@/components/dashboard/EditMode";
 import { Tile, type TileLive } from "@/components/dashboard/Tile";
 import { Tabs } from "@/components/dashboard/Tabs";
 import { AddButton } from "@/components/dashboard/AddButton";
@@ -61,7 +61,6 @@ export default async function DashboardPage({
   const user = await pageUser();
   const d = dict(user.locale);
   const editable = canEdit(user);
-  const editing = editable && searchParams.edit === "1";
 
   // Self-healing for data written before slugs and positions existed. Both are
   // no-ops after the first run.
@@ -183,6 +182,7 @@ export default async function DashboardPage({
         />
       )}
 
+      <EditModeProvider canEdit={editable}>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <Tabs
           d={d}
@@ -201,12 +201,7 @@ export default async function DashboardPage({
           <div className="flex items-center gap-2">
             {/* Two hints, because edit mode is two different things: a pointer
                 board on a wide screen and a list with arrows on a phone. */}
-            {editing && (
-              <>
-                <span className="hidden text-xs text-faint md:inline">{d.dashboard.dragHint}</span>
-                <span className="text-xs text-faint md:hidden">{d.dashboard.reorderHint}</span>
-              </>
-            )}
+            <EditHints d={d} />
             <BackgroundButton
               d={d}
               dashboardId={active.id}
@@ -216,14 +211,7 @@ export default async function DashboardPage({
                 backgroundBlur: active.backgroundBlur,
               }}
             />
-            <Link
-              href={`/?tab=${active.slug ?? active.id}${editing ? "" : "&edit=1"}`}
-              className={`rounded-control px-3 py-1.5 text-sm font-medium transition-colors ${
-                editing ? "bg-accent/10 text-accent" : "text-muted hover:bg-raised hover:text-text"
-              }`}
-            >
-              {editing ? d.dashboard.doneEditing : d.dashboard.editMode}
-            </Link>
+            <EditToggle d={d} />
             <AddButton d={d} dashboardId={active.id} containers={containers} folders={folders} />
           </div>
         )}
@@ -235,7 +223,6 @@ export default async function DashboardPage({
         <Board
           d={d}
           layout={items.map(({ id, x, y, w, h }) => ({ id, x, y, w, h }))}
-          editing={editing}
           folderIds={items.filter((i) => i.kind === "folder").map((i) => i.id)}
           lockedIds={items.filter((i) => i.locked).map((i) => i.id)}
         >
@@ -245,7 +232,6 @@ export default async function DashboardPage({
               item={item}
               statuses={statuses}
               d={d}
-              editing={editing}
               canEdit={editable}
               iconPack={iconPack}
               userId={user.id}
@@ -254,6 +240,7 @@ export default async function DashboardPage({
           ))}
         </Board>
       )}
+      </EditModeProvider>
     </>
   );
 }

@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import type { Item } from "@prisma/client";
 import { deleteItem, toggleLock } from "@/actions/dashboard";
 import { ItemDialog } from "./ItemDialog";
+import { useEditMode } from "./EditMode";
 import type { Dictionary } from "@/i18n";
 
 /**
@@ -21,8 +22,14 @@ import type { Dictionary } from "@/i18n";
  * clicked.
  */
 export function ItemActions({ item, d }: { item: Item; d: Dictionary }) {
+  const { editing: modeEditing } = useEditMode();
   const [editing, setEditing] = useState(false);
   const [pending, startTransition] = useTransition();
+
+  // Rendered on every tile but only present while the board is being edited —
+  // which is what lets edit mode be an instant client toggle rather than a
+  // navigation that re-renders the whole page.
+  if (!modeEditing) return null;
 
   return (
     <>

@@ -579,6 +579,29 @@ body {
   will-change: opacity, transform, filter;
 }
 
+/*
+ * Entering edit mode.
+ *
+ * The toggle is instant now (client state, no navigation), which left it
+ * feeling abrupt — the board simply blinked into a different mode. This is the
+ * small motion that says "the board has opened up for arranging": it lifts and
+ * settles once, and every tile's edit ring fades in behind it. Stopped under
+ * reduced-motion by the block below.
+ */
+.hp-editing {
+  animation: hp-edit-in 320ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+@keyframes hp-edit-in {
+  from {
+    opacity: 0.75;
+    transform: scale(0.99) translateY(-2px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;

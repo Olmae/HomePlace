@@ -3,6 +3,7 @@
 import { Children, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { COLUMNS, clampBox, resolveCollisions, readingOrder, overlaps, swapInReadingOrder, type Box } from "@/lib/layout";
 import { saveLayout, moveIntoFolder } from "@/actions/dashboard";
+import { useEditMode } from "./EditMode";
 import type { Dictionary } from "@/i18n";
 
 /**
@@ -29,7 +30,6 @@ type Drag =
 export function Board({
   d,
   layout,
-  editing,
   children,
   folderIds = [],
   lockedIds = [],
@@ -37,13 +37,13 @@ export function Board({
   d: Dictionary;
   /** One entry per child, in the same order. */
   layout: Box[];
-  editing: boolean;
   children: ReactNode;
   /** Tiles that accept a drop — dragging onto one files the tile inside it. */
   folderIds?: string[];
   /** Tiles that cannot be dragged and are never pushed aside. */
   lockedIds?: string[];
 }) {
+  const { editing } = useEditMode();
   const [boxes, setBoxes] = useState<Box[]>(layout);
   const [drag, setDrag] = useState<Drag>(null);
   const ref = useRef<HTMLDivElement>(null);
@@ -213,7 +213,7 @@ export function Board({
   return (
     <div
       ref={ref}
-      className="hp-board grid grid-cols-1 gap-3 md:grid-cols-12"
+      className={`hp-board grid grid-cols-1 gap-3 md:grid-cols-12 ${editing ? "hp-editing" : ""}`}
       // The row height is a variable rather than an inline grid property: it
       // must apply from `md` up only, and inline styles cannot be conditional.
       style={{ ["--row-height" as string]: `${ROW_HEIGHT}px` }}

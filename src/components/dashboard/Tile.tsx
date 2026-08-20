@@ -3,6 +3,7 @@ import type { Item } from "@prisma/client";
 import { Card, StatusDot, TileIcon, Meter, type StatusKind } from "@/components/ui";
 import { Widget } from "@/components/widgets";
 import { ItemActions } from "./ItemActions";
+import { HideWhenEditing } from "./EditMode";
 import { FolderContents } from "./FolderContents";
 import { TileControls } from "./TileControls";
 import type { TileStatus } from "@/lib/status";
@@ -42,7 +43,7 @@ export function Tile({
   item,
   statuses,
   d,
-  editing,
+  inFolder = false,
   canEdit,
   iconPack = false,
   userId,
@@ -51,7 +52,8 @@ export function Tile({
   item: ItemWithChildren;
   statuses: Map<string, TileStatus>;
   d: Dictionary;
-  editing: boolean;
+  /** A tile rendered inside a folder dialog: it never gets edit controls. */
+  inFolder?: boolean;
   canEdit: boolean;
   iconPack?: boolean;
   /** Passed to widgets that show something personal, such as the calendar. */
@@ -69,7 +71,7 @@ export function Tile({
   if (item.kind === "widget") {
     return (
       <div className="relative h-full">
-        {editing && canEdit && <ItemActions item={item} d={d} />}
+        {canEdit && !inFolder && <ItemActions item={item} d={d} />}
         <Widget
           widget={item.widget ?? "notes"}
           config={parseConfig(item.config)}
@@ -85,7 +87,7 @@ export function Tile({
   if (item.kind === "section") {
     return (
       <div className="relative flex h-full items-end pb-1">
-        {editing && canEdit && <ItemActions item={item} d={d} />}
+        {canEdit && !inFolder && <ItemActions item={item} d={d} />}
         <div className="w-full border-b border-line pb-1">
           <h2 className="flex items-center gap-2 text-sm font-semibold tracking-tight">
             {item.icon && <TileIcon icon={item.icon} title={item.title} size="sm" />}
@@ -111,7 +113,7 @@ export function Tile({
     const roomy = item.w >= 3;
     return (
       <Card className="relative flex h-full flex-col p-3">
-        {editing && canEdit && <ItemActions item={item} d={d} />}
+        {canEdit && !inFolder && <ItemActions item={item} d={d} />}
 
         <div className="mb-2 flex items-center gap-2">
           <TileIcon icon={item.icon || GLYPH.folder} title={item.title} color={item.color} />
@@ -132,7 +134,7 @@ export function Tile({
                 item={child}
                 statuses={statuses}
                 d={d}
-                editing={false}
+                inFolder
                 canEdit={canEdit}
                 iconPack={iconPack}
                 userId={userId}
@@ -204,9 +206,9 @@ export function Tile({
   // is wanted, not where it is discovered.
   const extras = parseConfig(item.config);
   const shows = (key: string) => live !== undefined && extras[key] === true;
-  // Controls need an admin and a container that still exists; editing hides
-  // them so the drag surface is not fighting five buttons.
-  const withControls = shows("controls") && canEdit && !editing && !!item.hostKey && !!item.containerName;
+  // Controls need an admin and a container that still exists; while editing they
+  // are hidden (below), so the drag surface is not fighting five buttons.
+  const withControls = shows("controls") && canEdit && !!item.hostKey && !!item.containerName;
 
   /*
    * A tile made small on purpose is a launcher, not a card. Below two cells in
@@ -294,19 +296,22 @@ export function Tile({
 
   return (
     <Card className="group relative flex h-full flex-col overflow-hidden transition-shadow hover:shadow-pop">
-      {editing && canEdit && <ItemActions item={item} d={d} />}
+      {canEdit && !inFolder && <ItemActions item={item} d={d} />}
 
       {/* Attached to a container: an arrow into its detail view — logs, mounts,
-          restarts. Hidden until hover so the tile stays a clean link. */}
-      {!editing && item.containerName && item.hostKey && (
-        <Link
-          href={`/containers/${encodeURIComponent(item.hostKey)}/${encodeURIComponent(item.containerName)}`}
-          title={d.containers.details}
-          aria-label={`${item.title} — ${d.containers.details}`}
-          className="absolute right-1 top-1 z-10 rounded-control px-1.5 text-lg leading-none text-faint opacity-0 transition-opacity hover:bg-raised hover:text-text focus-visible:opacity-100 group-hover:opacity-100"
-        >
-          {GLYPH.details}
-        </Link>
+          restarts. Hidden until hover so the tile stays a clean link, and gone
+          entirely while editing so it does not fight the toolbar. */}
+      {item.containerName && item.hostKey && (
+        <HideWhenEditing>
+          <Link
+            href={`/containers/${encodeURIComponent(item.hostKey)}/${encodeURIComponent(item.containerName)}`}
+            title={d.containers.details}
+            aria-label={`${item.title} — ${d.containers.details}`}
+            className="absolute right-1 top-1 z-10 rounded-control px-1.5 text-lg leading-none text-faint opacity-0 transition-opacity hover:bg-raised hover:text-text focus-visible:opacity-100 group-hover:opacity-100"
+          >
+            {GLYPH.details}
+          </Link>
+        </HideWhenEditing>
       )}
       {isExternal ? (
         <a
@@ -327,9 +332,11 @@ export function Tile({
           and behaves differently in every browser that tries to make sense of
           it. */}
       {withControls && (
-        <div className="shrink-0 px-3 pb-3">
-          <TileControls d={d} hostKey={item.hostKey!} id={live!.id} name={item.containerName!} state={live!.state} />
-        </div>
+        <HideWhenEditing>
+          <div className="shrink-0 px-3 pb-3">
+            <TileControls d={d} hostKey={item.hostKey!} id={live!.id} name={item.containerName!} state={live!.state} />
+          </div>
+        </HideWhenEditing>
       )}
     </Card>
   );
