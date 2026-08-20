@@ -20,6 +20,8 @@ import { ServiceForms } from "./ServiceForms";
 import { PushCard } from "./PushCard";
 import { NotifierForms } from "./NotifierForms";
 import { NotifyPolicyForm } from "./NotifyPolicyForm";
+import { BackupCard } from "./BackupCard";
+import { listBackups } from "@/lib/backup";
 import { servicesForDisplay } from "@/lib/services";
 import { currentNowPlayingToken } from "@/actions/integrations";
 
@@ -275,21 +277,25 @@ async function AccountSection({
  * now-playing token, the icon pack, and export/import of the whole layout.
  */
 async function SystemSection({ d, userId }: { d: ReturnType<typeof dict>; userId: string }) {
-  const [display, npToken, iconPack] = await Promise.all([
+  const [display, npToken, iconPack, backups] = await Promise.all([
     integrationsForDisplay(userId),
     currentNowPlayingToken(),
     getSetting<boolean>("icons.pack", false),
+    listBackups(),
   ]);
 
   return (
-    <IntegrationForms
-      d={d}
-      display={display}
-      nowPlayingToken={npToken}
-      appUrl={effectiveOrigin()}
-      iconPack={iconPack}
-      only="system"
-    />
+    <div className="space-y-3">
+      <IntegrationForms
+        d={d}
+        display={display}
+        nowPlayingToken={npToken}
+        appUrl={effectiveOrigin()}
+        iconPack={iconPack}
+        only="system"
+      />
+      <BackupCard d={d} initial={backups} />
+    </div>
   );
 }
 

@@ -17,7 +17,7 @@ import {
   MonitorIcon,
 } from "@/components/containers/ControlIcons";
 import { GroupCategoryIcon, categoryFor } from "@/components/containers/GroupIcons";
-import { runContainerAction } from "@/actions/containers";
+import { runContainerAction, checkImageUpdates } from "@/actions/containers";
 import { saveContainerGroups } from "@/actions/dashboard";
 import { autoIcon, guessIcon, GLYPH } from "@/lib/icons";
 import {
@@ -93,6 +93,18 @@ export function ContainerTable({
   const [grouped, setGrouped] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [updates, setUpdates] = useState<Record<string, "update" | "current" | "unknown">>({});
+  const [checking, setChecking] = useState(false);
+
+  function checkUpdates() {
+    setChecking(true);
+    setError(null);
+    startTransition(async () => {
+      const result = await checkImageUpdates();
+      setUpdates(Object.fromEntries(result.map((r) => [r.name, r.status])));
+      setChecking(false);
+    });
+  }
   const [pending, startTransition] = useTransition();
 
   // The group configuration is edited here and saved back on every change; the
@@ -215,6 +227,14 @@ export function ContainerTable({
               {row.name}
             </Link>
             {row.onDashboard && <span className="text-[10px] text-faint" title={d.containers.onDashboard}>◈</span>}
+            {updates[row.name] === "update" && (
+              <span
+                className="rounded-control bg-warn/15 px-1.5 text-[10px] font-medium text-warn"
+                title={d.containers.updateAvailable}
+              >
+                ↑ {d.containers.update}
+              </span>
+            )}
           </div>
           <p className="truncate font-mono text-[11px] text-faint" title={row.image}>
             {row.status}
@@ -322,6 +342,11 @@ export function ContainerTable({
         </Select>
 
         <div className="ml-auto flex items-center gap-2">
+          {canEdit && (
+            <Button size="sm" variant="quiet" disabled={checking} onClick={checkUpdates} title={d.containers.checkUpdatesHint}>
+              {checking ? d.common.loading : d.containers.checkUpdates}
+            </Button>
+          )}
           <Button
             size="sm"
             variant={grouped ? "ghost" : "quiet"}

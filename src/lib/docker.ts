@@ -16,6 +16,8 @@ export type Container = {
   id: string;
   name: string;
   image: string;
+  /** The local image's config digest ("sha256:…"), for update checks. */
+  imageId?: string;
   /** running | exited | paused | created | restarting | dead */
   state: string;
   status: string;
@@ -41,6 +43,7 @@ type RawContainer = {
   Id: string;
   Names: string[];
   Image: string;
+  ImageID?: string;
   State: string;
   Status: string;
   Created: number;
@@ -99,6 +102,7 @@ function toContainer(c: RawContainer, host: DockerHost): Container {
     id: c.Id,
     name: (c.Names?.[0] ?? c.Id).replace(/^\//, ""),
     image: c.Image,
+    imageId: c.ImageID,
     state: c.State,
     status: c.Status,
     createdAt: c.Created * 1000,
