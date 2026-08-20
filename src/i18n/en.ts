@@ -601,6 +601,33 @@ export const en = {
     onlyOn: "Only what is on",
     noArea: "No room",
     on: "on",
+
+    // Grouping — the same three-way switch the containers page has: by room, by
+    // kind, or into groups made by hand.
+    byGroup: "By group",
+    newGroup: "New group",
+    editGroup: "Edit group",
+    groupName: "Group name",
+    groupIcon: "Icon",
+    groupMembers: "Devices",
+    groupMembersHint: "Pick the devices that belong to this group.",
+    deleteGroup: "Delete group",
+    unplaced: "Other",
+
+    // Per-device tweaks — a readable name and how its value is shown.
+    customize: "Customize",
+    displayName: "Name",
+    displayNameHint: "Leave empty to use the name Home Assistant provides.",
+    valueFormat: "Value format",
+    fmtAuto: "Automatic",
+    fmtNumber: "Number",
+    fmtDuration: "Duration (d h m)",
+    fmtBytes: "Data size",
+    fmtPercent: "Percent",
+    fmtDatetime: "Date & time",
+    fmtRelative: "Time ago",
+    fmtRaw: "Raw",
+    resetName: "Reset name",
   },
   metrics: {
     preset: "Common",

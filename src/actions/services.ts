@@ -2,6 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth";
+import { setSetting } from "@/lib/db";
+import { HOME_CONFIG_KEY, normalizeHome, type HomeConfig } from "@/lib/homeConfig";
 import {
   saveJellyfin,
   saveQbit,
@@ -121,4 +123,17 @@ export async function toggleEntity(entityId: string): Promise<ServiceResult> {
   const result = await haToggle(entityId);
   revalidatePath("/");
   return result;
+}
+
+/**
+ * Save the smart-home layer: hand-made groups, per-entity value formats and
+ * name overrides. The client owns the whole shape and hands it back in one
+ * call; it is normalised here so a malformed payload cannot poison the setting
+ * the home page reads on every load.
+ */
+export async function saveHomeConfig(config: HomeConfig): Promise<void> {
+  await requireRole("admin");
+  await setSetting(HOME_CONFIG_KEY, normalizeHome(config));
+  revalidatePath("/home");
+  revalidatePath("/");
 }

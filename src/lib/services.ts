@@ -414,6 +414,13 @@ export type HaEntity = {
   toggleable: boolean;
   /** Room, when Home Assistant knows one. */
   area?: string;
+  /**
+   * Home Assistant's own classification of a sensor — "duration", "timestamp",
+   * "data_size", "temperature"… It is what lets a raw number be shown as days
+   * and hours, or a Unix time as "5 min ago", without anyone choosing a format
+   * by hand.
+   */
+  deviceClass?: string;
   /** Extra attributes worth showing: brightness, temperature, battery. */
   attributes?: Record<string, string>;
 };
@@ -524,6 +531,7 @@ export async function haStates(ids?: string[]): Promise<HaEntity[] | null> {
         domain,
         toggleable: TOGGLEABLE.has(domain),
         area: areaOf(id),
+        deviceClass: e.attributes?.device_class ? String(e.attributes.device_class) : undefined,
         attributes: interesting(e.attributes ?? {}),
       };
     })

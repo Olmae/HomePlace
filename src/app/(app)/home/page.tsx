@@ -1,6 +1,8 @@
 import { pageUser } from "@/lib/pageUser";
 import { canEdit } from "@/lib/auth";
 import { haStates, haConfig, haAreas } from "@/lib/services";
+import { getSetting } from "@/lib/db";
+import { EMPTY_HOME, HOME_CONFIG_KEY, normalizeHome } from "@/lib/homeConfig";
 import { dict } from "@/i18n";
 import { EmptyState } from "@/components/ui";
 import { AutoRefresh } from "@/components/AutoRefresh";
@@ -28,7 +30,11 @@ export default async function SmartHomePage() {
     return <EmptyState title={d.home.notConfigured} hint={d.home.notConfiguredHint} />;
   }
 
-  const [entities, areas] = await Promise.all([haStates(), haAreas()]);
+  const [entities, areas, configRaw] = await Promise.all([
+    haStates(),
+    haAreas(),
+    getSetting<unknown>(HOME_CONFIG_KEY, EMPTY_HOME),
+  ]);
   if (!entities) {
     return <EmptyState title={d.home.unreachable} hint={d.home.notConfiguredHint} />;
   }
@@ -40,6 +46,7 @@ export default async function SmartHomePage() {
         d={d}
         canControl={canEdit(user)}
         areas={areas}
+        config={normalizeHome(configRaw)}
         entities={entities.map((e) => ({
           id: e.id,
           name: e.name,
@@ -48,6 +55,8 @@ export default async function SmartHomePage() {
           domain: e.domain,
           toggleable: e.toggleable,
           area: e.area,
+          deviceClass: e.deviceClass,
+          attributes: e.attributes,
         }))}
       />
     </>
