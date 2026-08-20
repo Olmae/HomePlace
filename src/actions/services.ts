@@ -18,6 +18,9 @@ import {
   haStates,
   haToggle,
   haSetState,
+  arrSearch,
+  arrAdd,
+  type ArrResult,
   haLight,
   haHistory,
   type HaHistoryPoint,
@@ -145,6 +148,18 @@ export async function setLight(
 export async function entityHistory(entityId: string): Promise<HaHistoryPoint[]> {
   await requireRole("admin");
   return haHistory(entityId);
+}
+
+/** Search Sonarr/Radarr for a title to add. */
+export async function searchArr(term: string): Promise<ArrResult[]> {
+  await requireRole("admin");
+  return arrSearch(term);
+}
+
+/** Add a found title to its Sonarr/Radarr library. */
+export async function addToArr(instanceLabel: string, externalId: number): Promise<ServiceResult> {
+  await requireRole("admin");
+  return arrAdd(instanceLabel, externalId);
 }
 
 /** The hand-made smart-home groups, for the Home-groups widget's picker. */

@@ -2,6 +2,7 @@ import { Card, CardHeader, Meter, Badge } from "@/components/ui";
 import { SERVICE_ICONS, serviceLogo } from "@/lib/icons";
 import { jellyfinState, qbitState, arrState, pbsState, haStates } from "@/lib/services";
 import { HaControls } from "./HaControls";
+import { ArrSearch } from "./ArrSearch";
 import { bytes, duration, ago } from "@/lib/format";
 import type { Dictionary } from "@/i18n";
 
@@ -165,7 +166,12 @@ export async function ArrWidget({ title, d }: { title: string; d: Dictionary }) 
 
   return (
     <Card className="h-full">
-      <CardHeader icon={serviceLogo("sonarr")} iconFallback={SERVICE_ICONS["sonarr"]} title={title} />
+      <CardHeader
+        icon={serviceLogo("sonarr")}
+        iconFallback={SERVICE_ICONS["sonarr"]}
+        title={title}
+        action={<ArrSearch d={d} />}
+      />
       <div className="space-y-3 p-4">
         {instances.map((instance) => (
           <div key={instance.label}>

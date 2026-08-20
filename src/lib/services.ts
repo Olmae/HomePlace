@@ -357,6 +357,102 @@ export async function arrState(): Promise<ArrState[]> {
   return results.filter((r): r is ArrState => r !== null);
 }
 
+export type ArrResult = {
+  instanceLabel: string;
+  kind: string;
+  title: string;
+  year?: number;
+  poster?: string;
+  overview?: string;
+  inLibrary: boolean;
+  /** tvdbId (Sonarr) or tmdbId (Radarr) — how the add is addressed. */
+  externalId: number;
+};
+
+/** Search every Sonarr/Radarr instance's lookup for a title. */
+export async function arrSearch(term: string): Promise<ArrResult[]> {
+  if (!term.trim()) return [];
+  const instances = await arrConfig();
+  const out: ArrResult[] = [];
+
+  await Promise.all(
+    instances.map(async (inst) => {
+      const isSonarr = /sonarr/i.test(inst.kind);
+      const isRadarr = /radarr/i.test(inst.kind);
+      if (!isSonarr && !isRadarr) return;
+      const path = isSonarr ? "series" : "movie";
+      const res = await get<Record<string, any>[]>({
+        url: `${inst.url}/api/v3/${path}/lookup?term=${encodeURIComponent(term)}`,
+        headers: { "x-api-key": inst.apiKey },
+      });
+      for (const r of (res ?? []).slice(0, 8)) {
+        const poster = Array.isArray(r.images)
+          ? r.images.find((im: Record<string, any>) => im.coverType === "poster")?.remoteUrl ?? r.images[0]?.remoteUrl
+          : undefined;
+        out.push({
+          instanceLabel: inst.label,
+          kind: inst.kind,
+          title: String(r.title ?? ""),
+          year: r.year || undefined,
+          poster: poster ? String(poster) : undefined,
+          overview: r.overview ? String(r.overview).slice(0, 240) : undefined,
+          inLibrary: Number(r.id ?? 0) > 0,
+          externalId: Number(isSonarr ? r.tvdbId : r.tmdbId) || 0,
+        });
+      }
+    })
+  );
+  return out;
+}
+
+/**
+ * Add a title to a Sonarr/Radarr library.
+ *
+ * The item is looked up again by its id, then handed back to the *arr with the
+ * first quality profile and first root folder filled in — the defaults its own
+ * "add" dialog would pre-select — and told to search for it. Anything more (a
+ * chosen profile, a specific folder) belongs in the *arr itself.
+ */
+export async function arrAdd(instanceLabel: string, externalId: number): Promise<{ ok: boolean; error?: string }> {
+  const inst = (await arrConfig()).find((i) => i.label === instanceLabel);
+  if (!inst) return { ok: false, error: "unknown instance" };
+
+  const isSonarr = /sonarr/i.test(inst.kind);
+  const path = isSonarr ? "series" : "movie";
+  const headers = { "x-api-key": inst.apiKey, "content-type": "application/json" };
+  const term = isSonarr ? `tvdb:${externalId}` : `tmdb:${externalId}`;
+
+  const results = await get<Record<string, any>[]>({
+    url: `${inst.url}/api/v3/${path}/lookup?term=${encodeURIComponent(term)}`,
+    headers,
+  });
+  const item = (results ?? [])[0];
+  if (!item) return { ok: false, error: "not found" };
+  if (Number(item.id ?? 0) > 0) return { ok: false, error: "already in the library" };
+
+  const [profiles, folders] = await Promise.all([
+    get<Record<string, any>[]>({ url: `${inst.url}/api/v3/qualityprofile`, headers }),
+    get<Record<string, any>[]>({ url: `${inst.url}/api/v3/rootfolder`, headers }),
+  ]);
+  const qualityProfileId = profiles?.[0]?.id;
+  const rootFolderPath = folders?.[0]?.path;
+  if (!qualityProfileId || !rootFolderPath) return { ok: false, error: "no quality profile or root folder is set up" };
+
+  const payload = {
+    ...item,
+    qualityProfileId,
+    rootFolderPath,
+    monitored: true,
+    addOptions: isSonarr ? { searchForMissingEpisodes: true } : { searchForMovie: true },
+  };
+  const res = await get<Record<string, any>>({
+    url: `${inst.url}/api/v3/${path}`,
+    headers,
+    init: { method: "POST", body: JSON.stringify(payload) },
+  });
+  return res ? { ok: true } : { ok: false, error: "the request was rejected" };
+}
+
 // ─────────────────────────────────── PBS ─────────────────────────────────
 
 export type PbsSettings = { url: string; tokenId: string; tokenSecret: string; verifyTls: boolean };
