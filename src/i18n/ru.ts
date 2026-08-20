@@ -334,8 +334,12 @@ export const ru: Dictionary = {
     pbs: "Бэкапы (PBS)",
     homeassistant: "Home Assistant",
     homegroups: "Группы дома",
+    scenes: "Сцены и скрипты",
+    energy: "Энергия",
     homeGroupsHint: "Какие группы показывать. Ничего не выбрано — показываются все.",
     noHomeGroups: "Групп пока нет — создайте их на странице «Умный дом».",
+    noScenes: "В Home Assistant нет сцен или скриптов.",
+    noPower: "В Home Assistant нет датчиков мощности.",
     mediaplayer: "Медиаплеер",
 
     calendar: "Календарь",

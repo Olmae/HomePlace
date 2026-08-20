@@ -30,6 +30,8 @@ export type WidgetKind =
   | "pbs"
   | "homeassistant"
   | "homegroups"
+  | "scenes"
+  | "energy"
   | "mediaplayer"
   | "weather"
   | "calendar"
@@ -44,7 +46,7 @@ type Category = { key: "monitoring" | "services" | "smarthome" | "home" | "atmos
 const CATEGORIES: Category[] = [
   { key: "monitoring", widgets: ["system", "disks", "load", "chart", "gauge", "uptimestrip", "containers", "proxmox"] },
   { key: "services", widgets: ["jellyfin", "qbittorrent", "arr", "pbs"] },
-  { key: "smarthome", widgets: ["homegroups", "homeassistant", "mediaplayer"] },
+  { key: "smarthome", widgets: ["homegroups", "homeassistant", "scenes", "energy", "mediaplayer"] },
   { key: "home", widgets: ["weather", "calendar", "reminders", "clock", "notes"] },
   { key: "atmosphere", widgets: ["slideshow", "nowplaying"] },
 ];
@@ -194,6 +196,36 @@ function Preview({ kind }: { kind: WidgetKind }) {
   }
 
   switch (kind) {
+    case "energy":
+      return (
+        <span className={frame}>
+          <span className="mb-0.5 font-mono text-sm leading-none">
+            ⚡ 420 <span className="text-[10px] text-faint">W</span>
+          </span>
+          {[75, 45, 20].map((w, i) => (
+            <span key={i} className="h-1 w-full rounded-full bg-line">
+              <span className="block h-1 rounded-full bg-warn" style={{ width: `${w}%` }} />
+            </span>
+          ))}
+        </span>
+      );
+
+    case "scenes":
+      return (
+        <span className={`${frame} gap-[3px]`}>
+          {[0, 1].map((row) => (
+            <span key={row} className="flex gap-[3px]">
+              {[0, 1, 2].map((i) => (
+                <span key={i} className="flex h-4 flex-1 items-center gap-1 rounded-[3px] bg-line px-1">
+                  <span className="h-1.5 w-1.5 rounded-full bg-accent" />
+                  <span className="h-1 flex-1 rounded bg-surface/70" />
+                </span>
+              ))}
+            </span>
+          ))}
+        </span>
+      );
+
     case "homegroups":
       return (
         <span className={frame}>

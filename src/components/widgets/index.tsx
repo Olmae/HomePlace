@@ -12,6 +12,7 @@ import { CalendarWidget } from "./Calendar";
 import { JellyfinWidget, QbitWidget, ArrWidget, PbsWidget, HomeAssistantWidget } from "./Services";
 import { MediaPlayerWidget } from "./MediaPlayer";
 import { HomeGroups } from "./HomeGroups";
+import { Scenes } from "./Scenes";
 import { haConfig, haMediaPlayers, haStates } from "@/lib/services";
 import { getSetting } from "@/lib/db";
 import { EMPTY_HOME, HOME_CONFIG_KEY, normalizeHome } from "@/lib/homeConfig";
@@ -98,6 +99,10 @@ export async function Widget({ widget, config, title, d, userId, canControl = fa
       return <MediaWidget config={config} title={title} d={d} canControl={canControl} />;
     case "homegroups":
       return <HomeGroupsWidget config={config} title={title} d={d} canControl={canControl} />;
+    case "scenes":
+      return <ScenesWidget config={config} title={title} d={d} canControl={canControl} />;
+    case "energy":
+      return <EnergyWidget config={config} title={title} d={d} />;
     case "reminders":
       return userId ? (
         <RemindersList title={title} d={d} userId={userId} />
@@ -738,6 +743,104 @@ async function HomeGroupsWidget({
       }))}
     />
   );
+}
+
+// ──────────────────────────────── Energy ─────────────────────────────────
+
+/**
+ * What the house is drawing right now, from Home Assistant's power sensors.
+ *
+ * Anything classed as power (watts) is listed biggest first with a bar relative
+ * to the hungriest, and the total across them sits at the top — the answer to
+ * "what is on and costing me". Energy sensors (kWh) are listed under it for the
+ * running totals. Auto-detected from the sensors' device class, or narrowed to
+ * a chosen set.
+ */
+async function EnergyWidget({ config, title, d }: { config: Record<string, unknown>; title: string; d: Dictionary }) {
+  if (!(await haConfig())) {
+    return <NotConfigured title={title} message={d.home.notConfigured} hint={d.home.notConfiguredHint} />;
+  }
+  const entities = await haStates();
+  if (!entities) return <NotConfigured title={title} message={d.home.unreachable} hint={d.home.notConfiguredHint} />;
+
+  const only = lines(config.entities);
+  const chosen = (e: { id: string }) => only.length === 0 || only.includes(e.id);
+  const val = (s: string) => (Number.isFinite(Number(s)) ? Number(s) : 0);
+
+  const power = entities
+    .filter((e) => e.deviceClass === "power" && chosen(e))
+    .map((e) => ({ id: e.id, name: e.name, w: e.unit === "kW" ? val(e.state) * 1000 : val(e.state) }))
+    .filter((e) => e.w > 0)
+    .sort((a, b) => b.w - a.w)
+    .slice(0, num(config.limit, 8));
+
+  const energy = entities
+    .filter((e) => e.deviceClass === "energy" && chosen(e))
+    .map((e) => ({ id: e.id, name: e.name, label: `${val(e.state)} ${e.unit ?? "kWh"}` }))
+    .slice(0, 4);
+
+  if (power.length === 0 && energy.length === 0) {
+    return <NotConfigured title={title} message={d.widgets.noPower} hint={d.home.notConfiguredHint} />;
+  }
+
+  const total = power.reduce((sum, p) => sum + p.w, 0);
+  const peak = Math.max(...power.map((p) => p.w), 1);
+
+  return (
+    <Card className="flex h-full flex-col">
+      <CardHeader title={title} icon="⚡" action={<span className="font-mono text-xs text-faint">{Math.round(total)} W</span>} />
+      <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3">
+        {power.map((p) => (
+          <div key={p.id}>
+            <div className="mb-1 flex items-baseline justify-between gap-2">
+              <span className="truncate text-xs">{p.name}</span>
+              <span className="shrink-0 font-mono text-[11px] tabular-nums text-muted">{Math.round(p.w)} W</span>
+            </div>
+            <Meter value={(p.w / peak) * 100} tone="warn" />
+          </div>
+        ))}
+        {energy.length > 0 && (
+          <div className="space-y-1 border-t border-line pt-2">
+            {energy.map((e) => (
+              <div key={e.id} className="flex items-baseline justify-between gap-2">
+                <span className="truncate text-xs text-muted">{e.name}</span>
+                <span className="shrink-0 font-mono text-[11px] tabular-nums text-faint">{e.label}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </Card>
+  );
+}
+
+// ──────────────────────────────── Scenes ─────────────────────────────────
+
+/** Scenes and scripts as one-tap buttons, filtered to a chosen set if given. */
+async function ScenesWidget({
+  config,
+  title,
+  d,
+  canControl,
+}: {
+  config: Record<string, unknown>;
+  title: string;
+  d: Dictionary;
+  canControl: boolean;
+}) {
+  if (!(await haConfig())) {
+    return <NotConfigured title={title} message={d.home.notConfigured} hint={d.home.notConfiguredHint} />;
+  }
+  const entities = await haStates();
+  if (!entities) return <NotConfigured title={title} message={d.home.unreachable} hint={d.home.notConfiguredHint} />;
+
+  const only = lines(config.entities);
+  const items = entities
+    .filter((e) => e.domain === "scene" || e.domain === "script")
+    .filter((e) => only.length === 0 || only.includes(e.id))
+    .map((e) => ({ id: e.id, name: e.name, domain: e.domain }));
+
+  return <Scenes d={d} title={title} items={items} canControl={canControl} />;
 }
 
 /** The wall behind the full-screen player, as configured. */

@@ -335,8 +335,12 @@ export const en = {
     pbs: "Backups (PBS)",
     homeassistant: "Home Assistant",
     homegroups: "Home groups",
+    scenes: "Scenes & scripts",
+    energy: "Energy",
     homeGroupsHint: "Which groups to show. None chosen shows them all.",
     noHomeGroups: "No groups yet — make them on the Smart home page.",
+    noScenes: "No scenes or scripts in Home Assistant.",
+    noPower: "No power sensors found in Home Assistant.",
     mediaplayer: "Media player",
 
     calendar: "Calendar",
