@@ -12,12 +12,22 @@ import type { Dictionary } from "@/i18n";
  * is then a link — "the week jellyfin kept dropping out" can be bookmarked, or
  * pasted to someone else.
  */
-export function EventFilters({ d, type, q }: { d: Dictionary; type: string; q: string }) {
+export function EventFilters({
+  d,
+  type,
+  q,
+  severity,
+}: {
+  d: Dictionary;
+  type: string;
+  q: string;
+  severity: string;
+}) {
   const router = useRouter();
   const params = useSearchParams();
   const [text, setText] = useState(q);
 
-  function apply(next: { type?: string; q?: string }) {
+  function apply(next: { type?: string; q?: string; severity?: string }) {
     const search = new URLSearchParams(params.toString());
     for (const [key, value] of Object.entries(next)) {
       if (value) search.set(key, value);
@@ -31,9 +41,17 @@ export function EventFilters({ d, type, q }: { d: Dictionary; type: string; q: s
     { value: "down", label: d.events.wentDown },
     { value: "up", label: d.events.cameUp },
     { value: "restart", label: d.events.restarted },
+    { value: "command", label: d.events.command },
     { value: "login", label: d.events.signedIn },
     { value: "auth-fail", label: d.events.authFailed },
     { value: "system", label: d.events.system },
+  ];
+
+  const severities = [
+    { value: "", label: d.events.allSeverities },
+    { value: "error", label: d.settings.sevError },
+    { value: "warn", label: d.events.warnings },
+    { value: "info", label: d.events.infos },
   ];
 
   return (
@@ -54,6 +72,13 @@ export function EventFilters({ d, type, q }: { d: Dictionary; type: string; q: s
         {kinds.map((kind) => (
           <option key={kind.value} value={kind.value}>
             {kind.label}
+          </option>
+        ))}
+      </Select>
+      <Select value={severity} onChange={(e) => apply({ severity: e.target.value })} className="w-40">
+        {severities.map((s) => (
+          <option key={s.value} value={s.value}>
+            {s.label}
           </option>
         ))}
       </Select>

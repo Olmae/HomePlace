@@ -77,6 +77,7 @@ export default async function MonitoringPage({
   const tabs = [
     { key: "overview", label: d.monitoring.allHosts },
     ...instances.map((i) => ({ key: i, label: i })),
+    ...(hasProm ? [{ key: "containers", label: d.widgets.containers }] : []),
     ...(hasPve ? [{ key: "proxmox", label: "Proxmox" }] : []),
   ];
 
@@ -129,8 +130,11 @@ export default async function MonitoringPage({
       )}
 
       {view === "overview" && <Overview d={d} instances={instances} hasPve={hasPve} range={range} />}
+      {view === "containers" && hasProm && <ContainersView d={d} range={range} />}
       {view === "proxmox" && hasPve && <ProxmoxView d={d} />}
-      {view !== "overview" && view !== "proxmox" && <HostView d={d} instance={view} range={range} />}
+      {view !== "overview" && view !== "proxmox" && view !== "containers" && (
+        <HostView d={d} instance={view} range={range} />
+      )}
     </>
   );
 }
@@ -505,6 +509,74 @@ async function GuestTable({ d }: { d: ReturnType<typeof dict> }) {
         </table>
       </div>
     </Card>
+  );
+}
+
+// ───────────────────────────── Containers ────────────────────────────────
+
+/**
+ * Consumption per container, over the chosen range.
+ *
+ * The containers page answers "what is each one costing right now"; this answers
+ * "how has it spent the last few hours", the busiest first, with a hoverable
+ * chart for CPU and one for memory apiece. It needs cAdvisor's per-container
+ * series from Prometheus — so it only appears where Prometheus does.
+ */
+async function ContainersView({ d, range }: { d: ReturnType<typeof dict>; range: Range }) {
+  const [cpuSeries, memSeries] = await Promise.all([
+    queryRange(Q.allContainerCpu(), range.minutes, range.points),
+    queryRange(Q.allContainerMemory(), range.minutes, range.points),
+  ]);
+
+  const cpuBy = new Map(cpuSeries.filter((s) => s.metric.name).map((s) => [s.metric.name, s.points]));
+  const memBy = new Map(memSeries.filter((s) => s.metric.name).map((s) => [s.metric.name, s.points]));
+  const latest = (pts?: [number, number][]) => (pts && pts.length ? pts[pts.length - 1][1] : 0);
+
+  // Busiest first — the point of the view is to find the hog, not to read an
+  // alphabet. Capped so a host with a hundred containers stays a page.
+  const names = [...new Set([...cpuBy.keys(), ...memBy.keys()])]
+    .sort((a, b) => latest(cpuBy.get(b)) - latest(cpuBy.get(a)))
+    .slice(0, 24);
+
+  if (names.length === 0) return <NoData d={d} />;
+
+  return (
+    <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+      {names.map((name) => {
+        const cpu = cpuBy.get(name);
+        const mem = memBy.get(name);
+        return (
+          <Card key={name}>
+            <CardHeader
+              title={<span className="truncate font-mono text-xs">{name}</span>}
+              action={
+                <span className="whitespace-nowrap font-mono text-[11px] tabular-nums text-faint">
+                  {percent(latest(cpu), 1)} · {bytes(latest(mem))}
+                </span>
+              }
+            />
+            <div className="space-y-3 p-4">
+              <div>
+                <p className="mb-1 text-[11px] text-muted">{d.monitoring.cpu}</p>
+                {cpu && cpu.length > 1 ? (
+                  <HoverChart d={d} points={cpu} unit="percent" min={0} height={72} />
+                ) : (
+                  <NoData d={d} />
+                )}
+              </div>
+              <div>
+                <p className="mb-1 text-[11px] text-muted">{d.monitoring.memory}</p>
+                {mem && mem.length > 1 ? (
+                  <HoverChart d={d} points={mem} unit="bytes" min={0} tone="ok" height={72} summary={false} />
+                ) : (
+                  <NoData d={d} />
+                )}
+              </div>
+            </div>
+          </Card>
+        );
+      })}
+    </div>
   );
 }
 

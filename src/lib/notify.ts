@@ -5,6 +5,13 @@ import { sendPush, alertRecipients } from "./push";
 import { send as sendTelegram } from "./telegram";
 import { inQuietHours } from "./quietHours";
 import { telegramConfig } from "./integrations";
+import {
+  NOTIFY_POLICY_KEY,
+  normalizePolicy,
+  shouldNotify,
+  type NotifyPolicy,
+  type Severity,
+} from "./notifyPolicy";
 
 /**
  * One place that decides where a notification goes.
@@ -79,6 +86,13 @@ export type Notification = {
   body: string;
   /** info | warn | error — decides the ntfy priority and the webhook field. */
   severity?: "info" | "warn" | "error";
+  /**
+   * The event kind this notification stands for (down, up, rule, restart…).
+   * When set, the household's notification policy decides whether it is sent at
+   * all — the event has already been recorded either way. Left unset (as
+   * reminders do) it always sends: the policy only narrows the kinds it lists.
+   */
+  type?: string;
   /** Groups repeats of the same thing, so a flapping service replaces itself. */
   tag?: string;
   /** Whether quiet hours may swallow this. Reminders say no. */
@@ -91,12 +105,33 @@ export type Notification = {
   skipPush?: boolean;
 };
 
-export type DeliveryResult = { push: number; telegram: boolean; ntfy: boolean; webhook: boolean; quiet: boolean };
+export type DeliveryResult = {
+  push: number;
+  telegram: boolean;
+  ntfy: boolean;
+  webhook: boolean;
+  quiet: boolean;
+  /** The policy withheld this kind of event from notifications. */
+  suppressed: boolean;
+};
+
+export async function notifyPolicy(): Promise<NotifyPolicy> {
+  return normalizePolicy(await getSetting(NOTIFY_POLICY_KEY, null));
+}
 
 /** Send to every configured route. Never throws — a notifier that can take the
  *  monitor down with it is worse than a missed message. */
 export async function notify(message: Notification): Promise<DeliveryResult> {
-  const result: DeliveryResult = { push: 0, telegram: false, ntfy: false, webhook: false, quiet: false };
+  const result: DeliveryResult = { push: 0, telegram: false, ntfy: false, webhook: false, quiet: false, suppressed: false };
+
+  // The policy decides what a phone hears; the event has already been recorded.
+  if (message.type) {
+    const policy = await notifyPolicy();
+    if (!shouldNotify(message.type, (message.severity as Severity) ?? "info", policy)) {
+      result.suppressed = true;
+      return result;
+    }
+  }
 
   const telegram = await telegramConfig();
   if (message.respectQuietHours !== false && inQuietHours(telegram?.quietHours ?? "")) {

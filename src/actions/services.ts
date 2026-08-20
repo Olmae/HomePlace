@@ -2,8 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth";
-import { setSetting } from "@/lib/db";
+import { prisma, setSetting } from "@/lib/db";
 import { HOME_CONFIG_KEY, normalizeHome, type HomeConfig } from "@/lib/homeConfig";
+import { NOTIFY_POLICY_KEY, normalizePolicy, type NotifyPolicy } from "@/lib/notifyPolicy";
 import {
   saveJellyfin,
   saveQbit,
@@ -16,6 +17,7 @@ import {
   pbsState,
   haStates,
   haToggle,
+  haSetState,
   type JellyfinSettings,
   type QbitSettings,
   type ArrInstance,
@@ -123,6 +125,33 @@ export async function toggleEntity(entityId: string): Promise<ServiceResult> {
   const result = await haToggle(entityId);
   revalidatePath("/");
   return result;
+}
+
+/** Turn a whole group of entities on or off in one call. */
+export async function setGroupState(entityIds: string[], on: boolean, groupName?: string): Promise<ServiceResult> {
+  const user = await requireRole("admin");
+  const result = await haSetState(entityIds, on);
+  // A group command is worth a line in the feed — "kitchen turned off" is
+  // exactly what you look for when a light is not where you left it.
+  await prisma.event.create({
+    data: {
+      type: "command",
+      severity: "info",
+      title: groupName ? `${groupName}: ${on ? "on" : "off"}` : on ? "on" : "off",
+      detail: result.ok ? `${entityIds.length}` : result.error ?? null,
+      actor: user.name,
+    },
+  });
+  revalidatePath("/home");
+  revalidatePath("/");
+  return result;
+}
+
+/** Save the household notification policy — what reaches a phone, and what does not. */
+export async function saveNotifyPolicy(policy: NotifyPolicy): Promise<void> {
+  await requireRole("admin");
+  await setSetting(NOTIFY_POLICY_KEY, normalizePolicy(policy));
+  revalidatePath("/settings");
 }
 
 /**

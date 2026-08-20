@@ -4,7 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import { Card, Badge } from "@/components/ui";
 import { Input, Select, Button, Field } from "@/components/form";
 import { Dialog } from "@/components/Dialog";
-import { toggleEntity, saveHomeConfig } from "@/actions/services";
+import { toggleEntity, setGroupState, saveHomeConfig } from "@/actions/services";
 import { prettyName, formatValue, VALUE_FORMATS, type ValueFormat } from "@/lib/haFormat";
 import {
   groupEntities,
@@ -110,6 +110,17 @@ export function SmartHome({
     });
   }
 
+  /** Turn every switchable device in a bucket on or off at once. */
+  function flipBucket(bucket: HomeBucket<Entity>, on: boolean) {
+    const ids = bucket.items.filter((e) => e.toggleable).map((e) => e.id);
+    if (ids.length === 0) return;
+    setBusy(bucket.key);
+    startTransition(async () => {
+      await setGroupState(ids, on, bucket.name);
+      setBusy(null);
+    });
+  }
+
   return (
     <>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -146,6 +157,9 @@ export function SmartHome({
           // automatic buckets cannot occur.
           if (bucket.items.length === 0 && bucket.groupId === undefined) return null;
 
+          const switchable = bucket.items.filter((e) => e.toggleable);
+          const anyOn = switchable.some(isOn);
+
           return (
             <section key={bucket.key}>
               <div className="mb-2 flex items-center gap-2">
@@ -154,6 +168,32 @@ export function SmartHome({
                   <span className="truncate">{bucket.name}</span>
                   <span className="text-muted">· {bucket.items.length}</span>
                 </h2>
+
+                {/* Control the whole group at once — the switchable ones in it.
+                    Individual devices stay independently switchable below. */}
+                {canControl && switchable.length > 0 && (
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => flipBucket(bucket, true)}
+                      disabled={pending && busy === bucket.key}
+                      className={`rounded-control border px-2 py-0.5 text-[11px] transition-colors ${
+                        anyOn ? "border-accent/40 text-accent" : "border-line text-muted hover:bg-raised hover:text-text"
+                      }`}
+                    >
+                      {d.home.allOn}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => flipBucket(bucket, false)}
+                      disabled={pending && busy === bucket.key}
+                      className="rounded-control border border-line px-2 py-0.5 text-[11px] text-muted transition-colors hover:bg-raised hover:text-text"
+                    >
+                      {d.home.allOff}
+                    </button>
+                  </div>
+                )}
+
                 {canControl && bucket.groupId && (
                   <button
                     type="button"

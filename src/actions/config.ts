@@ -62,7 +62,7 @@ const exportSchema = z.object({
 export type ConfigExport = z.infer<typeof exportSchema>;
 
 /** Settings safe to carry between installations — no addresses, no secrets. */
-const PORTABLE_SETTINGS = ["containers.groups", "home.config"];
+const PORTABLE_SETTINGS = ["containers.groups", "home.config", "notify.policy"];
 
 export async function exportConfig(): Promise<ConfigExport> {
   await requireRole("admin");

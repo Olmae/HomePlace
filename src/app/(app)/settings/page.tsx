@@ -9,6 +9,7 @@ import { settings as cfg } from "@/lib/config";
 import { effectiveOrigin } from "@/lib/origin";
 import { integrationStatus, integrationsForDisplay } from "@/lib/integrations";
 import { notifiersForDisplay } from "@/lib/notify";
+import { NOTIFY_POLICY_KEY, normalizePolicy } from "@/lib/notifyPolicy";
 import { enabled as ssoEnabled } from "@/lib/friendplace";
 import { dict } from "@/i18n";
 import { Card, CardHeader, Badge } from "@/components/ui";
@@ -19,6 +20,7 @@ import { RuleForms } from "./RuleForms";
 import { ServiceForms } from "./ServiceForms";
 import { PushCard } from "./PushCard";
 import { NotifierForms } from "./NotifierForms";
+import { NotifyPolicyForm } from "./NotifyPolicyForm";
 import { servicesForDisplay } from "@/lib/services";
 import { currentNowPlayingToken } from "@/actions/integrations";
 
@@ -193,15 +195,17 @@ async function ServicesSection({ d }: { d: ReturnType<typeof dict> }) {
 // ──────────────────────── Alerts and notifications ───────────────────────
 
 async function AlertsSection({ d, userId }: { d: ReturnType<typeof dict>; userId: string }) {
-  const [rules, notifiers, pushCount] = await Promise.all([
+  const [rules, notifiers, pushCount, policyRaw] = await Promise.all([
     prisma.alertRule.findMany({ orderBy: { createdAt: "asc" } }),
     notifiersForDisplay(),
     prisma.pushSubscription.count({ where: { userId } }),
+    getSetting<unknown>(NOTIFY_POLICY_KEY, null),
   ]);
 
   return (
     <div className="space-y-3">
       <RuleForms d={d} rules={rules} />
+      <NotifyPolicyForm d={d} policy={normalizePolicy(policyRaw)} />
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
         <PushCard d={d} count={pushCount} />
         <NotifierForms d={d} ntfy={notifiers.ntfy} webhook={notifiers.webhook} />

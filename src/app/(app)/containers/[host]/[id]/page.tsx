@@ -9,12 +9,12 @@ import { queryRange, Q } from "@/lib/prometheus";
 import { dict } from "@/i18n";
 import { Card, CardHeader, Badge, StatusDot } from "@/components/ui";
 import { TileIcon } from "@/components/TileIcon";
-import { Sparkline } from "@/components/Sparkline";
+import { HoverChart } from "@/components/HoverChart";
 import { ContainerControls } from "@/components/containers/ContainerControls";
 import { LiveLogs } from "@/components/containers/LiveLogs";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import { autoIcon } from "@/lib/icons";
-import { bytes, ago } from "@/lib/format";
+import { ago } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -147,18 +147,23 @@ export default async function ContainerDetailPage({ params }: { params: { host: 
           <>
             <Card>
               <CardHeader title={`${d.monitoring.cpu} · 3h`} />
-              <div className="p-4">{cpu[0] ? <Sparkline points={cpu[0].points} min={0} /> : <p className="text-sm text-muted">{d.widgets.noData}</p>}</div>
+              <div className="p-4">
+                {cpu[0] ? (
+                  <HoverChart d={d} points={cpu[0].points} unit="percent" min={0} />
+                ) : (
+                  <p className="text-sm text-muted">{d.widgets.noData}</p>
+                )}
+              </div>
             </Card>
             <Card className="lg:col-span-2">
-              <CardHeader
-                title={`${d.monitoring.memory} · 3h`}
-                action={
-                  mem[0]?.points.at(-1) ? (
-                    <span className="font-mono text-xs text-faint">{bytes(mem[0].points.at(-1)![1])}</span>
-                  ) : null
-                }
-              />
-              <div className="p-4">{mem[0] ? <Sparkline points={mem[0].points} tone="ok" /> : <p className="text-sm text-muted">{d.widgets.noData}</p>}</div>
+              <CardHeader title={`${d.monitoring.memory} · 3h`} />
+              <div className="p-4">
+                {mem[0] ? (
+                  <HoverChart d={d} points={mem[0].points} unit="bytes" min={0} tone="ok" />
+                ) : (
+                  <p className="text-sm text-muted">{d.widgets.noData}</p>
+                )}
+              </div>
             </Card>
           </>
         )}

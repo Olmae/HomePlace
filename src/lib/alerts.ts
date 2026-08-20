@@ -82,11 +82,15 @@ async function deliver(text: string, quietHours: string, itemId: string, state: 
       title: state === "down" ? "⚠ HomePlace" : "✅ HomePlace",
       body: stripHtml(text),
       severity: state === "down" ? "error" : "info",
+      type: state,
       tag: `item-${itemId}`,
     });
 
-    // Nothing got through: leave it unmarked so the next tick tries again.
-    const anything = delivered.push > 0 || delivered.telegram || delivered.ntfy || delivered.webhook;
+    // Nothing got through: leave it unmarked so the next tick tries again. A
+    // policy that deliberately withheld the message is not a failure — it must
+    // not make the loop retry forever.
+    const anything =
+      delivered.suppressed || delivered.push > 0 || delivered.telegram || delivered.ntfy || delivered.webhook;
     if (!anything && state === "down") return;
   }
   if (state === "down") {

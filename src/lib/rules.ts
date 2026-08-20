@@ -64,6 +64,7 @@ export async function evaluateRules(): Promise<RuleEvaluation[]> {
             title: `✅ ${rule.name}`,
             body: `back to normal — ${describe(rule, value)}`,
             severity: "info",
+            type: "rule",
             tag: `rule-${rule.id}`,
           });
         }
@@ -103,6 +104,7 @@ export async function evaluateRules(): Promise<RuleEvaluation[]> {
       title: `${mark} ${rule.name}`,
       body: describe(rule, value),
       severity: rule.severity === "error" ? "error" : rule.severity === "info" ? "info" : "warn",
+      type: "rule",
       tag: `rule-${rule.id}`,
     });
   }

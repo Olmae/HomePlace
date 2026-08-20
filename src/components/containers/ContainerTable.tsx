@@ -8,6 +8,16 @@ import { Input, Select, Button, Field } from "@/components/form";
 import { Dialog } from "@/components/Dialog";
 import { TileIcon } from "@/components/TileIcon";
 import { LiveLogs } from "@/components/containers/LiveLogs";
+import {
+  LogsIcon,
+  PlayIcon,
+  StopIcon,
+  RestartIcon,
+  OpenIcon,
+  PlusIcon,
+  GroupIcon,
+  MonitorIcon,
+} from "@/components/containers/ControlIcons";
 import { runContainerAction } from "@/actions/containers";
 import { createItem, saveContainerGroups } from "@/actions/dashboard";
 import { autoIcon, guessIcon, GLYPH } from "@/lib/icons";
@@ -93,11 +103,35 @@ export function ContainerTable({
   const [logsRow, setLogsRow] = useState<Row | null>(null);
   const [editing, setEditing] = useState<GroupBucket<Row> | null>(null);
   const [creating, setCreating] = useState(false);
+  const [assigning, setAssigning] = useState<Row | null>(null);
 
   function persist(next: ContainerGroupConfig) {
     setConfig(next);
     startTransition(() => void saveContainerGroups(next));
   }
+
+  /**
+   * Move one container into a custom group, or out of every custom group (back
+   * to its automatic Compose group). A container belongs to one custom group at
+   * a time, so it is first removed from all of them.
+   */
+  function moveToGroup(name: string, groupId: string | null) {
+    const custom = config.custom.map((g) => ({ ...g, members: g.members.filter((m) => m !== name) }));
+    if (groupId) {
+      const target = custom.find((g) => g.id === groupId);
+      if (target) target.members = [...target.members, name];
+    }
+    persist({ ...config, custom });
+  }
+
+  function createGroupWith(name: string, memberName: string) {
+    const group: CustomGroup = { id: `g${Date.now().toString(36)}`, name, members: [memberName] };
+    // Remove the member from any group it was already in.
+    const custom = config.custom.map((g) => ({ ...g, members: g.members.filter((m) => m !== memberName) }));
+    persist({ ...config, custom: [...custom, group] });
+  }
+
+  const groupOf = (name: string) => config.custom.find((g) => g.members.includes(name)) ?? null;
 
   const visible = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -170,6 +204,15 @@ export function ContainerTable({
           title={row.status}
           aria-hidden
         />
+        {/* Straight to this container's monitoring — right beside the status
+            dot, the same weight as the row's other line icons. */}
+        <Link
+          href={`/containers/${encodeURIComponent(row.hostKey)}/${encodeURIComponent(row.id)}`}
+          title={d.nav.monitoring}
+          className="inline-flex shrink-0 items-center rounded-control p-0.5 text-faint transition-colors hover:bg-raised hover:text-text"
+        >
+          <MonitorIcon />
+        </Link>
         <TileIcon icon={icon} title={row.name} size="sm" fallback={guessIcon({ name: row.name, image: row.image }) || GLYPH.container} />
 
         <div className="min-w-[10rem] flex-1">
@@ -227,14 +270,9 @@ export function ContainerTable({
           )}
         </div>
 
-        <div className="flex shrink-0 items-center gap-1">
-          <Button
-            size="sm"
-            variant="quiet"
-            title={d.containers.viewLogs}
-            onClick={() => setLogsRow(row)}
-          >
-            {GLYPH.logs ?? "▤"}
+        <div className="flex shrink-0 items-center gap-0.5">
+          <Button size="sm" variant="quiet" title={d.containers.viewLogs} onClick={() => setLogsRow(row)}>
+            <LogsIcon />
           </Button>
 
           {row.suggestedUrl && (
@@ -243,9 +281,9 @@ export function ContainerTable({
               target="_blank"
               rel="noreferrer"
               title={d.containers.open}
-              className="rounded-control px-2 py-1 text-xs text-muted transition-colors hover:bg-raised hover:text-text"
+              className="inline-flex items-center rounded-control px-2 py-1 text-muted transition-colors hover:bg-raised hover:text-text"
             >
-              ↗
+              <OpenIcon />
             </a>
           )}
 
@@ -257,12 +295,18 @@ export function ContainerTable({
               onClick={() => act(row, running ? "restart" : "start")}
               title={running ? d.containers.restart : d.containers.start}
             >
-              {running ? GLYPH.restart : GLYPH.start}
+              {running ? <RestartIcon /> : <PlayIcon />}
             </Button>
           )}
           {canEdit && controlEnabled && running && (
             <Button size="sm" variant="quiet" disabled={pending && busy === row.id} onClick={() => act(row, "stop")} title={d.containers.stop}>
-              {GLYPH.stop}
+              <StopIcon />
+            </Button>
+          )}
+
+          {canEdit && (
+            <Button size="sm" variant="quiet" title={d.containers.moveToGroup} onClick={() => setAssigning(row)}>
+              <GroupIcon />
             </Button>
           )}
 
@@ -287,7 +331,7 @@ export function ContainerTable({
                 )
               }
             >
-              ＋
+              <PlusIcon />
             </Button>
           )}
         </div>
@@ -447,7 +491,77 @@ export function ContainerTable({
           }}
         />
       )}
+
+      {/* Quick assign one container to a group, from its row. */}
+      {assigning && (
+        <Dialog open onClose={() => setAssigning(null)} title={assigning.name}>
+          <p className="mb-3 text-xs text-muted">{d.containers.moveToGroup}</p>
+          <div className="space-y-1">
+            {(() => {
+              const current = groupOf(assigning.name);
+              const rowName = assigning.name;
+              return (
+                <>
+                  {config.custom.map((g) => (
+                    <button
+                      key={g.id}
+                      type="button"
+                      onClick={() => {
+                        moveToGroup(rowName, current?.id === g.id ? null : g.id);
+                        setAssigning(null);
+                      }}
+                      className={`flex w-full items-center gap-2 rounded-control border px-3 py-2 text-left text-sm transition-colors ${
+                        current?.id === g.id
+                          ? "border-accent/40 bg-accent/5"
+                          : "border-line hover:bg-raised"
+                      }`}
+                    >
+                      {g.icon && <TileIcon icon={g.icon} title={g.name} size="sm" />}
+                      <span className="truncate">{g.name}</span>
+                      {current?.id === g.id && <span className="ml-auto text-accent">✓</span>}
+                    </button>
+                  ))}
+
+                  {current && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        moveToGroup(rowName, null);
+                        setAssigning(null);
+                      }}
+                      className="flex w-full items-center gap-2 rounded-control border border-line px-3 py-2 text-left text-sm transition-colors hover:bg-raised"
+                    >
+                      {d.containers.ungrouped}
+                    </button>
+                  )}
+
+                  <NewGroupInline
+                    d={d}
+                    onCreate={(groupName) => {
+                      createGroupWith(groupName, rowName);
+                      setAssigning(null);
+                    }}
+                  />
+                </>
+              );
+            })()}
+          </div>
+        </Dialog>
+      )}
     </>
+  );
+}
+
+/** A one-field inline form to make a new group and drop the container into it. */
+function NewGroupInline({ d, onCreate }: { d: Dictionary; onCreate: (name: string) => void }) {
+  const [name, setName] = useState("");
+  return (
+    <div className="flex items-center gap-2 pt-2">
+      <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={d.containers.newGroup} className="flex-1" />
+      <Button variant="primary" disabled={!name.trim()} onClick={() => name.trim() && onCreate(name.trim())}>
+        {d.common.add}
+      </Button>
+    </div>
   );
 }
 

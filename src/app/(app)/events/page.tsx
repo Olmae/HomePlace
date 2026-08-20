@@ -18,19 +18,23 @@ export const dynamic = "force-dynamic";
 export default async function EventsPage({
   searchParams,
 }: {
-  searchParams: { type?: string; q?: string };
+  searchParams: { type?: string; q?: string; severity?: string };
 }) {
   const user = await pageUser();
   const d = dict(user.locale);
 
   const type = searchParams.type ?? "";
+  const severity = searchParams.severity ?? "";
   const q = (searchParams.q ?? "").trim();
 
   // "What happened with jellyfin this week" is the question this page exists
-  // for, and two hundred unfiltered rows do not answer it.
+  // for, and unfiltered rows do not answer it. The feed keeps everything now —
+  // group commands, sign-ins, restarts — so the limit is higher and the filters
+  // do more of the narrowing.
   const events = await prisma.event.findMany({
     where: {
       ...(type ? { type } : {}),
+      ...(severity ? { severity } : {}),
       ...(q
         ? {
             OR: [
@@ -43,7 +47,7 @@ export default async function EventsPage({
         : {}),
     },
     orderBy: { at: "desc" },
-    take: 200,
+    take: 400,
     include: { item: { select: { title: true } } },
   });
 
@@ -54,6 +58,8 @@ export default async function EventsPage({
     login: d.events.signedIn,
     "auth-fail": d.events.authFailed,
     discovery: d.events.discovered,
+    command: d.events.command,
+    system: d.events.system,
   };
 
   return (
@@ -62,11 +68,11 @@ export default async function EventsPage({
 
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-lg font-semibold tracking-tight">{d.events.title}</h1>
-        <EventFilters d={d} type={type} q={q} />
+        <EventFilters d={d} type={type} q={q} severity={severity} />
       </div>
 
       {events.length === 0 ? (
-        <EmptyState title={q || type ? d.events.noMatches : d.events.empty} />
+        <EmptyState title={q || type || severity ? d.events.noMatches : d.events.empty} />
       ) : (
       <Card>
         <ul className="divide-y divide-line">

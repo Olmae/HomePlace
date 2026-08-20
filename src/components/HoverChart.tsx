@@ -92,6 +92,11 @@ export function HoverChart({
   // The tooltip is placed as a fraction of the box width, so it tracks the
   // point without the SVG's non-scaling coordinate system getting in the way.
   const leftPct = hover !== null ? (hover / (clean.length - 1)) * 100 : 0;
+  // Where the point sits vertically, as a fraction of the box. When it is high
+  // — a spike near the top — the tooltip would otherwise cover the very peak
+  // being inspected, so it flips to sit below the point instead of above it.
+  const pointTopPct = activeXY ? (activeXY[1] / height) * 100 : 0;
+  const below = pointTopPct < 34;
 
   function onMove(e: React.PointerEvent<HTMLDivElement>) {
     const el = box.current;
@@ -144,8 +149,14 @@ export function HoverChart({
 
         {active && (
           <div
-            className="pointer-events-none absolute top-0 z-10 -translate-x-1/2 whitespace-nowrap rounded-control border border-line bg-surface px-2 py-1 text-[11px] shadow-pop"
-            style={{ left: `${Math.min(88, Math.max(12, leftPct))}%` }}
+            className="pointer-events-none absolute z-10 -translate-x-1/2 whitespace-nowrap rounded-control border border-line bg-surface px-2 py-1 text-[11px] shadow-pop"
+            style={{
+              left: `${Math.min(88, Math.max(12, leftPct))}%`,
+              top: `${pointTopPct}%`,
+              // Above the point by default; below it when the point is near the
+              // top, so the readout never sits on top of the peak.
+              transform: `translate(-50%, ${below ? "12px" : "calc(-100% - 12px)"})`,
+            }}
           >
             <span className="font-mono tabular-nums">{fmt(unit, active[1])}</span>
             <span className="ml-1.5 text-faint">

@@ -808,6 +808,40 @@ async function haCall(
 }
 
 /**
+ * Turn several entities on or off at once — the whole group, in one tap.
+ *
+ * Uses Home Assistant's cross-domain `homeassistant.turn_on` / `turn_off`, so a
+ * group holding lights and switches together is handled in a single call. Only
+ * the switchable domains are touched; a sensor swept up in a group is ignored
+ * rather than erroring.
+ */
+export async function haSetState(entityIds: string[], on: boolean): Promise<{ ok: boolean; error?: string }> {
+  const cfg = await haConfig();
+  if (!cfg) return { ok: false, error: "home assistant is not configured" };
+
+  const targets = entityIds.filter((id) => {
+    const domain = id.split(".")[0];
+    // Scenes and scripts have no "off"; leave them out of a bulk on/off.
+    return TOGGLEABLE.has(domain) && domain !== "scene" && domain !== "script";
+  });
+  if (targets.length === 0) return { ok: true };
+
+  try {
+    const res = await fetch(`${cfg.url}/api/services/homeassistant/${on ? "turn_on" : "turn_off"}`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${cfg.token}`, "content-type": "application/json" },
+      body: JSON.stringify({ entity_id: targets }),
+      cache: "no-store",
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+/**
  * Flip a switch.
  *
  * Only the domains above, and only turn_on / turn_off / toggle — a dashboard
