@@ -423,6 +423,11 @@ export type HaEntity = {
   deviceClass?: string;
   /** For a light that is on: its brightness as a percentage, for the dimmer. */
   brightness?: number;
+  /** A colour light's current colour, "r,g,b", for the colour picker. */
+  rgb?: string;
+  /** Which of brightness / colour temperature / colour the light supports. */
+  supportsColor?: boolean;
+  supportsColorTemp?: boolean;
   /** Extra attributes worth showing: brightness, temperature, battery. */
   attributes?: Record<string, string>;
 };
@@ -538,6 +543,18 @@ export async function haStates(ids?: string[]): Promise<HaEntity[] | null> {
           domain === "light" && e.attributes?.brightness != null
             ? Math.round((Number(e.attributes.brightness) / 255) * 100)
             : undefined,
+        rgb:
+          domain === "light" && Array.isArray(e.attributes?.rgb_color)
+            ? (e.attributes.rgb_color as number[]).slice(0, 3).join(",")
+            : undefined,
+        supportsColor:
+          domain === "light" &&
+          Array.isArray(e.attributes?.supported_color_modes) &&
+          (e.attributes.supported_color_modes as string[]).some((m) => ["rgb", "rgbw", "rgbww", "hs", "xy"].includes(m)),
+        supportsColorTemp:
+          domain === "light" &&
+          Array.isArray(e.attributes?.supported_color_modes) &&
+          (e.attributes.supported_color_modes as string[]).includes("color_temp"),
         attributes: interesting(e.attributes ?? {}),
       };
     })
@@ -892,7 +909,7 @@ export async function haSetState(entityIds: string[], on: boolean): Promise<{ ok
  */
 export async function haLight(
   entityId: string,
-  opts: { on?: boolean; brightnessPct?: number; colorTempK?: number }
+  opts: { on?: boolean; brightnessPct?: number; colorTempK?: number; rgb?: [number, number, number] }
 ): Promise<{ ok: boolean; error?: string }> {
   const cfg = await haConfig();
   if (!cfg) return { ok: false, error: "home assistant is not configured" };
@@ -903,7 +920,10 @@ export async function haLight(
   const data: Record<string, unknown> = { entity_id: entityId };
   if (!off) {
     if (opts.brightnessPct !== undefined) data.brightness_pct = Math.max(1, Math.min(100, Math.round(opts.brightnessPct)));
-    if (opts.colorTempK !== undefined) data.color_temp_kelvin = Math.round(opts.colorTempK);
+    // Colour and colour temperature are mutually exclusive in Home Assistant —
+    // sending a colour switches the light out of temperature mode and back.
+    if (opts.rgb) data.rgb_color = opts.rgb.map((c) => Math.max(0, Math.min(255, Math.round(c))));
+    else if (opts.colorTempK !== undefined) data.color_temp_kelvin = Math.round(opts.colorTempK);
   }
 
   try {

@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useTransition, type ReactNode } from "react";
+import { useEffect, useState, useTransition, type ReactNode } from "react";
 import type { Item } from "@prisma/client";
 import { Dialog } from "@/components/Dialog";
 import { Field, Input, Select, Textarea, Button } from "@/components/form";
 import { createItem, updateItem, type ItemInput } from "@/actions/dashboard";
+import { listHomeGroups } from "@/actions/services";
 import { autoIcon, iconPackUrl, guessIcon, GLYPH } from "@/lib/icons";
 import { TileIcon } from "@/components/TileIcon";
 import { IconPicker } from "@/components/IconPicker";
@@ -136,6 +137,8 @@ export function ItemDialog({
     jfLimit: Number(config.limit ?? 12),
     jfShowSessions: config.showSessions !== false,
     jfShowCounts: config.showCounts !== false,
+    // Home-groups widget: which groups to show (empty = all).
+    homeGroups: Array.isArray(config.groups) ? (config.groups as string[]) : [],
     // Extras for a container tile. Off by default: a tile is a link first, and
     // a dashboard of tiles that all sprout meters is a monitoring screen.
     showStats: config.stats === true,
@@ -286,6 +289,8 @@ export function ItemDialog({
         };
       case "homeassistant":
         return { entities: form.entities.split("\n").map((e) => e.trim()).filter(Boolean) };
+      case "homegroups":
+        return { groups: form.homeGroups };
       case "mediaplayer":
         return {
           entities: form.entities.split("\n").map((e) => e.trim()).filter(Boolean),
@@ -569,6 +574,12 @@ export function ItemDialog({
                   value={form.entities.split("\n").map((e) => e.trim()).filter(Boolean)}
                   onChange={(ids) => set("entities", ids.join("\n"))}
                 />
+              </Field>
+            )}
+
+            {form.widget === "homegroups" && (
+              <Field label={d.widgets.homegroups} hint={d.widgets.homeGroupsHint}>
+                <HomeGroupSelect d={d} value={form.homeGroups} onChange={(ids) => set("homeGroups", ids)} />
               </Field>
             )}
 
@@ -1022,6 +1033,55 @@ function KindCard({
       <span className="block text-sm font-medium">{title}</span>
       <span className="mt-0.5 block text-[11px] leading-snug text-muted">{hint}</span>
     </button>
+  );
+}
+
+/**
+ * Choose which smart-home groups the Home-groups widget shows.
+ *
+ * The groups are the hand-made ones from the smart-home page; they are fetched
+ * on open rather than threaded through the whole add flow, so this works the
+ * same whether the widget is being created or edited. Nothing checked means all
+ * of them, which is the sensible default for a fresh widget.
+ */
+function HomeGroupSelect({
+  d,
+  value,
+  onChange,
+}: {
+  d: Dictionary;
+  value: string[];
+  onChange: (ids: string[]) => void;
+}) {
+  const [groups, setGroups] = useState<{ id: string; name: string; icon?: string }[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void listHomeGroups().then((g) => {
+      if (!cancelled) setGroups(g);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  function toggle(id: string) {
+    onChange(value.includes(id) ? value.filter((x) => x !== id) : [...value, id]);
+  }
+
+  if (groups === null) return <p className="text-xs text-muted">{d.common.loading}</p>;
+  if (groups.length === 0) return <p className="text-xs text-muted">{d.widgets.noHomeGroups}</p>;
+
+  return (
+    <div className="space-y-0.5 rounded-control border border-line p-1">
+      {groups.map((g) => (
+        <label key={g.id} className="flex items-center gap-2 rounded-control px-2 py-1 text-sm hover:bg-raised">
+          <input type="checkbox" checked={value.includes(g.id)} onChange={() => toggle(g.id)} />
+          {g.icon && <span aria-hidden>{g.icon}</span>}
+          <span className="truncate">{g.name}</span>
+        </label>
+      ))}
+    </div>
   );
 }
 

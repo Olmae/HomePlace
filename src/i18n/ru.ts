@@ -330,6 +330,8 @@ export const ru: Dictionary = {
     pbs: "Бэкапы (PBS)",
     homeassistant: "Home Assistant",
     homegroups: "Группы дома",
+    homeGroupsHint: "Какие группы показывать. Ничего не выбрано — показываются все.",
+    noHomeGroups: "Групп пока нет — создайте их на странице «Умный дом».",
     mediaplayer: "Медиаплеер",
 
     calendar: "Календарь",
@@ -656,6 +658,7 @@ export const ru: Dictionary = {
     noHistory: "Недавней истории нет",
     brightness: "Яркость",
     warmth: "Тёплость",
+    color: "Цвет",
   },
   metrics: {
     preset: "Частое",

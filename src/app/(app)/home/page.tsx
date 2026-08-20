@@ -56,6 +56,10 @@ export default async function SmartHomePage() {
           toggleable: e.toggleable,
           area: e.area,
           deviceClass: e.deviceClass,
+          brightness: e.brightness,
+          rgb: e.rgb,
+          supportsColor: e.supportsColor,
+          supportsColorTemp: e.supportsColorTemp,
           attributes: e.attributes,
         }))}
       />

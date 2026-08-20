@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth";
-import { prisma, setSetting } from "@/lib/db";
+import { prisma, getSetting, setSetting } from "@/lib/db";
 import { HOME_CONFIG_KEY, normalizeHome, type HomeConfig } from "@/lib/homeConfig";
 import { NOTIFY_POLICY_KEY, normalizePolicy, type NotifyPolicy } from "@/lib/notifyPolicy";
 import {
@@ -133,7 +133,7 @@ export async function toggleEntity(entityId: string): Promise<ServiceResult> {
 /** Detailed light control: brightness and colour temperature, not only on/off. */
 export async function setLight(
   entityId: string,
-  opts: { on?: boolean; brightnessPct?: number; colorTempK?: number }
+  opts: { on?: boolean; brightnessPct?: number; colorTempK?: number; rgb?: [number, number, number] }
 ): Promise<ServiceResult> {
   await requireRole("admin");
   const result = await haLight(entityId, opts);
@@ -145,6 +145,13 @@ export async function setLight(
 export async function entityHistory(entityId: string): Promise<HaHistoryPoint[]> {
   await requireRole("admin");
   return haHistory(entityId);
+}
+
+/** The hand-made smart-home groups, for the Home-groups widget's picker. */
+export async function listHomeGroups(): Promise<{ id: string; name: string; icon?: string }[]> {
+  await requireRole("admin");
+  const config = normalizeHome(await getSetting(HOME_CONFIG_KEY, null));
+  return config.groups.map((g) => ({ id: g.id, name: g.name, icon: g.icon }));
 }
 
 /** Turn a whole group of entities on or off in one call. */

@@ -7,6 +7,7 @@ import { Dialog } from "@/components/Dialog";
 import { toggleEntity, setGroupState, saveHomeConfig, entityHistory } from "@/actions/services";
 import type { HaHistoryPoint } from "@/lib/services";
 import { prettyName, formatValue, VALUE_FORMATS, type ValueFormat } from "@/lib/haFormat";
+import { LightControls } from "@/components/widgets/LightControls";
 import {
   groupEntities,
   type HomeConfig,
@@ -24,6 +25,10 @@ export type Entity = {
   toggleable: boolean;
   area?: string;
   deviceClass?: string;
+  brightness?: number;
+  rgb?: string;
+  supportsColor?: boolean;
+  supportsColorTemp?: boolean;
   attributes?: Record<string, string>;
 };
 
@@ -665,6 +670,20 @@ function DeviceDialog({
             </Button>
           )}
         </div>
+
+        {/* Full light control — dimmer and colour — when this is a light. */}
+        {entity.domain === "light" && on && canControl && (
+          <LightControls
+            d={d}
+            light={{
+              id: entity.id,
+              brightness: entity.brightness,
+              rgb: entity.rgb,
+              supportsColor: entity.supportsColor,
+              supportsColorTemp: entity.supportsColorTemp,
+            }}
+          />
+        )}
 
         {entity.attributes && Object.keys(entity.attributes).length > 0 && (
           <div className="flex flex-wrap gap-1.5">

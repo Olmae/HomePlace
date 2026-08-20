@@ -331,6 +331,8 @@ export const en = {
     pbs: "Backups (PBS)",
     homeassistant: "Home Assistant",
     homegroups: "Home groups",
+    homeGroupsHint: "Which groups to show. None chosen shows them all.",
+    noHomeGroups: "No groups yet — make them on the Smart home page.",
     mediaplayer: "Media player",
 
     calendar: "Calendar",
@@ -657,6 +659,7 @@ export const en = {
     noHistory: "No recent history",
     brightness: "Brightness",
     warmth: "Warmth",
+    color: "Colour",
   },
   metrics: {
     preset: "Common",

@@ -97,7 +97,7 @@ export async function Widget({ widget, config, title, d, userId, canControl = fa
     case "mediaplayer":
       return <MediaWidget config={config} title={title} d={d} canControl={canControl} />;
     case "homegroups":
-      return <HomeGroupsWidget title={title} d={d} canControl={canControl} />;
+      return <HomeGroupsWidget config={config} title={title} d={d} canControl={canControl} />;
     case "reminders":
       return userId ? (
         <RemindersList title={title} d={d} userId={userId} />
@@ -696,7 +696,17 @@ async function MediaWidget({
  * uses, with a switch per device and a dimmer per light. Server-fetched like
  * every widget; the switching is a client component handed the result.
  */
-async function HomeGroupsWidget({ title, d, canControl }: { title: string; d: Dictionary; canControl: boolean }) {
+async function HomeGroupsWidget({
+  config,
+  title,
+  d,
+  canControl,
+}: {
+  config: Record<string, unknown>;
+  title: string;
+  d: Dictionary;
+  canControl: boolean;
+}) {
   if (!(await haConfig())) {
     return <NotConfigured title={title} message={d.home.notConfigured} hint={d.home.notConfiguredHint} />;
   }
@@ -713,6 +723,7 @@ async function HomeGroupsWidget({ title, d, canControl }: { title: string; d: Di
       title={title}
       canControl={canControl}
       config={normalizeHome(configRaw)}
+      showGroups={lines(config.groups)}
       entities={entities.map((e) => ({
         id: e.id,
         name: e.name,
@@ -721,6 +732,9 @@ async function HomeGroupsWidget({ title, d, canControl }: { title: string; d: Di
         toggleable: e.toggleable,
         area: e.area,
         brightness: e.brightness,
+        rgb: e.rgb,
+        supportsColor: e.supportsColor,
+        supportsColorTemp: e.supportsColorTemp,
       }))}
     />
   );

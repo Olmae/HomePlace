@@ -1,10 +1,11 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { Card, CardHeader } from "@/components/ui";
-import { toggleEntity, setGroupState, setLight } from "@/actions/services";
+import { toggleEntity, setGroupState } from "@/actions/services";
 import { groupEntities, type HomeConfig } from "@/lib/homeConfig";
 import { prettyName } from "@/lib/haFormat";
+import { LightControls, GroupLightControls } from "./LightControls";
 import type { Dictionary } from "@/i18n";
 
 export type HomeGroupsEntity = {
@@ -15,6 +16,9 @@ export type HomeGroupsEntity = {
   toggleable: boolean;
   area?: string;
   brightness?: number;
+  rgb?: string;
+  supportsColor?: boolean;
+  supportsColorTemp?: boolean;
 };
 
 /**
@@ -32,24 +36,32 @@ export function HomeGroups({
   entities,
   config,
   canControl,
+  showGroups,
 }: {
   d: Dictionary;
   title: string;
   entities: HomeGroupsEntity[];
   config: HomeConfig;
   canControl: boolean;
+  /** Custom group ids to show. Empty or undefined shows every group. */
+  showGroups?: string[];
 }) {
   const [over, setOver] = useState<Record<string, string>>({});
+  const [openGroup, setOpenGroup] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   const nameOf = (e: HomeGroupsEntity) => config.names[e.id] || prettyName(e.id, e.name);
   const stateOf = (e: HomeGroupsEntity) => over[e.id] ?? e.state;
   const isOn = (e: HomeGroupsEntity) => ["on", "open", "home", "playing"].includes(stateOf(e));
 
+  const pick = showGroups && showGroups.length > 0 ? new Set(showGroups) : null;
   const buckets = groupEntities(entities, config, "area", {
     unplaced: d.home.unplaced,
     kindLabel: (dm) => dm,
-  }).filter((b) => b.items.some((e) => e.toggleable) || b.groupId !== undefined);
+  })
+    .filter((b) => b.items.some((e) => e.toggleable) || b.groupId !== undefined)
+    // When the widget was told which groups to show, show only those.
+    .filter((b) => !pick || (b.groupId !== undefined && pick.has(b.groupId)));
 
   function flip(e: HomeGroupsEntity) {
     if (!canControl || !e.toggleable) return;
@@ -72,6 +84,8 @@ export function HomeGroups({
 
         {buckets.map((bucket) => {
           const switchable = bucket.items.filter((e) => e.toggleable).map((e) => e.id);
+          const groupLights = bucket.items.filter((e) => e.domain === "light").map((e) => e.id);
+          const panelOpen = openGroup === bucket.key;
           return (
             <section key={bucket.key}>
               <div className="mb-1.5 flex items-center gap-2">
@@ -82,6 +96,19 @@ export function HomeGroups({
                 </h3>
                 {canControl && switchable.length > 0 && (
                   <div className="ml-auto flex items-center gap-1">
+                    {groupLights.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setOpenGroup(panelOpen ? null : bucket.key)}
+                        aria-label={d.home.color}
+                        aria-expanded={panelOpen}
+                        className={`rounded-control border px-1.5 py-0.5 text-[11px] transition-colors ${
+                          panelOpen ? "border-accent text-accent" : "border-line text-muted hover:bg-raised hover:text-text"
+                        }`}
+                      >
+                        ◑
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => flipGroup(switchable, true)}
@@ -99,6 +126,10 @@ export function HomeGroups({
                   </div>
                 )}
               </div>
+
+              {/* Group-level light control — brightness and colour for every
+                  light in the group at once. */}
+              {panelOpen && groupLights.length > 0 && <GroupLightControls d={d} lights={groupLights} />}
 
               <div className="space-y-1.5">
                 {bucket.items.map((e) => {
@@ -132,7 +163,18 @@ export function HomeGroups({
                       </div>
 
                       {/* Detailed light control appears when the light is on. */}
-                      {isLight && on && canControl && <LightControl d={d} entity={e} />}
+                      {isLight && on && canControl && (
+                        <LightControls
+                          d={d}
+                          light={{
+                            id: e.id,
+                            brightness: e.brightness,
+                            rgb: e.rgb,
+                            supportsColor: e.supportsColor,
+                            supportsColorTemp: e.supportsColorTemp,
+                          }}
+                        />
+                      )}
                     </div>
                   );
                 })}
@@ -145,66 +187,3 @@ export function HomeGroups({
   );
 }
 
-/**
- * A dimmer and a warm–cool slider for one light.
- *
- * Both answer the finger immediately and tell Home Assistant at most every
- * 200ms while dragging, so the room changes as the slider moves instead of when
- * it is let go.
- */
-function LightControl({ d, entity }: { d: Dictionary; entity: HomeGroupsEntity }) {
-  const [bright, setBright] = useState(entity.brightness ?? 100);
-  const [warm, setWarm] = useState(50); // 0 warm … 100 cool, seeded neutral
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  function send(next: { brightnessPct?: number; colorTempK?: number }) {
-    if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(() => void setLight(entity.id, next), 200);
-  }
-
-  return (
-    <div className="mt-1.5 space-y-1.5">
-      <label className="flex items-center gap-2">
-        <span className="w-4 text-center text-[11px] text-faint" aria-hidden>
-          ☼
-        </span>
-        <input
-          type="range"
-          min={1}
-          max={100}
-          value={bright}
-          aria-label={d.home.brightness}
-          onChange={(e) => {
-            const v = Number(e.target.value);
-            setBright(v);
-            send({ brightnessPct: v });
-          }}
-          className="hp-range flex-1"
-          style={{ ["--fill" as string]: `${bright}%` }}
-        />
-        <span className="w-8 text-right font-mono text-[10px] tabular-nums text-faint">{bright}%</span>
-      </label>
-
-      <label className="flex items-center gap-2">
-        <span className="w-4 text-center text-[11px] text-faint" aria-hidden>
-          ◐
-        </span>
-        <input
-          type="range"
-          min={0}
-          max={100}
-          value={warm}
-          aria-label={d.home.warmth}
-          onChange={(e) => {
-            const v = Number(e.target.value);
-            setWarm(v);
-            // 0 → 2200K (warm), 100 → 6500K (cool).
-            send({ colorTempK: Math.round(2200 + (v / 100) * (6500 - 2200)) });
-          }}
-          className="hp-range hp-range-warm flex-1"
-          style={{ ["--fill" as string]: `${warm}%` }}
-        />
-      </label>
-    </div>
-  );
-}
