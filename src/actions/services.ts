@@ -18,6 +18,7 @@ import {
   haStates,
   haToggle,
   haSetState,
+  haLight,
   haHistory,
   type HaHistoryPoint,
   type JellyfinSettings,
@@ -125,6 +126,17 @@ export async function listHaEntities(): Promise<{ id: string; name: string; doma
 export async function toggleEntity(entityId: string): Promise<ServiceResult> {
   await requireRole("admin");
   const result = await haToggle(entityId);
+  revalidatePath("/");
+  return result;
+}
+
+/** Detailed light control: brightness and colour temperature, not only on/off. */
+export async function setLight(
+  entityId: string,
+  opts: { on?: boolean; brightnessPct?: number; colorTempK?: number }
+): Promise<ServiceResult> {
+  await requireRole("admin");
+  const result = await haLight(entityId, opts);
   revalidatePath("/");
   return result;
 }

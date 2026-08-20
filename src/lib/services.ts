@@ -421,6 +421,8 @@ export type HaEntity = {
    * by hand.
    */
   deviceClass?: string;
+  /** For a light that is on: its brightness as a percentage, for the dimmer. */
+  brightness?: number;
   /** Extra attributes worth showing: brightness, temperature, battery. */
   attributes?: Record<string, string>;
 };
@@ -532,6 +534,10 @@ export async function haStates(ids?: string[]): Promise<HaEntity[] | null> {
         toggleable: TOGGLEABLE.has(domain),
         area: areaOf(id),
         deviceClass: e.attributes?.device_class ? String(e.attributes.device_class) : undefined,
+        brightness:
+          domain === "light" && e.attributes?.brightness != null
+            ? Math.round((Number(e.attributes.brightness) / 255) * 100)
+            : undefined,
         attributes: interesting(e.attributes ?? {}),
       };
     })
@@ -867,6 +873,44 @@ export async function haSetState(entityIds: string[], on: boolean): Promise<{ ok
       method: "POST",
       headers: { authorization: `Bearer ${cfg.token}`, "content-type": "application/json" },
       body: JSON.stringify({ entity_id: targets }),
+      cache: "no-store",
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+/**
+ * Detailed light control — brightness and colour temperature, not only on/off.
+ *
+ * `light.turn_on` takes brightness as a percentage and colour temperature in
+ * kelvin; turning a light fully down is a turn_off, which is what a wall dimmer
+ * does at the bottom of its travel. Only the `light` domain is accepted here.
+ */
+export async function haLight(
+  entityId: string,
+  opts: { on?: boolean; brightnessPct?: number; colorTempK?: number }
+): Promise<{ ok: boolean; error?: string }> {
+  const cfg = await haConfig();
+  if (!cfg) return { ok: false, error: "home assistant is not configured" };
+  if (entityId.split(".")[0] !== "light") return { ok: false, error: "not a light" };
+
+  const off = opts.on === false || opts.brightnessPct === 0;
+  const service = off ? "turn_off" : "turn_on";
+  const data: Record<string, unknown> = { entity_id: entityId };
+  if (!off) {
+    if (opts.brightnessPct !== undefined) data.brightness_pct = Math.max(1, Math.min(100, Math.round(opts.brightnessPct)));
+    if (opts.colorTempK !== undefined) data.color_temp_kelvin = Math.round(opts.colorTempK);
+  }
+
+  try {
+    const res = await fetch(`${cfg.url}/api/services/light/${service}`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${cfg.token}`, "content-type": "application/json" },
+      body: JSON.stringify(data),
       cache: "no-store",
       signal: AbortSignal.timeout(10000),
     });

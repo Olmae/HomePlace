@@ -11,7 +11,10 @@ import { WeatherWidget } from "./Weather";
 import { CalendarWidget } from "./Calendar";
 import { JellyfinWidget, QbitWidget, ArrWidget, PbsWidget, HomeAssistantWidget } from "./Services";
 import { MediaPlayerWidget } from "./MediaPlayer";
-import { haConfig, haMediaPlayers } from "@/lib/services";
+import { HomeGroups } from "./HomeGroups";
+import { haConfig, haMediaPlayers, haStates } from "@/lib/services";
+import { getSetting } from "@/lib/db";
+import { EMPTY_HOME, HOME_CONFIG_KEY, normalizeHome } from "@/lib/homeConfig";
 import { RemindersWidget } from "./Reminders";
 import { Gauge } from "@/components/Gauge";
 import { Chart } from "@/components/Chart";
@@ -93,6 +96,8 @@ export async function Widget({ widget, config, title, d, userId, canControl = fa
       return <HomeAssistantWidget config={config} title={title} d={d} />;
     case "mediaplayer":
       return <MediaWidget config={config} title={title} d={d} canControl={canControl} />;
+    case "homegroups":
+      return <HomeGroupsWidget title={title} d={d} canControl={canControl} />;
     case "reminders":
       return userId ? (
         <RemindersList title={title} d={d} userId={userId} />
@@ -680,6 +685,43 @@ async function MediaWidget({
       canControl={canControl}
       background={background(config.background)}
       like={like}
+    />
+  );
+}
+
+// ─────────────────────────────── Home groups ─────────────────────────────
+
+/**
+ * The smart-home groups on the board — the same groups the smart-home page
+ * uses, with a switch per device and a dimmer per light. Server-fetched like
+ * every widget; the switching is a client component handed the result.
+ */
+async function HomeGroupsWidget({ title, d, canControl }: { title: string; d: Dictionary; canControl: boolean }) {
+  if (!(await haConfig())) {
+    return <NotConfigured title={title} message={d.home.notConfigured} hint={d.home.notConfiguredHint} />;
+  }
+
+  const [entities, configRaw] = await Promise.all([
+    haStates(),
+    getSetting<unknown>(HOME_CONFIG_KEY, EMPTY_HOME),
+  ]);
+  if (!entities) return <NotConfigured title={title} message={d.home.unreachable} hint={d.home.notConfiguredHint} />;
+
+  return (
+    <HomeGroups
+      d={d}
+      title={title}
+      canControl={canControl}
+      config={normalizeHome(configRaw)}
+      entities={entities.map((e) => ({
+        id: e.id,
+        name: e.name,
+        state: e.state,
+        domain: e.domain,
+        toggleable: e.toggleable,
+        area: e.area,
+        brightness: e.brightness,
+      }))}
     />
   );
 }

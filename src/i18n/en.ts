@@ -330,6 +330,7 @@ export const en = {
     arr: "*arr queue",
     pbs: "Backups (PBS)",
     homeassistant: "Home Assistant",
+    homegroups: "Home groups",
     mediaplayer: "Media player",
 
     calendar: "Calendar",
@@ -654,6 +655,8 @@ export const en = {
     resetName: "Reset name",
     history: "History",
     noHistory: "No recent history",
+    brightness: "Brightness",
+    warmth: "Warmth",
   },
   metrics: {
     preset: "Common",

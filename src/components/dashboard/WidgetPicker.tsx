@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { TileIcon } from "@/components/TileIcon";
+import { SERVICE_ICONS, serviceLogo } from "@/lib/icons";
 import type { Dictionary } from "@/i18n";
 
 /**
@@ -27,6 +29,7 @@ export type WidgetKind =
   | "arr"
   | "pbs"
   | "homeassistant"
+  | "homegroups"
   | "mediaplayer"
   | "weather"
   | "calendar"
@@ -41,7 +44,7 @@ type Category = { key: "monitoring" | "services" | "smarthome" | "home" | "atmos
 const CATEGORIES: Category[] = [
   { key: "monitoring", widgets: ["system", "disks", "load", "chart", "gauge", "uptimestrip", "containers", "proxmox"] },
   { key: "services", widgets: ["jellyfin", "qbittorrent", "arr", "pbs"] },
-  { key: "smarthome", widgets: ["homeassistant", "mediaplayer"] },
+  { key: "smarthome", widgets: ["homegroups", "homeassistant", "mediaplayer"] },
   { key: "home", widgets: ["weather", "calendar", "reminders", "clock", "notes"] },
   { key: "atmosphere", widgets: ["slideshow", "nowplaying"] },
 ];
@@ -137,7 +140,77 @@ export function WidgetPicker({
 function Preview({ kind }: { kind: WidgetKind }) {
   const frame = "flex h-14 w-full flex-col justify-center gap-1 rounded bg-raised p-2";
 
+  // The service widgets preview with the real product logo and a sketch of
+  // their content, so the picker reads "Jellyfin" at a glance rather than an
+  // abstract grid of bars.
+  const serviceKey: Partial<Record<WidgetKind, string>> = {
+    jellyfin: "jellyfin",
+    qbittorrent: "qbittorrent",
+    arr: "sonarr",
+    pbs: "pbs",
+    homeassistant: "homeassistant",
+  };
+
+  if (serviceKey[kind]) {
+    const key = serviceKey[kind]!;
+    return (
+      <span className="flex h-14 w-full flex-row items-center gap-2 rounded bg-raised p-2">
+        <TileIcon icon={serviceLogo(key)} title={key} size="md" fallback={SERVICE_ICONS[key] ?? "•"} />
+        <span className="flex min-w-0 flex-1 flex-col gap-1">
+          {kind === "jellyfin" && (
+            <span className="flex gap-1">
+              <span className="h-6 w-4 rounded-sm bg-accent/30" />
+              <span className="h-6 w-4 rounded-sm bg-accent/20" />
+              <span className="h-6 w-4 rounded-sm bg-line" />
+            </span>
+          )}
+          {kind === "qbittorrent" && (
+            <>
+              <span className="h-1.5 w-full rounded-full bg-line">
+                <span className="block h-1.5 w-2/3 rounded-full bg-ok" />
+              </span>
+              <span className="h-1.5 w-full rounded-full bg-line">
+                <span className="block h-1.5 w-1/3 rounded-full bg-ok" />
+              </span>
+            </>
+          )}
+          {kind === "arr" && (
+            <>
+              <span className="h-1.5 w-full rounded bg-line" />
+              <span className="h-1.5 w-2/3 rounded bg-line" />
+            </>
+          )}
+          {kind === "pbs" && <span className="font-mono text-sm leading-none">OK</span>}
+          {kind === "homeassistant" && (
+            <span className="flex gap-1.5">
+              <span className="h-5 flex-1 rounded bg-accent/40" />
+              <span className="h-5 flex-1 rounded bg-line" />
+              <span className="h-5 flex-1 rounded bg-accent/40" />
+            </span>
+          )}
+        </span>
+      </span>
+    );
+  }
+
   switch (kind) {
+    case "homegroups":
+      return (
+        <span className={frame}>
+          {[true, false].map((on, i) => (
+            <span key={i} className="flex items-center gap-1.5">
+              <span className="text-[11px] leading-none" aria-hidden>
+                💡
+              </span>
+              <span className="h-1 flex-1 rounded-full bg-line">
+                <span className={`block h-1 rounded-full ${on ? "bg-accent" : ""}`} style={{ width: on ? "70%" : "0" }} />
+              </span>
+              <span className={`h-2.5 w-4 rounded-full ${on ? "bg-accent" : "bg-line"}`} />
+            </span>
+          ))}
+        </span>
+      );
+
     case "system":
     case "disks":
     case "proxmox":

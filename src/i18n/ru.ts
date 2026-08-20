@@ -329,6 +329,7 @@ export const ru: Dictionary = {
     arr: "Очередь *arr",
     pbs: "Бэкапы (PBS)",
     homeassistant: "Home Assistant",
+    homegroups: "Группы дома",
     mediaplayer: "Медиаплеер",
 
     calendar: "Календарь",
@@ -653,6 +654,8 @@ export const ru: Dictionary = {
     resetName: "Сбросить имя",
     history: "История",
     noHistory: "Недавней истории нет",
+    brightness: "Яркость",
+    warmth: "Тёплость",
   },
   metrics: {
     preset: "Частое",

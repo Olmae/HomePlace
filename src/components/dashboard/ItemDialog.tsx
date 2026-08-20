@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, type ReactNode } from "react";
 import type { Item } from "@prisma/client";
 import { Dialog } from "@/components/Dialog";
 import { Field, Input, Select, Textarea, Button } from "@/components/form";
 import { createItem, updateItem, type ItemInput } from "@/actions/dashboard";
-import { autoIcon, GLYPH } from "@/lib/icons";
+import { autoIcon, iconPackUrl, guessIcon, GLYPH } from "@/lib/icons";
 import { TileIcon } from "@/components/TileIcon";
 import { IconPicker } from "@/components/IconPicker";
 import { PlacePicker } from "./PlacePicker";
@@ -346,11 +346,11 @@ export function ItemDialog({
       <div className="flex flex-col gap-4">
         {mode === "add" && (
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
-            <KindCard active={kind === "service"} onClick={() => setKind("service")} title={d.dashboard.addContainer} hint={d.dashboard.addContainerHint} />
-            <KindCard active={kind === "link"} onClick={() => setKind("link")} title={d.dashboard.addLink} hint={d.dashboard.addLinkHint} />
-            <KindCard active={kind === "folder"} onClick={() => setKind("folder")} title={d.dashboard.addFolder} hint={d.dashboard.addFolderHint} />
-            <KindCard active={kind === "widget"} onClick={() => setKind("widget")} title={d.dashboard.addWidget} hint={d.dashboard.addWidgetHint} />
-            <KindCard active={kind === "section"} onClick={() => setKind("section")} title={d.dashboard.addSection} hint={d.dashboard.addSectionHint} />
+            <KindCard active={kind === "service"} onClick={() => setKind("service")} title={d.dashboard.addContainer} hint={d.dashboard.addContainerHint} icon={<KindIcon kind="service" />} />
+            <KindCard active={kind === "link"} onClick={() => setKind("link")} title={d.dashboard.addLink} hint={d.dashboard.addLinkHint} icon={<KindIcon kind="link" />} />
+            <KindCard active={kind === "folder"} onClick={() => setKind("folder")} title={d.dashboard.addFolder} hint={d.dashboard.addFolderHint} icon={<KindIcon kind="folder" />} />
+            <KindCard active={kind === "widget"} onClick={() => setKind("widget")} title={d.dashboard.addWidget} hint={d.dashboard.addWidgetHint} icon={<KindIcon kind="widget" />} />
+            <KindCard active={kind === "section"} onClick={() => setKind("section")} title={d.dashboard.addSection} hint={d.dashboard.addSectionHint} icon={<KindIcon kind="section" />} />
           </div>
         )}
 
@@ -895,10 +895,10 @@ function ContainerPicker({
               } ${c.onDashboard ? "opacity-55" : ""}`}
             >
               <TileIcon
-                icon={c.icon || autoIcon({ name: c.name, image: c.image })}
+                icon={c.icon || iconPackUrl({ name: c.name, image: c.image })}
                 title={c.name}
                 size="sm"
-                fallback={GLYPH.container}
+                fallback={guessIcon({ name: c.name, image: c.image }) || GLYPH.container}
               />
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-xs font-medium">{c.name}</span>
@@ -948,10 +948,10 @@ function BoundContainer({
       <span className="mb-1 block text-xs font-medium text-muted">{d.dashboard.addContainer}</span>
       <div className="flex items-center gap-2 rounded-control border border-line p-2">
         <TileIcon
-          icon={container?.icon || autoIcon({ name, image: container?.image })}
+          icon={container?.icon || iconPackUrl({ name, image: container?.image })}
           title={name}
           size="sm"
-          fallback={GLYPH.container}
+          fallback={guessIcon({ name, image: container?.image }) || GLYPH.container}
         />
         <span className="min-w-0 flex-1">
           <span className="block truncate text-sm font-medium">{name}</span>
@@ -997,7 +997,19 @@ function Extra({
   );
 }
 
-function KindCard({ active, onClick, title, hint }: { active: boolean; onClick: () => void; title: string; hint: string }) {
+function KindCard({
+  active,
+  onClick,
+  title,
+  hint,
+  icon,
+}: {
+  active: boolean;
+  onClick: () => void;
+  title: string;
+  hint: string;
+  icon: ReactNode;
+}) {
   return (
     <button
       type="button"
@@ -1006,10 +1018,65 @@ function KindCard({ active, onClick, title, hint }: { active: boolean; onClick: 
         active ? "border-accent bg-accent/10" : "border-line hover:bg-raised"
       }`}
     >
+      <span className={`mb-1 block ${active ? "text-accent" : "text-muted"}`}>{icon}</span>
       <span className="block text-sm font-medium">{title}</span>
       <span className="mt-0.5 block text-[11px] leading-snug text-muted">{hint}</span>
     </button>
   );
+}
+
+/** Line icons for the five kinds of thing a dashboard can hold. */
+function KindIcon({ kind }: { kind: Kind }) {
+  const common = {
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 1.6,
+    strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const,
+    className: "h-5 w-5",
+    "aria-hidden": true,
+  };
+  switch (kind) {
+    case "service":
+      return (
+        <svg {...common}>
+          <path d="M3 7.5 12 3l9 4.5v9L12 21l-9-4.5z" />
+          <path d="M3 7.5 12 12l9-4.5M12 12v9" />
+        </svg>
+      );
+    case "link":
+      return (
+        <svg {...common}>
+          <path d="M9 15l6-6" />
+          <path d="M11 6.5 12.5 5a4 4 0 0 1 5.7 5.7l-1.5 1.5" />
+          <path d="M13 17.5 11.5 19a4 4 0 0 1-5.7-5.7l1.5-1.5" />
+        </svg>
+      );
+    case "folder":
+      return (
+        <svg {...common}>
+          <path d="M3 7.5A1.5 1.5 0 0 1 4.5 6h4l2 2.5h7A1.5 1.5 0 0 1 19 10v7.5A1.5 1.5 0 0 1 17.5 19h-13A1.5 1.5 0 0 1 3 17.5z" />
+        </svg>
+      );
+    case "widget":
+      return (
+        <svg {...common}>
+          <rect x="3.5" y="3.5" width="7" height="7" rx="1.5" />
+          <rect x="13.5" y="3.5" width="7" height="7" rx="1.5" />
+          <rect x="3.5" y="13.5" width="7" height="7" rx="1.5" />
+          <rect x="13.5" y="13.5" width="7" height="7" rx="1.5" />
+        </svg>
+      );
+    case "section":
+      return (
+        <svg {...common}>
+          <path d="M4 6h16M4 11h10M4 16h13" />
+        </svg>
+      );
+    default:
+      return null;
+  }
 }
 
 function parseConfig(raw: string | null | undefined): Record<string, unknown> {
