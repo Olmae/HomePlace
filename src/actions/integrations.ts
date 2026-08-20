@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { randomBytes } from "node:crypto";
 import { requireRole } from "@/lib/auth";
 import { setSetting, getSetting } from "@/lib/db";
-import { savePrometheus, saveProxmox, saveTelegram, telegramConfig } from "@/lib/integrations";
+import { savePrometheus, saveProxmox, saveTelegram, telegramConfig, saveDockerHosts } from "@/lib/integrations";
+import type { DockerHost } from "@/lib/config";
 import { prometheusHealth } from "@/lib/prometheus";
 import { proxmoxHealth } from "@/lib/proxmox";
 import { sendWith } from "@/lib/telegram";
@@ -174,6 +175,16 @@ export async function testWebhook(): Promise<TestResult> {
   if (!cfg) return { ok: false, error: "no webhook address" };
   const ok = await sendWebhook(cfg, { title: "HomePlace", body: "Test notification — the webhook is working.", severity: "info" });
   return ok ? { ok: true } : { ok: false, error: "the endpoint did not answer with a success status" };
+}
+
+/** Docker hosts added in the interface, on top of anything the .env fixes. */
+export async function saveDockerHostsSettings(hosts: DockerHost[]): Promise<TestResult> {
+  await requireRole("admin");
+  await saveDockerHosts(hosts);
+  revalidatePath("/settings");
+  revalidatePath("/containers");
+  revalidatePath("/");
+  return { ok: true };
 }
 
 /** Email through the household's own SMTP server. */

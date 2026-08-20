@@ -95,6 +95,18 @@ export async function saveDockerHosts(hosts: DockerHost[]): Promise<void> {
   );
 }
 
+/**
+ * Docker hosts split by where they come from: the ones the .env fixes (shown
+ * read-only, because a file always wins) and the ones added in the interface
+ * (editable). The settings form needs both.
+ */
+export async function dockerHostsForDisplay(): Promise<{ env: DockerHost[]; stored: DockerHost[] }> {
+  const env = dockerHosts();
+  const keys = new Set(env.map((h) => h.key));
+  const stored = (await getSetting<DockerHost[]>(KEY.dockerHosts, [])).filter((h) => h?.url && h.key && !keys.has(h.key));
+  return { env, stored };
+}
+
 // ─────────────────────────────── Prometheus ──────────────────────────────
 
 export async function prometheusConfig(): Promise<(PrometheusSettings & { source: Source }) | null> {

@@ -7,7 +7,8 @@ import { prometheusHealth } from "@/lib/prometheus";
 import { proxmoxHealth } from "@/lib/proxmox";
 import { settings as cfg } from "@/lib/config";
 import { effectiveOrigin } from "@/lib/origin";
-import { integrationStatus, integrationsForDisplay } from "@/lib/integrations";
+import { integrationStatus, integrationsForDisplay, dockerHostsForDisplay } from "@/lib/integrations";
+import { DockerHostsForm } from "./DockerHostsForm";
 import { notifiersForDisplay } from "@/lib/notify";
 import { NOTIFY_POLICY_KEY, normalizePolicy } from "@/lib/notifyPolicy";
 import { dict } from "@/i18n";
@@ -132,9 +133,10 @@ async function IntegrationsSection({
   pve: { ok: boolean; error?: string };
   userId: string;
 }) {
-  const [display, iconPack] = await Promise.all([
+  const [display, iconPack, dockerHostsDisplay] = await Promise.all([
     integrationsForDisplay(userId),
     getSetting<boolean>("icons.pack", false),
+    dockerHostsForDisplay(),
   ]);
 
   return (
@@ -170,6 +172,8 @@ async function IntegrationsSection({
       </div>
 
       {!cfg.allowContainerControl() && <p className="text-xs text-muted">⚠ {d.containers.controlDisabled}</p>}
+
+      {isAdmin && <DockerHostsForm d={d} env={dockerHostsDisplay.env} stored={dockerHostsDisplay.stored} />}
 
       {isAdmin && (
         <IntegrationForms d={d} display={display} nowPlayingToken="" appUrl={effectiveOrigin()} iconPack={iconPack} />
