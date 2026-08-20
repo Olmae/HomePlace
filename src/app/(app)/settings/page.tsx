@@ -22,6 +22,8 @@ import { NotifierForms } from "./NotifierForms";
 import { NotifyPolicyForm } from "./NotifyPolicyForm";
 import { BackupCard } from "./BackupCard";
 import { listBackups } from "@/lib/backup";
+import { StatusPageCard } from "./StatusPageCard";
+import { normalizeStatusPage, STATUS_PAGE_KEY, EMPTY_STATUS_PAGE } from "@/lib/statusPage";
 import { servicesForDisplay } from "@/lib/services";
 import { currentNowPlayingToken } from "@/actions/integrations";
 
@@ -277,11 +279,13 @@ async function AccountSection({
  * now-playing token, the icon pack, and export/import of the whole layout.
  */
 async function SystemSection({ d, userId }: { d: ReturnType<typeof dict>; userId: string }) {
-  const [display, npToken, iconPack, backups] = await Promise.all([
+  const [display, npToken, iconPack, backups, statusRaw, checkable] = await Promise.all([
     integrationsForDisplay(userId),
     currentNowPlayingToken(),
     getSetting<boolean>("icons.pack", false),
     listBackups(),
+    getSetting<unknown>(STATUS_PAGE_KEY, EMPTY_STATUS_PAGE),
+    prisma.item.findMany({ where: { checkKind: { not: "none" } }, select: { id: true, title: true }, orderBy: { title: "asc" } }),
   ]);
 
   return (
@@ -294,6 +298,7 @@ async function SystemSection({ d, userId }: { d: ReturnType<typeof dict>; userId
         iconPack={iconPack}
         only="system"
       />
+      <StatusPageCard d={d} initial={normalizeStatusPage(statusRaw)} items={checkable} />
       <BackupCard d={d} initial={backups} />
     </div>
   );
