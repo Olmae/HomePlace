@@ -14,12 +14,11 @@ import {
   StopIcon,
   RestartIcon,
   OpenIcon,
-  PlusIcon,
-  GroupIcon,
   MonitorIcon,
 } from "@/components/containers/ControlIcons";
+import { GroupCategoryIcon, categoryFor } from "@/components/containers/GroupIcons";
 import { runContainerAction } from "@/actions/containers";
-import { createItem, saveContainerGroups } from "@/actions/dashboard";
+import { saveContainerGroups } from "@/actions/dashboard";
 import { autoIcon, guessIcon, GLYPH } from "@/lib/icons";
 import {
   groupContainers,
@@ -103,35 +102,11 @@ export function ContainerTable({
   const [logsRow, setLogsRow] = useState<Row | null>(null);
   const [editing, setEditing] = useState<GroupBucket<Row> | null>(null);
   const [creating, setCreating] = useState(false);
-  const [assigning, setAssigning] = useState<Row | null>(null);
 
   function persist(next: ContainerGroupConfig) {
     setConfig(next);
     startTransition(() => void saveContainerGroups(next));
   }
-
-  /**
-   * Move one container into a custom group, or out of every custom group (back
-   * to its automatic Compose group). A container belongs to one custom group at
-   * a time, so it is first removed from all of them.
-   */
-  function moveToGroup(name: string, groupId: string | null) {
-    const custom = config.custom.map((g) => ({ ...g, members: g.members.filter((m) => m !== name) }));
-    if (groupId) {
-      const target = custom.find((g) => g.id === groupId);
-      if (target) target.members = [...target.members, name];
-    }
-    persist({ ...config, custom });
-  }
-
-  function createGroupWith(name: string, memberName: string) {
-    const group: CustomGroup = { id: `g${Date.now().toString(36)}`, name, members: [memberName] };
-    // Remove the member from any group it was already in.
-    const custom = config.custom.map((g) => ({ ...g, members: g.members.filter((m) => m !== memberName) }));
-    persist({ ...config, custom: [...custom, group] });
-  }
-
-  const groupOf = (name: string) => config.custom.find((g) => g.members.includes(name)) ?? null;
 
   const visible = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -303,37 +278,6 @@ export function ContainerTable({
               <StopIcon />
             </Button>
           )}
-
-          {canEdit && (
-            <Button size="sm" variant="quiet" title={d.containers.moveToGroup} onClick={() => setAssigning(row)}>
-              <GroupIcon />
-            </Button>
-          )}
-
-          {canEdit && !row.onDashboard && dashboardId && (
-            <Button
-              size="sm"
-              variant="quiet"
-              disabled={pending}
-              title={d.containers.addToDashboard}
-              onClick={() =>
-                startTransition(() =>
-                  void createItem({
-                    dashboardId,
-                    kind: "service",
-                    title: row.name,
-                    icon: icon || null,
-                    url: row.suggestedUrl?.replace("HOST_ADDRESS", window.location.hostname) ?? null,
-                    containerName: row.name,
-                    hostKey: row.hostKey,
-                    checkKind: "docker",
-                  })
-                )
-              }
-            >
-              <PlusIcon />
-            </Button>
-          )}
         </div>
       </li>
     );
@@ -399,9 +343,12 @@ export function ContainerTable({
         </Card>
       )}
 
-      {/* Grouped view. */}
+      {/* Grouped view — two columns on a wide screen so the stacks fill the
+          width instead of leaving a channel of empty space down the middle.
+          Columns rather than a grid: the groups are different heights, and a
+          grid would leave a ragged gap under the shorter one. */}
       {buckets && (
-        <div className="space-y-3">
+        <div className="gap-3 [column-fill:balance] sm:columns-1 lg:columns-2">
           {buckets.map((bucket) => {
             const isCollapsed = collapsed.has(bucket.key) || (bucket.hidden && !collapsed.has(`show:${bucket.key}`));
             const runningCount = bucket.items.filter((r) => r.state === "running").length;
@@ -410,7 +357,7 @@ export function ContainerTable({
             if (bucket.items.length === 0 && bucket.customId === undefined) return null;
 
             return (
-              <Card key={bucket.key} className={bucket.hidden ? "opacity-70" : ""}>
+              <Card key={bucket.key} className={`mb-3 break-inside-avoid ${bucket.hidden ? "opacity-70" : ""}`}>
                 <div className="flex items-center gap-2 border-b border-line px-3 py-2">
                   <button
                     type="button"
@@ -418,7 +365,20 @@ export function ContainerTable({
                     className="flex min-w-0 flex-1 items-center gap-2 text-left"
                   >
                     <span className={`text-faint transition-transform ${isCollapsed ? "" : "rotate-90"}`}>▸</span>
-                    {bucket.icon && <TileIcon icon={bucket.icon} title={bucket.name} size="sm" />}
+                    {bucket.icon ? (
+                      <TileIcon icon={bucket.icon} title={bucket.name} size="sm" />
+                    ) : (
+                      bucket.key !== "ungrouped" && (
+                        <span className="shrink-0 text-muted">
+                          <GroupCategoryIcon
+                            category={categoryFor(
+                              `${bucket.name} ${bucket.projectKey ?? ""} ${bucket.items.map((r) => `${r.name} ${r.image}`).join(" ")}`
+                            )}
+                            className="h-4 w-4"
+                          />
+                        </span>
+                      )
+                    )}
                     <span className="truncate text-sm font-semibold">{bucket.name}</span>
                     {bucket.auto && <Badge>{d.containers.autoGroup}</Badge>}
                     <span className="font-mono text-[11px] text-faint">
@@ -492,76 +452,7 @@ export function ContainerTable({
         />
       )}
 
-      {/* Quick assign one container to a group, from its row. */}
-      {assigning && (
-        <Dialog open onClose={() => setAssigning(null)} title={assigning.name}>
-          <p className="mb-3 text-xs text-muted">{d.containers.moveToGroup}</p>
-          <div className="space-y-1">
-            {(() => {
-              const current = groupOf(assigning.name);
-              const rowName = assigning.name;
-              return (
-                <>
-                  {config.custom.map((g) => (
-                    <button
-                      key={g.id}
-                      type="button"
-                      onClick={() => {
-                        moveToGroup(rowName, current?.id === g.id ? null : g.id);
-                        setAssigning(null);
-                      }}
-                      className={`flex w-full items-center gap-2 rounded-control border px-3 py-2 text-left text-sm transition-colors ${
-                        current?.id === g.id
-                          ? "border-accent/40 bg-accent/5"
-                          : "border-line hover:bg-raised"
-                      }`}
-                    >
-                      {g.icon && <TileIcon icon={g.icon} title={g.name} size="sm" />}
-                      <span className="truncate">{g.name}</span>
-                      {current?.id === g.id && <span className="ml-auto text-accent">✓</span>}
-                    </button>
-                  ))}
-
-                  {current && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        moveToGroup(rowName, null);
-                        setAssigning(null);
-                      }}
-                      className="flex w-full items-center gap-2 rounded-control border border-line px-3 py-2 text-left text-sm transition-colors hover:bg-raised"
-                    >
-                      {d.containers.ungrouped}
-                    </button>
-                  )}
-
-                  <NewGroupInline
-                    d={d}
-                    onCreate={(groupName) => {
-                      createGroupWith(groupName, rowName);
-                      setAssigning(null);
-                    }}
-                  />
-                </>
-              );
-            })()}
-          </div>
-        </Dialog>
-      )}
     </>
-  );
-}
-
-/** A one-field inline form to make a new group and drop the container into it. */
-function NewGroupInline({ d, onCreate }: { d: Dictionary; onCreate: (name: string) => void }) {
-  const [name, setName] = useState("");
-  return (
-    <div className="flex items-center gap-2 pt-2">
-      <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={d.containers.newGroup} className="flex-1" />
-      <Button variant="primary" disabled={!name.trim()} onClick={() => name.trim() && onCreate(name.trim())}>
-        {d.common.add}
-      </Button>
-    </div>
   );
 }
 
@@ -597,8 +488,19 @@ function GroupDialog({
   const [name, setName] = useState(bucket?.name ?? "");
   const [icon, setIcon] = useState(bucket?.icon ?? "");
   const [members, setMembers] = useState<string[]>(existingCustom?.members ?? []);
+  // Extra containers pulled into an automatic group by hand.
+  const [extra, setExtra] = useState<string[]>(
+    isAuto && bucket?.projectKey ? config.overrides[bucket.projectKey]?.extra ?? [] : []
+  );
 
   const allNames = useMemo(() => [...rows].sort((a, b) => a.name.localeCompare(b.name)), [rows]);
+
+  // Containers Compose already put in this automatic group — shown ticked and
+  // fixed, since they belong here whatever the override says.
+  const naturalHere = useMemo(
+    () => new Set(rows.filter((r) => isAuto && bucket?.projectKey && r.project === bucket.projectKey).map((r) => r.name)),
+    [rows, isAuto, bucket?.projectKey]
+  );
   // Names already spoken for by another custom group, so a container cannot be
   // claimed by two at once.
   const takenElsewhere = useMemo(() => {
@@ -614,6 +516,10 @@ function GroupDialog({
     setMembers((prev) => (prev.includes(n) ? prev.filter((x) => x !== n) : [...prev, n]));
   }
 
+  function toggleExtra(n: string) {
+    setExtra((prev) => (prev.includes(n) ? prev.filter((x) => x !== n) : [...prev, n]));
+  }
+
   function save() {
     if (isAuto && bucket?.projectKey) {
       const overrides = { ...config.overrides };
@@ -621,6 +527,8 @@ function GroupDialog({
         ...overrides[bucket.projectKey],
         name: name.trim() || undefined,
         icon: icon.trim() || undefined,
+        // Never store a container that already belongs here by Compose.
+        extra: extra.filter((n) => !naturalHere.has(n)),
       };
       onSave({ ...config, overrides });
       return;
@@ -685,6 +593,38 @@ function GroupDialog({
                       checked={members.includes(r.name)}
                       disabled={taken}
                       onChange={() => toggleMember(r.name)}
+                    />
+                    <span className="truncate">{r.name}</span>
+                    {r.project && <span className="ml-auto font-mono text-[11px] text-faint">{r.project}</span>}
+                  </label>
+                );
+              })}
+            </div>
+          </Field>
+        )}
+
+        {/* Automatic group: its Compose members are fixed, but you can pull in
+            your own containers — the ones Compose did not put here. */}
+        {isAuto && (
+          <Field label={d.containers.groupMembers} hint={d.containers.groupMembersHint}>
+            <div className="max-h-56 space-y-0.5 overflow-y-auto rounded-control border border-line p-1">
+              {allNames.map((r) => {
+                const natural = naturalHere.has(r.name);
+                const takenByCustom = takenElsewhere.has(r.name);
+                const checked = natural || extra.includes(r.name);
+                return (
+                  <label
+                    key={`${r.hostKey}/${r.id}`}
+                    className={`flex items-center gap-2 rounded-control px-2 py-1 text-sm ${
+                      natural || takenByCustom ? "opacity-50" : "hover:bg-raised"
+                    }`}
+                    title={natural ? d.containers.autoGroupHint : undefined}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      disabled={natural || takenByCustom}
+                      onChange={() => toggleExtra(r.name)}
                     />
                     <span className="truncate">{r.name}</span>
                     {r.project && <span className="ml-auto font-mono text-[11px] text-faint">{r.project}</span>}

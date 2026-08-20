@@ -5,7 +5,6 @@ import { decrypt, encrypt } from "./secretBox";
 import {
   prometheus as prometheusEnv,
   proxmox as proxmoxEnv,
-  friendplace as friendplaceEnv,
   dockerHosts,
   type DockerHost,
 } from "./config";
@@ -225,7 +224,6 @@ export async function integrationStatus() {
     prometheus: prom !== null,
     proxmox: pve !== null,
     telegram: tg !== null && tg.enabled,
-    friendplace: friendplaceEnv() !== null,
   };
 }
 

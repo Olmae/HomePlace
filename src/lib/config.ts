@@ -96,30 +96,6 @@ export function proxmox() {
   };
 }
 
-/**
- * FriendPlace single sign-on — entirely optional.
- *
- * With no variables set, the login page shows only the local form and the whole
- * integration disappears. That is the default for anyone who clones this
- * project: HomePlace stands on its own, FriendPlace is a bonus for those who
- * also run it.
- */
-export function friendplace() {
-  const url = env("FRIENDPLACE_URL");
-  const clientId = env("FRIENDPLACE_CLIENT_ID");
-  const clientSecret = env("FRIENDPLACE_CLIENT_SECRET");
-  if (!url || !clientId || !clientSecret) return null;
-  return {
-    url: url.replace(/\/+$/, ""),
-    clientId,
-    clientSecret,
-    /** Only FriendPlace admins get in; everyone else is refused after consent. */
-    adminsOnly: bool("FRIENDPLACE_ADMINS_ONLY", true),
-    /** Role handed to a newly linked account. */
-    defaultRole: env("FRIENDPLACE_DEFAULT_ROLE") ?? "admin",
-  };
-}
-
 /** Public base URL, needed to build the OAuth redirect_uri. */
 export function appUrl(): string {
   return (env("APP_URL") ?? "http://localhost:3200").replace(/\/+$/, "");

@@ -37,6 +37,12 @@ export type GroupOverride = {
   name?: string;
   icon?: string;
   hidden?: boolean;
+  /**
+   * Containers pulled into this automatic group by hand — ones Compose did not
+   * put here. This is what lets you add your own container to a stack's group
+   * from the pencil without turning the whole group into a hand-kept list.
+   */
+  extra?: string[];
 };
 
 export type ContainerGroupConfig = {
@@ -114,28 +120,44 @@ export function groupContainers<T extends { name: string; project?: string }>(
     items: [],
   };
 
+  // name → the automatic project it was pulled into by hand. Overrides the
+  // container's own Compose project, the same way a custom group does.
+  const extraOf = new Map<string, string>();
+  for (const [project, override] of Object.entries(config.overrides)) {
+    for (const name of override.extra ?? []) if (!extraOf.has(name)) extraOf.set(name, project);
+  }
+
+  const ensureAuto = (project: string): GroupBucket<T> => {
+    let bucket = auto.get(project);
+    if (!bucket) {
+      const override = config.overrides[project] ?? {};
+      bucket = {
+        key: `auto:${project}`,
+        name: override.name || project,
+        icon: override.icon,
+        auto: true,
+        projectKey: project,
+        hidden: !!override.hidden,
+        items: [],
+      };
+      auto.set(project, bucket);
+    }
+    return bucket;
+  };
+
   for (const item of items) {
     const inCustom = assigned.get(item.name);
     if (inCustom) {
       custom.get(inCustom.id)!.items.push(item);
       continue;
     }
+    const pulledInto = extraOf.get(item.name);
+    if (pulledInto) {
+      ensureAuto(pulledInto).items.push(item);
+      continue;
+    }
     if (item.project) {
-      let bucket = auto.get(item.project);
-      if (!bucket) {
-        const override = config.overrides[item.project] ?? {};
-        bucket = {
-          key: `auto:${item.project}`,
-          name: override.name || item.project,
-          icon: override.icon,
-          auto: true,
-          projectKey: item.project,
-          hidden: !!override.hidden,
-          items: [],
-        };
-        auto.set(item.project, bucket);
-      }
-      bucket.items.push(item);
+      ensureAuto(item.project).items.push(item);
       continue;
     }
     ungrouped.items.push(item);

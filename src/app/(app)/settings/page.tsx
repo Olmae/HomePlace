@@ -10,7 +10,6 @@ import { effectiveOrigin } from "@/lib/origin";
 import { integrationStatus, integrationsForDisplay } from "@/lib/integrations";
 import { notifiersForDisplay } from "@/lib/notify";
 import { NOTIFY_POLICY_KEY, normalizePolicy } from "@/lib/notifyPolicy";
-import { enabled as ssoEnabled } from "@/lib/friendplace";
 import { dict } from "@/i18n";
 import { Card, CardHeader, Badge } from "@/components/ui";
 import { ago } from "@/lib/format";
@@ -163,12 +162,6 @@ async function IntegrationsSection({
           error={pve.error}
           d={d}
         />
-        <IntegrationCard
-          name={d.settings.integrationFriendPlace}
-          configured={ssoEnabled()}
-          ok={ssoEnabled()}
-          d={d}
-        />
       </div>
 
       {!cfg.allowContainerControl() && <p className="text-xs text-muted">⚠ {d.containers.controlDisabled}</p>}
@@ -260,7 +253,6 @@ async function AccountSection({
                   <p className="truncate text-xs text-muted">{u.login ?? u.email}</p>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
-                  {u.fpUserId && <Badge tone="accent">FriendPlace</Badge>}
                   {u.disabled && <Badge tone="danger">off</Badge>}
                   <Badge tone={u.role === "owner" ? "ok" : "neutral"}>{roleLabel[u.role] ?? u.role}</Badge>
                   <span className="whitespace-nowrap text-xs text-faint">

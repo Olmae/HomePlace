@@ -123,7 +123,6 @@ export const SERVICE_ICONS: Record<string, string> = {
   dashboard: "🧭",
   homepage: "🧭",
   homeplace: "🏡",
-  friendplace: "👥",
   music: "🎵",
   camera: "📷",
   printer: "🖨️",
