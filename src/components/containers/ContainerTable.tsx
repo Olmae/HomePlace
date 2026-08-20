@@ -148,6 +148,22 @@ export function ContainerTable({
     });
   }
 
+  /**
+   * The same action across a whole group — start the stopped, or stop/restart
+   * the running. Only the containers the action can actually change are touched.
+   */
+  function actGroup(items: Row[], action: "start" | "stop" | "restart") {
+    const targets = items.filter((r) => (action === "start" ? r.state !== "running" : r.state === "running"));
+    if (targets.length === 0) return;
+    setError(null);
+    startTransition(async () => {
+      for (const row of targets) {
+        const result = await runContainerAction(row.hostKey, row.id, row.name, action);
+        if (!result.ok) setError(`${row.name}: ${result.error ?? d.containers.actionFailed}`);
+      }
+    });
+  }
+
   function toggleCollapse(key: string) {
     setCollapsed((prev) => {
       const next = new Set(prev);
@@ -386,13 +402,28 @@ export function ContainerTable({
                     </span>
                   </button>
 
-                  {canEdit && bucket.key !== "ungrouped" && (
-                    <div className="flex shrink-0 items-center gap-1">
+                  <div className="flex shrink-0 items-center gap-0.5">
+                    {/* Whole-group controls: restart or stop the running ones,
+                        start the stopped ones — the group in one press. */}
+                    {canEdit && controlEnabled && bucket.items.length > 0 && (
+                      <>
+                        <Button size="sm" variant="quiet" title={d.containers.startGroup} onClick={() => actGroup(bucket.items, "start")}>
+                          <PlayIcon />
+                        </Button>
+                        <Button size="sm" variant="quiet" title={d.containers.restartGroup} onClick={() => actGroup(bucket.items, "restart")}>
+                          <RestartIcon />
+                        </Button>
+                        <Button size="sm" variant="quiet" title={d.containers.stopGroup} onClick={() => actGroup(bucket.items, "stop")}>
+                          <StopIcon />
+                        </Button>
+                      </>
+                    )}
+                    {canEdit && bucket.key !== "ungrouped" && (
                       <Button size="sm" variant="quiet" title={d.common.edit} onClick={() => setEditing(bucket)}>
                         ✎
                       </Button>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
 
                 {!isCollapsed && (

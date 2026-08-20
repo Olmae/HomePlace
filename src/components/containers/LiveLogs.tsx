@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, Fragment, type ReactNode } from "react";
 import { Card, CardHeader } from "@/components/ui";
-import { Button } from "@/components/form";
+import { Button, Input } from "@/components/form";
 import type { Dictionary } from "@/i18n";
 
 /**
@@ -42,8 +42,22 @@ export function LiveLogs({
   const [lines, setLines] = useState<string[]>(() => initial.split("\n").filter(Boolean));
   const [live, setLive] = useState(true);
   const [connected, setConnected] = useState(false);
+  const [query, setQuery] = useState("");
+  const [onlyMatches, setOnlyMatches] = useState(false);
   const box = useRef<HTMLPreElement>(null);
   const stick = useRef(true);
+
+  const needle = query.trim().toLowerCase();
+  // When filtering, only the matching lines are shown; otherwise every line is
+  // shown and the matches within it are highlighted.
+  const shown = useMemo(
+    () => (needle && onlyMatches ? lines.filter((l) => l.toLowerCase().includes(needle)) : lines),
+    [lines, needle, onlyMatches]
+  );
+  const matchCount = useMemo(
+    () => (needle ? lines.filter((l) => l.toLowerCase().includes(needle)).length : 0),
+    [lines, needle]
+  );
 
   useEffect(() => {
     if (!live) return;
@@ -70,7 +84,7 @@ export function LiveLogs({
   useEffect(() => {
     const el = box.current;
     if (el && stick.current) el.scrollTop = el.scrollHeight;
-  }, [lines]);
+  }, [shown]);
 
   return (
     <Card>
@@ -78,6 +92,24 @@ export function LiveLogs({
         title={d.containers.logs}
         action={
           <div className="flex items-center gap-2">
+            <Input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={d.common.search}
+              className="h-7 w-36 text-xs"
+            />
+            {needle && (
+              <button
+                type="button"
+                onClick={() => setOnlyMatches((v) => !v)}
+                title={d.containers.onlyMatches}
+                className={`rounded-control border px-1.5 py-0.5 text-[11px] tabular-nums transition-colors ${
+                  onlyMatches ? "border-accent text-accent" : "border-line text-muted hover:bg-raised"
+                }`}
+              >
+                {matchCount}
+              </button>
+            )}
             <span className={`h-1.5 w-1.5 rounded-full ${connected && live ? "bg-ok" : "bg-faint"}`} aria-hidden />
             <span className="text-[11px] text-faint">{lines.length}</span>
             <Button size="sm" variant="quiet" onClick={() => setLive((v) => !v)}>
@@ -95,8 +127,34 @@ export function LiveLogs({
         }}
         className={`${className} overflow-auto p-4 font-mono text-[11px] leading-relaxed text-muted`}
       >
-        {lines.join("\n") || "—"}
+        {shown.length === 0 ? (
+          "—"
+        ) : needle ? (
+          shown.map((line, i) => (
+            <div key={i}>{highlight(line, needle)}</div>
+          ))
+        ) : (
+          shown.join("\n")
+        )}
       </pre>
     </Card>
   );
+}
+
+/** Wrap every case-insensitive occurrence of `needle` in a highlight mark. */
+function highlight(line: string, needle: string) {
+  const lower = line.toLowerCase();
+  const parts: ReactNode[] = [];
+  let from = 0;
+  for (let at = lower.indexOf(needle); at !== -1; at = lower.indexOf(needle, from)) {
+    if (at > from) parts.push(line.slice(from, at));
+    parts.push(
+      <mark key={at} className="rounded-[2px] bg-accent/30 text-text">
+        {line.slice(at, at + needle.length)}
+      </mark>
+    );
+    from = at + needle.length;
+  }
+  parts.push(line.slice(from));
+  return parts.map((p, i) => <Fragment key={i}>{p}</Fragment>);
 }

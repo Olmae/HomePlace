@@ -183,8 +183,12 @@ export const ru: Dictionary = {
     start: "Запустить",
     stop: "Остановить",
     restart: "Перезапустить",
+    startGroup: "Запустить все",
+    restartGroup: "Перезапустить все",
+    stopGroup: "Остановить все",
     logs: "Логи",
     viewLogs: "Смотреть логи",
+    onlyMatches: "Только совпадения",
     pause: "Пауза",
     resume: "Следить",
 

@@ -184,8 +184,12 @@ export const en = {
     start: "Start",
     stop: "Stop",
     restart: "Restart",
+    startGroup: "Start all",
+    restartGroup: "Restart all",
+    stopGroup: "Stop all",
     logs: "Logs",
     viewLogs: "View logs",
+    onlyMatches: "Only matching lines",
     pause: "Pause",
     resume: "Follow",
 
