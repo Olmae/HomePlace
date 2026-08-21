@@ -48,6 +48,8 @@ export type WidgetKind =
   | "airquality"
   | "rates"
   | "wol"
+  | "shopping"
+  | "presence"
   | "slideshow"
   | "nowplaying";
 
@@ -56,8 +58,8 @@ type Category = { key: "monitoring" | "services" | "smarthome" | "home" | "atmos
 const CATEGORIES: Category[] = [
   { key: "monitoring", widgets: ["system", "disks", "load", "chart", "gauge", "uptimestrip", "sla", "recentevents", "containers", "proxmox", "wol"] },
   { key: "services", widgets: ["jellyfin", "qbittorrent", "arr", "pbs"] },
-  { key: "smarthome", widgets: ["homegroups", "homeassistant", "scenes", "energy", "mediaplayer"] },
-  { key: "home", widgets: ["weather", "airquality", "calendar", "ical", "reminders", "clock", "worldclocks", "countdown", "rates", "notes", "feed", "embed"] },
+  { key: "smarthome", widgets: ["homegroups", "homeassistant", "scenes", "energy", "presence", "mediaplayer"] },
+  { key: "home", widgets: ["weather", "airquality", "calendar", "ical", "reminders", "shopping", "clock", "worldclocks", "countdown", "rates", "notes", "feed", "embed"] },
   { key: "atmosphere", widgets: ["slideshow", "nowplaying"] },
 ];
 
@@ -499,6 +501,30 @@ function Preview({ kind }: { kind: WidgetKind }) {
             <span key={i} className="flex items-center justify-between gap-1">
               <span className="h-1.5 w-10 rounded bg-line" />
               <span className="rounded bg-accent/20 px-1 text-[9px] leading-none text-accent">⏻</span>
+            </span>
+          ))}
+        </span>
+      );
+
+    case "shopping":
+      return (
+        <span className={frame}>
+          {[true, false, false].map((done, i) => (
+            <span key={i} className="flex items-center gap-1.5">
+              <span className={`h-2 w-2 rounded-[2px] border ${done ? "border-accent bg-accent" : "border-line"}`} />
+              <span className={`h-1.5 flex-1 rounded bg-line ${done ? "opacity-40" : ""}`} />
+            </span>
+          ))}
+        </span>
+      );
+
+    case "presence":
+      return (
+        <span className={frame}>
+          {[true, false].map((home, i) => (
+            <span key={i} className="flex items-center gap-1.5">
+              <span className={`h-2 w-2 rounded-full ${home ? "bg-ok" : "bg-line"}`} />
+              <span className="h-1.5 flex-1 rounded bg-line" />
             </span>
           ))}
         </span>

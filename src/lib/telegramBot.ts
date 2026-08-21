@@ -3,6 +3,7 @@ import { prisma, getSetting, setSetting } from "./db";
 import { telegramConfig } from "./integrations";
 import { tgApi, tgSend } from "./telegram";
 import { listContainers } from "./docker";
+import { addShopping, getShopping } from "./shopping";
 
 /**
  * The Telegram command bot.
@@ -20,9 +21,9 @@ import { listContainers } from "./docker";
  */
 
 const OFFSET_KEY = "telegram.offset";
-const state = new Map<string, "reminder">(); // chatId → what the next message is
+const state = new Map<string, "reminder" | "shopping">(); // chatId → what the next message is
 
-const MENU = [["➕ Напоминание"], ["📋 Мои напоминания", "📊 Статус"]];
+const MENU = [["➕ Напоминание", "🛒 В список"], ["📋 Напоминания", "📊 Статус"]];
 
 export async function pollTelegram(): Promise<void> {
   const cfg = await telegramConfig();
@@ -52,6 +53,29 @@ export async function pollTelegram(): Promise<void> {
 async function handle(chatId: string, text: string): Promise<void> {
   const lower = text.toLowerCase();
 
+  // "Done" leaves whatever mode we are in.
+  if (/^\/(done)|^готово$|^меню$|^menu$/.test(lower)) {
+    state.delete(chatId);
+    await tgSend(chatId, "Готово.", MENU);
+    return;
+  }
+
+  // Shopping mode: every line becomes an item until "готово".
+  if (state.get(chatId) === "shopping" && !/^\//.test(lower) && !/список|статус/.test(lower)) {
+    await addShopping(text);
+    await tgSend(chatId, `🛒 Добавлено: <b>${escape(text)}</b>. Ещё? Или «Готово».`);
+    return;
+  }
+
+  if (/^\/(shop|buy)|список покупок|^🛒|в список/.test(lower)) {
+    state.set(chatId, "shopping");
+    const items = await getShopping();
+    const open = items.filter((i) => !i.done);
+    const list = open.length > 0 ? "\n\n" + open.map((i) => `• ${escape(i.text)}`).join("\n") : "";
+    await tgSend(chatId, `Пишите товары — по одному в сообщении. «Готово» — закончить.${list}`);
+    return;
+  }
+
   if (/^\/(start|help)|^меню$|^menu$/.test(lower)) {
     state.delete(chatId);
     await tgSend(chatId, "Что добавить? Выберите или просто напишите напоминание — например «Купить хлеб завтра 18:00».", MENU);
@@ -62,12 +86,12 @@ async function handle(chatId: string, text: string): Promise<void> {
     await tgSend(chatId, await statusText(), MENU);
     return;
   }
-  if (/^\/list|мои напоминани/.test(lower)) {
+  if (/^\/list|^📋/.test(lower)) {
     state.delete(chatId);
     await tgSend(chatId, await remindersText(), MENU);
     return;
   }
-  if (/^\/remind|напоминание/.test(lower)) {
+  if (/^\/remind|^➕/.test(lower)) {
     state.set(chatId, "reminder");
     await tgSend(chatId, "Напишите напоминание и время. Например: «Позвонить маме завтра 19:30» или «Оплатить интернет | 25.12 10:00».");
     return;

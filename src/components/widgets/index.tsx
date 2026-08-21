@@ -28,6 +28,8 @@ import { uptimeRatio } from "@/lib/monitor";
 import { readFeed } from "@/lib/feeds";
 import { readIcal } from "@/lib/ical";
 import { Wol, type WolMachine } from "./Wol";
+import { ShoppingList } from "./ShoppingList";
+import { getShopping } from "@/lib/shopping";
 import { bytes, percent, duration, ago } from "@/lib/format";
 import type { Dictionary } from "@/i18n";
 
@@ -138,6 +140,10 @@ export async function Widget({ widget, config, title, d, userId, canControl = fa
       return <RatesWidget config={config} title={title} d={d} />;
     case "wol":
       return <WolWidget config={config} title={title} d={d} canControl={canControl} />;
+    case "shopping":
+      return <ShoppingWidget title={title} d={d} canControl={canControl} />;
+    case "presence":
+      return <PresenceWidget title={title} d={d} />;
     case "notes":
       return <NotesWidget title={title} text={str(config.text) ?? ""} />;
     default:
@@ -1186,6 +1192,50 @@ async function RatesWidget({ config, title, d }: { config: Record<string, unknow
 
 function formatRate(r: number): string {
   return r >= 100 ? r.toFixed(2) : r >= 1 ? r.toFixed(3) : r.toFixed(5);
+}
+
+// ──────────────────────────────── Shopping ───────────────────────────────
+
+/** The shared shopping list — also fed by the Telegram bot. */
+async function ShoppingWidget({ title, d, canControl }: { title: string; d: Dictionary; canControl: boolean }) {
+  const items = await getShopping();
+  return <ShoppingList d={d} title={title} items={items} canControl={canControl} />;
+}
+
+// ──────────────────────────────── Presence ───────────────────────────────
+
+/** Who is home, from Home Assistant's people. */
+async function PresenceWidget({ title, d }: { title: string; d: Dictionary }) {
+  if (!(await haConfig())) {
+    return <NotConfigured title={title} message={d.home.notConfigured} hint={d.home.notConfiguredHint} />;
+  }
+  const entities = await haStates();
+  if (!entities) return <NotConfigured title={title} message={d.home.unreachable} hint={d.home.notConfiguredHint} />;
+
+  const people = entities.filter((e) => e.domain === "person" || e.domain === "device_tracker");
+  return (
+    <Card className="flex h-full flex-col">
+      <CardHeader title={title} icon="🏠" />
+      <div className="min-h-0 flex-1 divide-y divide-line overflow-y-auto">
+        {people.length === 0 ? (
+          <p className="p-4 text-sm text-muted">{d.widgets.noData}</p>
+        ) : (
+          people.map((p) => {
+            const home = p.state === "home";
+            return (
+              <div key={p.id} className="flex items-center gap-3 px-4 py-2.5">
+                <span className={`h-2 w-2 shrink-0 rounded-full ${home ? "bg-ok" : "bg-faint"}`} aria-hidden />
+                <span className="min-w-0 flex-1 truncate text-sm font-medium">{p.name}</span>
+                <span className={`shrink-0 text-xs ${home ? "text-ok" : "text-muted"}`}>
+                  {home ? d.widgets.presenceHome : p.state === "not_home" ? d.widgets.presenceAway : p.state}
+                </span>
+              </div>
+            );
+          })
+        )}
+      </div>
+    </Card>
+  );
 }
 
 // ─────────────────────────────────── WoL ─────────────────────────────────
