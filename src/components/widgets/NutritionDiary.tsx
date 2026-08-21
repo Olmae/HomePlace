@@ -50,7 +50,7 @@ export function NutritionDiary({ d, title, state, canControl }: { d: Dictionary;
         )}
       </div>
 
-      {!editing && canControl && state.profile && <AddFood d={d} fatSecret={state.fatSecret} onAdded={refresh} start={start} />}
+      {!editing && canControl && state.profile && <AddFood d={d} lookup={state.lookup} onAdded={refresh} start={start} />}
     </Card>
   );
 }
@@ -135,13 +135,13 @@ function Entries({ d, state, canControl, onChange }: { d: Dictionary; state: Nut
 
 // ─────────────────────────────── Add food ───────────────────────────────
 
-function AddFood({ d, fatSecret, onAdded, start }: { d: Dictionary; fatSecret: boolean; onAdded: () => void; start: (fn: () => void) => void }) {
+function AddFood({ d, lookup, onAdded, start }: { d: Dictionary; lookup: boolean; onAdded: () => void; start: (fn: () => void) => void }) {
   const t = d.widgets;
   const [query, setQuery] = useState("");
   const [barcode, setBarcode] = useState("");
   const [result, setResult] = useState<SearchResult | null>(null);
   const [busy, setBusy] = useState(false);
-  const [manual, setManual] = useState(!fatSecret);
+  const [manual, setManual] = useState(!lookup);
   const [scanning, setScanning] = useState(false);
   const [canScan, setCanScan] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -169,7 +169,7 @@ function AddFood({ d, fatSecret, onAdded, start }: { d: Dictionary; fatSecret: b
     try { setResult(await searchBarcode(c)); } finally { setBusy(false); }
   }
 
-  if (manual) return <ManualForm d={d} onAdded={onAdded} start={start} onCancel={fatSecret ? () => setManual(false) : undefined} />;
+  if (manual) return <ManualForm d={d} onAdded={onAdded} start={start} onCancel={lookup ? () => setManual(false) : undefined} />;
 
   const foods = result?.foods ?? [];
   return (

@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { getProfile, setProfile, computeTargets, type NutritionProfile, type Targets } from "@/lib/nutrition";
-import { fatSecretSearch, fatSecretBarcode, type SearchResult } from "@/lib/fatsecret";
+import { foodSearch, foodByBarcode } from "@/lib/food";
+import type { SearchResult } from "@/lib/fatsecret";
 
 /**
  * The food diary.
@@ -21,7 +22,9 @@ export type NutritionState = {
   targets: Targets | null;
   entries: FoodEntry[];
   totals: DayTotals;
-  fatSecret: boolean;
+  // Whether online food lookup is available. Always true now — Open Food Facts
+  // is keyless, so search and barcode work even without FatSecret configured.
+  lookup: boolean;
 };
 
 function startOfToday(): Date {
@@ -41,13 +44,12 @@ export async function getNutrition(): Promise<NutritionState> {
     (t, e) => ({ kcal: t.kcal + e.kcal, protein: t.protein + e.protein, fat: t.fat + e.fat, carbs: t.carbs + e.carbs }),
     { kcal: 0, protein: 0, fat: 0, carbs: 0 }
   );
-  const { fatSecretConfig } = await import("@/lib/fatsecret");
   return {
     profile,
     targets: profile ? computeTargets(profile) : null,
     entries,
     totals: { kcal: Math.round(totals.kcal), protein: Math.round(totals.protein), fat: Math.round(totals.fat), carbs: Math.round(totals.carbs) },
-    fatSecret: (await fatSecretConfig()) !== null,
+    lookup: true,
   };
 }
 
@@ -66,12 +68,12 @@ export async function saveNutritionProfile(input: NutritionProfile): Promise<voi
 
 export async function searchFood(query: string): Promise<SearchResult> {
   await requireUser();
-  return fatSecretSearch(query);
+  return foodSearch(query);
 }
 
 export async function searchBarcode(barcode: string): Promise<SearchResult> {
   await requireUser();
-  return fatSecretBarcode(barcode);
+  return foodByBarcode(barcode);
 }
 
 export async function logFood(input: { name: string; kcal: number; protein: number; fat: number; carbs: number; grams?: number | null }): Promise<void> {

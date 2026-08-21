@@ -7,7 +7,7 @@ import { addShopping, getShopping } from "./shopping";
 import { haToggle } from "./services";
 import { sendWol } from "./wol";
 import { extractRepeat, repeatLabel } from "./recurrence";
-import { fatSecretSearch, fatSecretBarcode } from "./fatsecret";
+import { foodSearch, foodByBarcode } from "./food";
 import { dict } from "@/i18n";
 
 /**
@@ -209,7 +209,7 @@ async function handleFood(chatId: string, text: string): Promise<void> {
     }
   }
 
-  const res = isBarcode ? await fatSecretBarcode(bare) : await fatSecretSearch(query);
+  const res = isBarcode ? await foodByBarcode(bare) : await foodSearch(query);
   if (res.error) {
     await tgSend(chatId, foodErrorText(res.error));
     return;

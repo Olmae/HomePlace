@@ -238,7 +238,14 @@ export function Board({
             }}
             className={`hp-cell group/cell relative ${
               dragging ? "z-30 scale-[1.02] opacity-95 drop-shadow-2xl transition-transform" : ""
-            } ${editing ? "touch-none select-none focus-within:z-10" : ""}`}
+            } ${
+              // Pointer-dragging (and the touch-action lock it needs) belongs to
+              // md and up. On a phone the tile stays scrollable and moves with the
+              // ↑↓ buttons instead — a full-tile drag that eats every touch is why
+              // the page could not be scrolled in edit mode. A light ring stands in
+              // for the drag surface's ring as the "editing" cue on small screens.
+              editing ? "select-none focus-within:z-10 md:touch-none rounded-card ring-1 ring-inset ring-accent/25 md:ring-0" : ""
+            }`}
           >
             {/* Drag surface and keyboard handle, edit mode only — one element,
                 not two. As two, the focusable layer covered the drag layer and
@@ -267,7 +274,7 @@ export function Board({
                   e.preventDefault();
                   nudge(box.id, delta[0], delta[1], e.shiftKey);
                 }}
-                className={`absolute inset-0 z-[5] rounded-card ring-1 ring-inset focus:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
+                className={`absolute inset-0 z-[5] hidden rounded-card ring-1 ring-inset focus:outline-none focus-visible:ring-2 focus-visible:ring-accent md:block ${
                   locked.has(box.id)
                     ? "cursor-not-allowed ring-warn/40"
                     : "cursor-grab ring-accent/30 active:cursor-grabbing"
@@ -323,7 +330,7 @@ export function Board({
                   e.stopPropagation();
                   setDrag({ kind: "resize", id: box.id, startX: e.clientX, startY: e.clientY, origin: box });
                 }}
-                className="absolute bottom-0 right-0 z-10 flex h-5 w-5 cursor-se-resize items-center justify-center rounded-br-card text-faint hover:text-accent"
+                className="absolute bottom-0 right-0 z-10 hidden h-5 w-5 cursor-se-resize items-center justify-center rounded-br-card text-faint hover:text-accent md:flex"
               >
                 <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden>
                   <path d="M9 1v8H1" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
