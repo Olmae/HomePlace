@@ -1,6 +1,7 @@
 import type { Dictionary } from "./en";
 
 export const ru: Dictionary = {
+  lang: "ru",
   common: {
     change: "Изменить",
     appName: "HomePlace",
@@ -852,9 +853,27 @@ export const ru: Dictionary = {
   reminders: {
     what: "О чём напомнить",
     once: "Один раз",
+    hourly: "Каждый час",
     daily: "Каждый день",
     weekly: "Каждую неделю",
     monthly: "Каждый месяц",
+    yearly: "Каждый год",
+    custom: "Каждые…",
+    every: "Каждые {n} {unit}",
+    repeatLabel: "Повтор",
+    count: "Число",
+    unitHours: "часы",
+    unitDays: "дни",
+    unitWeeks: "недели",
+    unitMonths: "месяцы",
+    unitYears: "годы",
+    units: {
+      hour: ["час", "часа", "часов"],
+      day: ["день", "дня", "дней"],
+      week: ["неделю", "недели", "недель"],
+      month: ["месяц", "месяца", "месяцев"],
+      year: ["год", "года", "лет"],
+    },
     done: "Готово",
     empty: "Напоминаний нет",
   },

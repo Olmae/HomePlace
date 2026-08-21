@@ -2,6 +2,9 @@
 // type-checked against it so a missing translation is a build error, not a blank
 // label in the interface.
 export const en = {
+  // BCP-47-ish language code, for the few places that need real grammar
+  // (plural forms) rather than a fixed string.
+  lang: "en",
   common: {
     change: "Change",
     appName: "HomePlace",
@@ -853,9 +856,27 @@ export const en = {
   reminders: {
     what: "What to remember",
     once: "Once",
+    hourly: "Hourly",
     daily: "Daily",
     weekly: "Weekly",
     monthly: "Monthly",
+    yearly: "Yearly",
+    custom: "Every…",
+    every: "Every {n} {unit}",
+    repeatLabel: "Repeat",
+    count: "Count",
+    unitHours: "hours",
+    unitDays: "days",
+    unitWeeks: "weeks",
+    unitMonths: "months",
+    unitYears: "years",
+    units: {
+      hour: ["hour", "hours", "hours"],
+      day: ["day", "days", "days"],
+      week: ["week", "weeks", "weeks"],
+      month: ["month", "months", "months"],
+      year: ["year", "years", "years"],
+    },
     done: "Done",
     empty: "Nothing to remember",
   },

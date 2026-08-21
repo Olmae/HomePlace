@@ -6,6 +6,8 @@ import { listContainers, controlContainer } from "./docker";
 import { addShopping, getShopping } from "./shopping";
 import { haToggle } from "./services";
 import { sendWol } from "./wol";
+import { extractRepeat, repeatLabel } from "./recurrence";
+import { dict } from "@/i18n";
 
 /**
  * The Telegram command bot.
@@ -82,7 +84,11 @@ async function handle(chatId: string, text: string): Promise<void> {
     state.delete(chatId);
     await tgSend(
       chatId,
-      "Напишите напоминание (например «Купить хлеб завтра 18:00») или выберите ниже.\n\n" +
+      "Напишите напоминание, например:\n" +
+        "• «Купить хлеб завтра 18:00»\n" +
+        "• «Полить цветы каждые 2 дня»\n" +
+        "• «Зарядка каждый день 8:00»\n" +
+        "• «Оплатить интернет 25.12 10:00 каждый месяц»\n\n" +
         "Команды:\n/restart &lt;имя&gt; — перезапустить контейнер\n/scene &lt;entity&gt; — запустить сцену\n/wake &lt;MAC&gt; — разбудить ПК",
       MENU
     );
@@ -122,7 +128,7 @@ async function handle(chatId: string, text: string): Promise<void> {
   }
   if (/^\/remind|^➕/.test(lower)) {
     state.set(chatId, "reminder");
-    await tgSend(chatId, "Напишите напоминание и время. Например: «Позвонить маме завтра 19:30» или «Оплатить интернет | 25.12 10:00».");
+    await tgSend(chatId, "Напишите напоминание и время. Например: «Позвонить маме завтра 19:30», «Полить цветы каждые 2 дня» или «Оплатить интернет | 25.12 10:00 каждый месяц».");
     return;
   }
 
@@ -135,8 +141,11 @@ async function handle(chatId: string, text: string): Promise<void> {
   state.delete(chatId);
   await createReminder(parsed);
   const when = parsed.at.toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
-  const rep = parsed.repeat !== "none" ? ` (${parsed.repeat})` : "";
-  await tgSend(chatId, `✅ Добавлено: <b>${escape(parsed.title)}</b> — ${when}${rep}`, MENU);
+  const rep = parsed.repeat !== "none" ? ` · ${repeatLabel(parsed.repeat, dict("ru")).toLowerCase()}` : "";
+  // No time was written and a relative day was assumed — say when, and invite a
+  // precise time instead.
+  const hint = parsed.assumedTime ? "\n<i>Время не указано — поставил через 24 часа. Хотите иначе — допишите время, например «18:00».</i>" : "";
+  await tgSend(chatId, `✅ Добавлено: <b>${escape(parsed.title)}</b> — ${when}${rep}${hint}`, MENU);
 }
 
 async function createReminder(r: { title: string; at: Date; repeat: string }): Promise<void> {
@@ -179,22 +188,35 @@ async function statusText(): Promise<string> {
 // ───────────────────────────── Time parsing ──────────────────────────────
 
 /** Pull a title, a moment and a repeat out of a plain-language line. */
-export function parseReminder(input: string): { title: string; at: Date; repeat: string } | null {
+export function parseReminder(input: string): { title: string; at: Date; repeat: string; assumedTime: boolean } | null {
   let text = input.trim();
   if (text.includes("|")) {
     // Explicit form: "text | when" — parse the two halves separately.
     const [t, w] = text.split("|");
     const when = parseWhen(w);
     const title = t.trim();
-    return when && title ? { title, at: when.at, repeat: when.repeat } : null;
+    return when && title ? { title, at: when.at, repeat: when.repeat, assumedTime: when.assumedTime } : null;
   }
 
   const now = new Date();
   const d = new Date(now);
   d.setSeconds(0, 0);
-  let repeat = "none";
   let found = false;
   let timeSet = false;
+  // A relative day ("завтра") with no clock time means the same time tomorrow —
+  // exactly 24 hours out — rather than a made-up 09:00. A calendar date is
+  // different: there the morning is the sensible default.
+  let relativeDay = false;
+
+  // Repeat first, in either language and either spelling — "каждые два дня",
+  // "every 3 hours", "ежедневно". Handled by the shared parser so the widget
+  // and the bot always agree on what a cadence means.
+  const rep = extractRepeat(text);
+  let repeat = rep.repeat;
+  if (repeat !== "none") {
+    text = rep.text;
+    found = true;
+  }
 
   const strip = (re: RegExp, fn: (m: RegExpMatchArray) => void) => {
     const m = text.match(re);
@@ -204,11 +226,9 @@ export function parseReminder(input: string): { title: string; at: Date; repeat:
     found = true;
   };
 
-  strip(/\b(каждый день|ежедневно|daily)\b/i, () => (repeat = "daily"));
-  strip(/\b(каждую неделю|еженедельно|weekly)\b/i, () => (repeat = "weekly"));
-  strip(/\b(каждый месяц|ежемесячно|monthly)\b/i, () => (repeat = "monthly"));
-
-  strip(/\b(через|in)\s+(\d+)\s*(мин\w*|м|min\w*|час\w*|ч|h|hours?|дн\w*|день|дня|дней|d|days?)\b/i, (m) => {
+  // `\b` is ASCII-only in JS and never matches next to Cyrillic, so these use
+  // explicit letter classes and space anchors instead.
+  strip(/(?:^|\s)(через|in)\s+(\d+)\s*(мин[а-яё]*|м|min[a-z]*|час[а-яё]*|ч|h|hours?|дн[а-яё]*|день|d|days?)/i, (m) => {
     const n = Number(m[2]);
     const u = m[3].toLowerCase();
     const ms = /^(мин|м|min)/.test(u) ? 60_000 : /^(час|ч|h)/.test(u) ? 3_600_000 : 86_400_000;
@@ -217,9 +237,9 @@ export function parseReminder(input: string): { title: string; at: Date; repeat:
     timeSet = true;
   });
 
-  strip(/\b(послезавтра|день после завтра)\b/i, () => d.setDate(now.getDate() + 2));
-  strip(/\b(завтра|tomorrow)\b/i, () => d.setDate(now.getDate() + 1));
-  strip(/\b(сегодня|today)\b/i, () => {});
+  strip(/(послезавтра|день после завтра)/i, () => { d.setDate(now.getDate() + 2); relativeDay = true; });
+  strip(/(завтра|tomorrow)/i, () => { d.setDate(now.getDate() + 1); relativeDay = true; });
+  strip(/(сегодня|today)/i, () => {});
 
   strip(/\b(\d{1,2})[.\/](\d{1,2})(?:[.\/](\d{2,4}))?\b/, (m) => {
     d.setMonth(Number(m[2]) - 1, Number(m[1]));
@@ -231,23 +251,33 @@ export function parseReminder(input: string): { title: string; at: Date; repeat:
     timeSet = true;
   });
   if (!timeSet) {
-    strip(/\bв\s+(\d{1,2})(?:\s*(час\w*|ч))?\b/i, (m) => {
+    strip(/(?:^|\s)(?:в|at)\s+(\d{1,2})(?:\s*(час[а-яё]*|ч|h))?(?:\s|$)/i, (m) => {
       d.setHours(Number(m[1]), 0, 0, 0);
       timeSet = true;
     });
   }
 
   if (!found) return null;
-  if (!timeSet) d.setHours(9, 0, 0, 0); // a date with no time means the morning
+
+  // "завтра" with no time is exactly a day out, keeping the current clock time;
+  // a bare calendar date with no time falls back to the morning.
+  let assumedTime = false;
+  if (!timeSet) {
+    if (relativeDay) {
+      assumedTime = true; // same time tomorrow — flag it so the reply can say so
+    } else {
+      d.setHours(9, 0, 0, 0);
+    }
+  }
   if (d < now) d.setDate(d.getDate() + 1); // a time already past today is tomorrow's
 
   const title = text.replace(/\s+/g, " ").replace(/^[\s|·,-]+|[\s|·,-]+$/g, "").trim();
-  return title ? { title, at: d, repeat } : null;
+  return title ? { title, at: d, repeat, assumedTime } : null;
 }
 
-function parseWhen(str: string): { at: Date; repeat: string } | null {
+function parseWhen(str: string): { at: Date; repeat: string; assumedTime: boolean } | null {
   const parsed = parseReminder(`placeholder ${str}`);
-  return parsed ? { at: parsed.at, repeat: parsed.repeat } : null;
+  return parsed ? { at: parsed.at, repeat: parsed.repeat, assumedTime: parsed.assumedTime } : null;
 }
 
 function escape(s: string): string {

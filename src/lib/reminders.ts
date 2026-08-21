@@ -2,6 +2,7 @@ import "server-only";
 import { prisma } from "./db";
 import { sendPush } from "./push";
 import { notify } from "./notify";
+import { nextOccurrence } from "./recurrence";
 
 /**
  * Reminders that have come due.
@@ -20,7 +21,18 @@ export async function processReminders(): Promise<void> {
   if (due.length === 0) return;
 
   for (const reminder of due) {
-    await prisma.reminder.update({ where: { id: reminder.id }, data: { notifiedAt: now } });
+    // A one-off is marked notified and stays put until it is ticked off. A
+    // repeating one moves itself to its next time right away — "water the
+    // plants every two days" should keep coming back on its own, without
+    // anyone having to press done for the cycle to continue.
+    if (reminder.repeat === "none") {
+      await prisma.reminder.update({ where: { id: reminder.id }, data: { notifiedAt: now } });
+    } else {
+      await prisma.reminder.update({
+        where: { id: reminder.id },
+        data: { at: nextOccurrence(reminder.at, reminder.repeat), notifiedAt: null },
+      });
+    }
 
     await prisma.event.create({
       data: { type: "system", severity: "info", title: reminder.title, detail: "reminder" },

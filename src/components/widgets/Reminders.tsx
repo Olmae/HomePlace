@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { Card, CardHeader } from "@/components/ui";
 import { Input, Select, Button } from "@/components/form";
 import { addReminder, completeReminder, deleteReminder } from "@/actions/reminders";
+import { makeRepeat, repeatLabel, type RepeatUnit } from "@/lib/recurrence";
 import type { Dictionary } from "@/i18n";
 
 export type ReminderRow = { id: string; title: string; at: string; repeat: string };
@@ -18,9 +19,13 @@ export type ReminderRow = { id: string; title: string; at: string; repeat: strin
 export function RemindersWidget({ d, title, rows }: { d: Dictionary; title: string; rows: ReminderRow[] }) {
   const [text, setText] = useState("");
   const [when, setWhen] = useState(defaultWhen());
-  const [repeat, setRepeat] = useState("none");
+  const [repeatMode, setRepeatMode] = useState("none");
+  const [everyN, setEveryN] = useState("2");
+  const [everyUnit, setEveryUnit] = useState<RepeatUnit>("day");
   const [adding, setAdding] = useState(false);
   const [pending, startTransition] = useTransition();
+
+  const repeat = repeatMode === "custom" ? makeRepeat(Number(everyN) || 2, everyUnit) : repeatMode;
 
   function submit() {
     if (!text.trim()) return;
@@ -60,16 +65,40 @@ export function RemindersWidget({ d, title, rows }: { d: Dictionary; title: stri
           />
           <div className="flex gap-2">
             <Input type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)} className="flex-1" />
-            <Select value={repeat} onChange={(e) => setRepeat(e.target.value)} className="w-28">
+            <Select value={repeatMode} onChange={(e) => setRepeatMode(e.target.value)} className="w-32" aria-label={d.reminders.repeatLabel}>
               <option value="none">{d.reminders.once}</option>
+              <option value="hourly">{d.reminders.hourly}</option>
               <option value="daily">{d.reminders.daily}</option>
               <option value="weekly">{d.reminders.weekly}</option>
               <option value="monthly">{d.reminders.monthly}</option>
+              <option value="yearly">{d.reminders.yearly}</option>
+              <option value="custom">{d.reminders.custom}</option>
             </Select>
             <Button variant="primary" size="sm" disabled={pending || !text.trim()} onClick={submit}>
               {d.common.add}
             </Button>
           </div>
+
+          {repeatMode === "custom" && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-faint">{d.reminders.custom}</span>
+              <Input
+                type="number"
+                min={2}
+                value={everyN}
+                onChange={(e) => setEveryN(e.target.value)}
+                className="w-16 text-center"
+                aria-label={d.reminders.count}
+              />
+              <Select value={everyUnit} onChange={(e) => setEveryUnit(e.target.value as RepeatUnit)} className="flex-1">
+                <option value="hour">{d.reminders.unitHours}</option>
+                <option value="day">{d.reminders.unitDays}</option>
+                <option value="week">{d.reminders.unitWeeks}</option>
+                <option value="month">{d.reminders.unitMonths}</option>
+                <option value="year">{d.reminders.unitYears}</option>
+              </Select>
+            </div>
+          )}
         </div>
       )}
 
@@ -97,7 +126,7 @@ export function RemindersWidget({ d, title, rows }: { d: Dictionary; title: stri
                   {today
                     ? at.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })
                     : at.toLocaleString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
-                  {row.repeat !== "none" && ` · ${d.reminders[row.repeat as "daily" | "weekly" | "monthly"]}`}
+                  {row.repeat !== "none" && ` · ${repeatLabel(row.repeat, d)}`}
                 </p>
               </div>
               <button

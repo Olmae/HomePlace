@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
-import { nextOccurrence } from "@/lib/recurrence";
+import { nextOccurrence, isRepeat } from "@/lib/recurrence";
 
 /**
  * Reminders.
@@ -32,7 +32,7 @@ export async function addReminder(input: { title: string; at: string; repeat: st
       userId: user.id,
       title: input.title.trim().slice(0, 200),
       at,
-      repeat: ["none", "daily", "weekly", "monthly"].includes(input.repeat) ? input.repeat : "none",
+      repeat: isRepeat(input.repeat) ? input.repeat : "none",
     },
   });
   revalidatePath("/");
