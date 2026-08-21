@@ -141,6 +141,10 @@ export function ItemDialog({
     homeGroups: Array.isArray(config.groups) ? (config.groups as string[]) : [],
     // Feed / embed widgets: the address they read.
     feedUrl: str(config.url),
+    // World clocks and the countdown.
+    zones: Array.isArray(config.zones) ? (config.zones as string[]).join("\n") : str(config.zones),
+    countdownTarget: str(config.target),
+    countdownLabel: str(config.label),
     // Extras for a container tile. Off by default: a tile is a link first, and
     // a dashboard of tiles that all sprout meters is a monitoring screen.
     showStats: config.stats === true,
@@ -297,6 +301,10 @@ export function ItemDialog({
         return { url: form.feedUrl.trim(), limit: Number(form.limit) };
       case "embed":
         return { url: form.feedUrl.trim() };
+      case "worldclocks":
+        return { zones: form.zones.split("\n").map((z) => z.trim()).filter(Boolean) };
+      case "countdown":
+        return { target: form.countdownTarget, label: form.countdownLabel.trim() };
       case "recentevents":
         return { limit: Number(form.limit) };
       case "sla":
@@ -640,6 +648,29 @@ export function ItemDialog({
               <Field label={d.widgets.limit}>
                 <Input type="number" min={1} max={30} value={form.limit} onChange={(e) => set("limit", Number(e.target.value))} />
               </Field>
+            )}
+
+            {form.widget === "worldclocks" && (
+              <Field label={d.widgets.zones} hint={d.widgets.zonesHint}>
+                <Textarea
+                  rows={4}
+                  value={form.zones}
+                  onChange={(e) => set("zones", e.target.value)}
+                  className="font-mono text-xs"
+                  placeholder={"Europe/Moscow\nAmerica/New_York\nAsia/Tokyo"}
+                />
+              </Field>
+            )}
+
+            {form.widget === "countdown" && (
+              <>
+                <Field label={d.widgets.countdownLabel}>
+                  <Input value={form.countdownLabel} onChange={(e) => set("countdownLabel", e.target.value)} placeholder="New Year" />
+                </Field>
+                <Field label={d.widgets.countdownTarget}>
+                  <Input type="datetime-local" value={form.countdownTarget} onChange={(e) => set("countdownTarget", e.target.value)} />
+                </Field>
+              </>
             )}
 
             {form.widget === "sla" && (

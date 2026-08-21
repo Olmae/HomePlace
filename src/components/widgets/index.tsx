@@ -1,6 +1,9 @@
 import { Card, CardHeader, Meter, Badge } from "@/components/ui";
 import { Sparkline } from "@/components/Sparkline";
 import { Clock } from "./Clock";
+import { WorldClocks } from "./WorldClocks";
+import { Countdown } from "./Countdown";
+import { Markdown } from "@/components/Markdown";
 import { query, queryOne, queryRange, Q } from "@/lib/prometheus";
 import { guests, storages } from "@/lib/proxmox";
 import { listContainers, statsForContainers } from "@/lib/docker";
@@ -60,6 +63,10 @@ export async function Widget({ widget, config, title, d, userId, canControl = fa
       return <ProxmoxWidget title={title} d={d} />;
     case "clock":
       return <Clock title={title} timeZone={str(config.timeZone)} />;
+    case "worldclocks":
+      return <WorldClocks title={title} zones={lines(config.zones)} />;
+    case "countdown":
+      return <Countdown d={d} title={title} target={str(config.target) ?? ""} label={str(config.label)} />;
     case "slideshow":
       return (
         <Slideshow
@@ -1019,11 +1026,13 @@ async function SlaWidget({ config, title, d }: { config: Record<string, unknown>
 
 function NotesWidget({ title, text }: { title: string; text: string }) {
   return (
-    <Card className="h-full">
+    <Card className="flex h-full flex-col">
       <CardHeader icon="📝" title={title} />
-      {/* whitespace-pre-wrap keeps the line breaks the user typed; a note is a
-          scratchpad, not a rich text document. */}
-      <p className="whitespace-pre-wrap p-4 text-sm leading-relaxed text-muted">{text}</p>
+      {/* Markdown, lightly: headings, lists, task checkboxes, links. A note is
+          a scratchpad, and plain text reads back as a wall. */}
+      <div className="min-h-0 flex-1 overflow-y-auto p-4 text-muted">
+        <Markdown text={text} />
+      </div>
     </Card>
   );
 }

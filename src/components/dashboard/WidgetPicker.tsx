@@ -37,6 +37,8 @@ export type WidgetKind =
   | "calendar"
   | "reminders"
   | "clock"
+  | "worldclocks"
+  | "countdown"
   | "notes"
   | "feed"
   | "embed"
@@ -51,7 +53,7 @@ const CATEGORIES: Category[] = [
   { key: "monitoring", widgets: ["system", "disks", "load", "chart", "gauge", "uptimestrip", "sla", "recentevents", "containers", "proxmox"] },
   { key: "services", widgets: ["jellyfin", "qbittorrent", "arr", "pbs"] },
   { key: "smarthome", widgets: ["homegroups", "homeassistant", "scenes", "energy", "mediaplayer"] },
-  { key: "home", widgets: ["weather", "calendar", "reminders", "clock", "notes", "feed", "embed"] },
+  { key: "home", widgets: ["weather", "calendar", "reminders", "clock", "worldclocks", "countdown", "notes", "feed", "embed"] },
   { key: "atmosphere", widgets: ["slideshow", "nowplaying"] },
 ];
 
@@ -418,6 +420,29 @@ function Preview({ kind }: { kind: WidgetKind }) {
       return (
         <span className={`${frame} items-center justify-center`}>
           <span className="font-mono text-lg leading-none">21:40</span>
+        </span>
+      );
+
+    case "worldclocks":
+      return (
+        <span className={frame}>
+          {["09:40", "14:40", "22:40"].map((t, i) => (
+            <span key={i} className="flex items-center justify-between">
+              <span className="h-1.5 w-8 rounded bg-line" />
+              <span className="font-mono text-[10px] leading-none">{t}</span>
+            </span>
+          ))}
+        </span>
+      );
+
+    case "countdown":
+      return (
+        <span className={`${frame} flex-row items-center justify-center gap-1 font-mono`}>
+          {["12", "04", "37"].map((n, i) => (
+            <span key={i} className="rounded bg-line px-1 text-sm leading-none">
+              {n}
+            </span>
+          ))}
         </span>
       );
 
