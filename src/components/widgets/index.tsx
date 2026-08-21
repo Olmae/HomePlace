@@ -26,6 +26,7 @@ import { prisma } from "@/lib/db";
 import { uptimeBuckets } from "@/lib/status";
 import { uptimeRatio } from "@/lib/monitor";
 import { readFeed } from "@/lib/feeds";
+import { readIcal } from "@/lib/ical";
 import { bytes, percent, duration, ago } from "@/lib/format";
 import type { Dictionary } from "@/i18n";
 
@@ -128,6 +129,12 @@ export async function Widget({ widget, config, title, d, userId, canControl = fa
       return <RecentEventsWidget config={config} title={title} d={d} />;
     case "sla":
       return <SlaWidget config={config} title={title} d={d} />;
+    case "ical":
+      return <IcalWidget config={config} title={title} d={d} />;
+    case "airquality":
+      return <AirQualityWidget config={config} title={title} d={d} />;
+    case "rates":
+      return <RatesWidget config={config} title={title} d={d} />;
     case "notes":
       return <NotesWidget title={title} text={str(config.text) ?? ""} />;
     default:
@@ -1022,6 +1029,160 @@ async function SlaWidget({ config, title, d }: { config: Record<string, unknown>
       </div>
     </Card>
   );
+}
+
+// ────────────────────────────────── iCal ─────────────────────────────────
+
+/** Upcoming events from any .ics calendar feed. */
+async function IcalWidget({ config, title, d }: { config: Record<string, unknown>; title: string; d: Dictionary }) {
+  const url = str(config.url);
+  if (!url) {
+    return (
+      <Card className="h-full">
+        <CardHeader icon="📅" title={title} />
+        <p className="p-4 text-sm text-muted">{d.widgets.icalHint}</p>
+      </Card>
+    );
+  }
+  const events = await readIcal(url, num(config.limit, 8));
+  return (
+    <Card className="flex h-full flex-col">
+      <CardHeader icon="📅" title={title} />
+      <div className="min-h-0 flex-1 divide-y divide-line overflow-y-auto">
+        {!events || events.length === 0 ? (
+          <p className="p-4 text-sm text-muted">{d.widgets.noData}</p>
+        ) : (
+          events.map((e, i) => (
+            <div key={i} className="flex items-baseline justify-between gap-3 px-4 py-2">
+              <span className="min-w-0 flex-1 truncate text-sm" title={e.summary}>
+                {e.summary}
+              </span>
+              <span className="shrink-0 font-mono text-[11px] tabular-nums text-faint">
+                {new Date(e.at).toLocaleDateString(undefined, { day: "2-digit", month: "short" })}
+                {!e.allDay && ` ${new Date(e.at).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}`}
+              </span>
+            </div>
+          ))
+        )}
+      </div>
+    </Card>
+  );
+}
+
+// ─────────────────────────────── Air quality ─────────────────────────────
+
+/** Air quality for a location, from Open-Meteo — no key, like the weather. */
+async function AirQualityWidget({ config, title, d }: { config: Record<string, unknown>; title: string; d: Dictionary }) {
+  const lat = Number(config.latitude);
+  const lon = Number(config.longitude);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+    return (
+      <Card className="h-full">
+        <CardHeader icon="🌫️" title={title} />
+        <p className="p-4 text-sm text-muted">{d.widgets.airHint}</p>
+      </Card>
+    );
+  }
+
+  let aqi: number | null = null;
+  let pm25: number | null = null;
+  let pm10: number | null = null;
+  try {
+    const res = await fetch(
+      `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${lat}&longitude=${lon}&current=european_aqi,pm2_5,pm10`,
+      { cache: "no-store", signal: AbortSignal.timeout(8000) }
+    );
+    if (res.ok) {
+      const cur = (await res.json())?.current ?? {};
+      aqi = num(cur.european_aqi, NaN);
+      pm25 = num(cur.pm2_5, NaN);
+      pm10 = num(cur.pm10, NaN);
+    }
+  } catch {
+    // Degrades to "no data" like every other panel.
+  }
+
+  const band = aqiBand(aqi);
+  return (
+    <Card className="flex h-full flex-col">
+      <CardHeader icon="🌫️" title={title} />
+      <div className="flex flex-1 flex-col items-center justify-center gap-1 p-4 text-center">
+        {aqi === null || !Number.isFinite(aqi) ? (
+          <p className="text-sm text-muted">{d.widgets.noData}</p>
+        ) : (
+          <>
+            <p className={`font-mono text-4xl tabular-nums ${band.color}`}>{Math.round(aqi)}</p>
+            <p className={`text-sm font-medium ${band.color}`}>{d.widgets[band.key as keyof typeof d.widgets]}</p>
+            <p className="mt-1 font-mono text-[11px] text-faint">
+              PM2.5 {pm25 != null && Number.isFinite(pm25) ? Math.round(pm25) : "—"} · PM10{" "}
+              {pm10 != null && Number.isFinite(pm10) ? Math.round(pm10) : "—"}
+            </p>
+          </>
+        )}
+      </div>
+    </Card>
+  );
+}
+
+/** European AQI band → label key and colour. */
+function aqiBand(aqi: number | null): { key: string; color: string } {
+  if (aqi === null || !Number.isFinite(aqi)) return { key: "aqiUnknown", color: "text-faint" };
+  if (aqi <= 20) return { key: "aqiGood", color: "text-ok" };
+  if (aqi <= 40) return { key: "aqiFair", color: "text-ok" };
+  if (aqi <= 60) return { key: "aqiModerate", color: "text-warn" };
+  if (aqi <= 80) return { key: "aqiPoor", color: "text-warn" };
+  return { key: "aqiVeryPoor", color: "text-danger" };
+}
+
+// ─────────────────────────────────── Rates ───────────────────────────────
+
+/** Currency rates against a base, from a free no-key source. */
+async function RatesWidget({ config, title, d }: { config: Record<string, unknown>; title: string; d: Dictionary }) {
+  const base = (str(config.base) ?? "USD").toUpperCase();
+  const symbols = lines(config.symbols).map((s) => s.toUpperCase());
+  if (symbols.length === 0) {
+    return (
+      <Card className="h-full">
+        <CardHeader icon="💱" title={title} />
+        <p className="p-4 text-sm text-muted">{d.widgets.ratesHint}</p>
+      </Card>
+    );
+  }
+
+  let rates: Record<string, number> = {};
+  try {
+    const res = await fetch(`https://open.er-api.com/v6/latest/${encodeURIComponent(base)}`, {
+      cache: "no-store",
+      signal: AbortSignal.timeout(8000),
+    });
+    if (res.ok) rates = (await res.json())?.rates ?? {};
+  } catch {
+    // no data
+  }
+
+  return (
+    <Card className="flex h-full flex-col">
+      <CardHeader icon="💱" title={title} action={<span className="font-mono text-[11px] text-faint">{base}</span>} />
+      <div className="min-h-0 flex-1 divide-y divide-line overflow-y-auto">
+        {Object.keys(rates).length === 0 ? (
+          <p className="p-4 text-sm text-muted">{d.widgets.noData}</p>
+        ) : (
+          symbols.map((sym) => (
+            <div key={sym} className="flex items-baseline justify-between gap-3 px-4 py-2">
+              <span className="text-sm font-medium">{sym}</span>
+              <span className="shrink-0 font-mono text-sm tabular-nums">
+                {rates[sym] ? formatRate(rates[sym]) : "—"}
+              </span>
+            </div>
+          ))
+        )}
+      </div>
+    </Card>
+  );
+}
+
+function formatRate(r: number): string {
+  return r >= 100 ? r.toFixed(2) : r >= 1 ? r.toFixed(3) : r.toFixed(5);
 }
 
 function NotesWidget({ title, text }: { title: string; text: string }) {

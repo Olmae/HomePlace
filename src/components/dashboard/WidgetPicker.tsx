@@ -44,6 +44,9 @@ export type WidgetKind =
   | "embed"
   | "recentevents"
   | "sla"
+  | "ical"
+  | "airquality"
+  | "rates"
   | "slideshow"
   | "nowplaying";
 
@@ -53,7 +56,7 @@ const CATEGORIES: Category[] = [
   { key: "monitoring", widgets: ["system", "disks", "load", "chart", "gauge", "uptimestrip", "sla", "recentevents", "containers", "proxmox"] },
   { key: "services", widgets: ["jellyfin", "qbittorrent", "arr", "pbs"] },
   { key: "smarthome", widgets: ["homegroups", "homeassistant", "scenes", "energy", "mediaplayer"] },
-  { key: "home", widgets: ["weather", "calendar", "reminders", "clock", "worldclocks", "countdown", "notes", "feed", "embed"] },
+  { key: "home", widgets: ["weather", "airquality", "calendar", "ical", "reminders", "clock", "worldclocks", "countdown", "rates", "notes", "feed", "embed"] },
   { key: "atmosphere", widgets: ["slideshow", "nowplaying"] },
 ];
 
@@ -456,12 +459,33 @@ function Preview({ kind }: { kind: WidgetKind }) {
       );
 
     case "feed":
+    case "ical":
       return (
         <span className={frame}>
           {[0, 1, 2].map((i) => (
             <span key={i} className="flex items-center gap-1.5">
               <span className="h-1 w-1 rounded-full bg-accent" />
               <span className="h-1.5 flex-1 rounded bg-line" style={{ width: `${90 - i * 15}%` }} />
+            </span>
+          ))}
+        </span>
+      );
+
+    case "airquality":
+      return (
+        <span className={`${frame} items-center justify-center`}>
+          <span className="font-mono text-2xl leading-none text-ok">32</span>
+          <span className="text-[9px] text-faint">AQI</span>
+        </span>
+      );
+
+    case "rates":
+      return (
+        <span className={frame}>
+          {["EUR", "RUB", "GBP"].map((c, i) => (
+            <span key={i} className="flex items-center justify-between">
+              <span className="font-mono text-[9px]">{c}</span>
+              <span className="h-1.5 w-8 rounded bg-line" />
             </span>
           ))}
         </span>

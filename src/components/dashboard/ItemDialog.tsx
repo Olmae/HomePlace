@@ -145,6 +145,9 @@ export function ItemDialog({
     zones: Array.isArray(config.zones) ? (config.zones as string[]).join("\n") : str(config.zones),
     countdownTarget: str(config.target),
     countdownLabel: str(config.label),
+    // Currency rates widget.
+    ratesBase: str(config.base) || "USD",
+    ratesSymbols: Array.isArray(config.symbols) ? (config.symbols as string[]).join("\n") : str(config.symbols),
     // Extras for a container tile. Off by default: a tile is a link first, and
     // a dashboard of tiles that all sprout meters is a monitoring screen.
     showStats: config.stats === true,
@@ -281,6 +284,7 @@ export function ItemDialog({
           caption: form.caption,
         };
       case "weather":
+      case "airquality":
         return {
           place: form.place,
           latitude: Number(form.latitude),
@@ -301,6 +305,13 @@ export function ItemDialog({
         return { url: form.feedUrl.trim(), limit: Number(form.limit) };
       case "embed":
         return { url: form.feedUrl.trim() };
+      case "ical":
+        return { url: form.feedUrl.trim(), limit: Number(form.limit) };
+      case "rates":
+        return {
+          base: form.ratesBase.trim().toUpperCase(),
+          symbols: form.ratesSymbols.split("\n").map((s) => s.trim().toUpperCase()).filter(Boolean),
+        };
       case "worldclocks":
         return { zones: form.zones.split("\n").map((z) => z.trim()).filter(Boolean) };
       case "countdown":
@@ -576,7 +587,7 @@ export function ItemDialog({
               </>
             )}
 
-            {form.widget === "weather" && (
+            {(form.widget === "weather" || form.widget === "airquality") && (
               <Field label={d.widgets.place} hint={d.widgets.weatherPick}>
                 <PlacePicker
                   d={d}
@@ -626,21 +637,41 @@ export function ItemDialog({
               </Field>
             )}
 
-            {(form.widget === "feed" || form.widget === "embed") && (
+            {(form.widget === "feed" || form.widget === "embed" || form.widget === "ical") && (
               <>
-                <Field label={d.widgets.url} hint={form.widget === "feed" ? d.widgets.feedUrlHint : d.widgets.embedUrlHint}>
+                <Field
+                  label={d.widgets.url}
+                  hint={form.widget === "feed" ? d.widgets.feedUrlHint : form.widget === "ical" ? d.widgets.icalUrlHint : d.widgets.embedUrlHint}
+                >
                   <Input
                     value={form.feedUrl}
                     onChange={(e) => set("feedUrl", e.target.value)}
-                    placeholder={form.widget === "feed" ? "https://…/releases.atom" : "https://…"}
+                    placeholder={form.widget === "feed" ? "https://…/releases.atom" : form.widget === "ical" ? "https://…/calendar.ics" : "https://…"}
                     className="font-mono text-xs"
                   />
                 </Field>
-                {form.widget === "feed" && (
+                {(form.widget === "feed" || form.widget === "ical") && (
                   <Field label={d.widgets.limit}>
                     <Input type="number" min={1} max={30} value={form.limit} onChange={(e) => set("limit", Number(e.target.value))} />
                   </Field>
                 )}
+              </>
+            )}
+
+            {form.widget === "rates" && (
+              <>
+                <Field label={d.widgets.ratesBase}>
+                  <Input value={form.ratesBase} onChange={(e) => set("ratesBase", e.target.value)} placeholder="USD" className="font-mono text-xs uppercase" />
+                </Field>
+                <Field label={d.widgets.ratesSymbols} hint={d.widgets.ratesSymbolsHint}>
+                  <Textarea
+                    rows={3}
+                    value={form.ratesSymbols}
+                    onChange={(e) => set("ratesSymbols", e.target.value)}
+                    className="font-mono text-xs uppercase"
+                    placeholder={"EUR\nRUB\nGBP"}
+                  />
+                </Field>
               </>
             )}
 
