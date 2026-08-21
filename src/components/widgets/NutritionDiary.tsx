@@ -147,7 +147,10 @@ function AddFood({ d, lookup, onAdded, start }: { d: Dictionary; lookup: boolean
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    setCanScan(typeof window !== "undefined" && "BarcodeDetector" in window && !!navigator.mediaDevices?.getUserMedia);
+    // A camera is enough — the scanner uses the native BarcodeDetector where it
+    // exists and falls back to a bundled decoder (ZXing) everywhere else, so the
+    // button is offered on iOS and Firefox too, not only on Chrome/Android.
+    setCanScan(typeof window !== "undefined" && !!navigator.mediaDevices?.getUserMedia);
   }, []);
 
   function onQuery(v: string) {
@@ -234,32 +237,45 @@ function BarcodeScanner({ d, onDetected, onClose }: { d: Dictionary; onDetected:
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    let stream: MediaStream | null = null;
-    let raf = 0;
     let stopped = false;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const Detector = (window as any).BarcodeDetector;
-    const detector = new Detector({ formats: ["ean_13", "ean_8", "upc_a", "upc_e", "code_128"] });
+    let cleanup = () => {};
 
     (async () => {
       try {
-        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
-        if (stopped) return;
-        const video = videoRef.current;
-        if (!video) return;
-        video.srcObject = stream;
-        await video.play();
-        const tick = async () => {
-          if (stopped || !videoRef.current) return;
-          try {
-            const codes = await detector.detect(videoRef.current);
-            if (codes[0]?.rawValue) { onDetectedRef.current(String(codes[0].rawValue)); return; }
-          } catch {
-            /* a frame that will not decode — try the next one */
-          }
+        if ("BarcodeDetector" in window) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const Detector = (window as any).BarcodeDetector;
+          const detector = new Detector({ formats: ["ean_13", "ean_8", "upc_a", "upc_e", "code_128"] });
+          const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+          const video = videoRef.current;
+          if (!video) return;
+          video.srcObject = stream;
+          await video.play();
+          let raf = 0;
+          const tick = async () => {
+            if (stopped || !videoRef.current) return;
+            try {
+              const codes = await detector.detect(videoRef.current);
+              if (codes[0]?.rawValue) { onDetectedRef.current(String(codes[0].rawValue)); return; }
+            } catch {
+              /* a frame that will not decode — try the next one */
+            }
+            raf = requestAnimationFrame(tick);
+          };
           raf = requestAnimationFrame(tick);
-        };
-        raf = requestAnimationFrame(tick);
+          cleanup = () => { cancelAnimationFrame(raf); stream.getTracks().forEach((tr) => tr.stop()); };
+        } else {
+          // No native detector (iOS, Firefox): load the JS decoder on demand so
+          // it never weighs on the initial bundle.
+          const { BrowserMultiFormatReader } = await import("@zxing/browser");
+          const reader = new BrowserMultiFormatReader();
+          const video = videoRef.current;
+          if (!video) return;
+          const controls = await reader.decodeFromConstraints({ video: { facingMode: "environment" } }, video, (result) => {
+            if (result && !stopped) onDetectedRef.current(result.getText());
+          });
+          cleanup = () => controls.stop();
+        }
       } catch {
         setError(d.widgets.nutritionScanError);
       }
@@ -267,8 +283,7 @@ function BarcodeScanner({ d, onDetected, onClose }: { d: Dictionary; onDetected:
 
     return () => {
       stopped = true;
-      cancelAnimationFrame(raf);
-      stream?.getTracks().forEach((tr) => tr.stop());
+      cleanup();
     };
     // Started once when the scanner opens; the detection callback is read from a
     // ref so a parent re-render never tears the camera down mid-scan.

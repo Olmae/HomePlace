@@ -207,6 +207,33 @@ export async function tgApi<T = unknown>(method: string, body: Record<string, un
   }
 }
 
+/**
+ * Download a file a user sent — a photo, typically — as raw bytes.
+ *
+ * Two hops, both through the same proxy as everything else: getFile turns a
+ * file id into a path, then the file endpoint serves the bytes. Returns null on
+ * any failure, so a bad photo never disturbs the tick.
+ */
+export async function tgFetchFile(fileId: string): Promise<Buffer | null> {
+  const cfg = await telegramConfig();
+  if (!cfg?.botToken) return null;
+  const file = await tgApi<{ file_path?: string }>("getFile", { file_id: fileId });
+  if (!file?.file_path) return null;
+  try {
+    const res = await fetch(`https://api.telegram.org/file/bot${cfg.botToken}/${file.file_path}`, {
+      cache: "no-store",
+      signal: AbortSignal.timeout(40_000),
+      // @ts-expect-error — undici's dispatcher option is not in the DOM types.
+      dispatcher: proxyDispatcher(cfg.proxyUrl ?? ""),
+    });
+    if (!res.ok) return null;
+    return Buffer.from(await res.arrayBuffer());
+  } catch (e) {
+    console.error("telegram file download failed:", e instanceof Error ? e.message : e);
+    return null;
+  }
+}
+
 /** Reply to one chat, optionally with a reply keyboard. */
 export async function tgSend(chatId: string | number, text: string, keyboard?: string[][]): Promise<void> {
   await tgApi("sendMessage", {

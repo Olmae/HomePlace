@@ -1,7 +1,8 @@
 import "server-only";
 import { prisma, getSetting, setSetting } from "./db";
 import { telegramConfig } from "./integrations";
-import { tgApi, tgSend } from "./telegram";
+import { tgApi, tgSend, tgFetchFile } from "./telegram";
+import { decodeBarcodeFromJpeg } from "./barcodeDecode";
 import { listContainers, controlContainer } from "./docker";
 import { addShopping, getShopping } from "./shopping";
 import { haToggle } from "./services";
@@ -48,16 +49,48 @@ export async function pollTelegram(): Promise<void> {
 
   for (const u of updates) {
     const msg = u.message;
-    if (!msg?.text || !msg.chat) continue;
+    if (!msg?.chat) continue;
     // Only the configured chat is trusted — anyone else is a stranger with the
     // bot's username, and this is a control surface.
     if (String(msg.chat.id) !== String(cfg.chatId)) continue;
     try {
-      await handle(String(msg.chat.id), msg.text.trim());
+      if (msg.text) await handle(String(msg.chat.id), msg.text.trim());
+      else if (msg.photo?.length) await handlePhoto(String(msg.chat.id), msg.photo);
     } catch (e) {
       console.error("telegram command failed:", e);
     }
   }
+}
+
+/**
+ * A photo is treated as a barcode to look up — "throw a picture of the packet
+ * at the bot". The largest size is decoded server-side; a hit is logged to the
+ * diary at 100 g, and anything unreadable asks for a clearer shot or the number.
+ */
+async function handlePhoto(chatId: string, photos: { file_id: string }[]): Promise<void> {
+  const largest = photos[photos.length - 1];
+  const buf = await tgFetchFile(largest.file_id);
+  if (!buf) {
+    await tgSend(chatId, "Не удалось скачать фото. Попробуйте ещё раз.");
+    return;
+  }
+  const code = decodeBarcodeFromJpeg(buf);
+  if (!code) {
+    await tgSend(chatId, "Не разглядел штрихкод на фото. Сфотографируйте ближе и ровнее — или пришлите цифры под кодом.");
+    return;
+  }
+
+  const res = await foodByBarcode(code);
+  if (res.error) {
+    await tgSend(chatId, foodErrorText(res.error));
+    return;
+  }
+  const match = res.foods.find((f) => f.per100);
+  if (!match) {
+    await tgSend(chatId, `Штрихкод <code>${escape(code)}</code> не нашёлся в базе. Попробуйте по названию.`);
+    return;
+  }
+  await logFoodMatch(chatId, match, 100);
 }
 
 async function handle(chatId: string, text: string): Promise<void> {
@@ -87,7 +120,7 @@ async function handle(chatId: string, text: string): Promise<void> {
     state.set(chatId, "food");
     await tgSend(
       chatId,
-      "Что съели? Напишите продукт, можно с граммами: «банан 150», «овсянка», или пришлите цифры штрихкода. «Готово» — закончить." +
+      "Что съели? Напишите продукт, можно с граммами: «банан 150», «овсянка», пришлите цифры штрихкода или фото штрихкода. «Готово» — закончить." +
         `\n\n${await todayFoodLine()}`
     );
     return;
@@ -418,4 +451,4 @@ function escape(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-type TgUpdate = { update_id: number; message?: { text?: string; chat?: { id: number } } };
+type TgUpdate = { update_id: number; message?: { text?: string; chat?: { id: number }; photo?: { file_id: string }[] } };
