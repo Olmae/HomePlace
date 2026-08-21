@@ -14,6 +14,7 @@ import {
   setIconPack,
   saveGoogleSettings,
   unlinkGoogle,
+  saveFatSecretSettings,
   type TestResult,
 } from "@/actions/integrations";
 import { importConfig } from "@/actions/config";
@@ -46,6 +47,7 @@ type Display = {
     source: string;
     commands: boolean;
   };
+  fatsecret: { clientId: string; hasSecret: boolean };
 };
 
 export function IntegrationForms({
@@ -84,7 +86,50 @@ export function IntegrationForms({
       <ProxmoxForm d={d} value={display.proxmox} />
       <TelegramForm d={d} value={display.telegram} />
       <GoogleCard d={d} value={display.google} />
+      <FatSecretForm d={d} value={display.fatsecret} />
     </div>
+  );
+}
+
+// ─────────────────────────────── FatSecret ───────────────────────────────
+
+function FatSecretForm({ d, value }: { d: Dictionary; value: Display["fatsecret"] }) {
+  const [form, setForm] = useState({ clientId: value.clientId, secret: "" });
+  const [saved, setSaved] = useState(false);
+  const [pending, startTransition] = useTransition();
+
+  return (
+    <Card>
+      <CardHeader
+        title={d.settings.integrationFatSecret}
+        action={<Badge tone={value.clientId ? "ok" : "neutral"}>{value.clientId ? d.common.ok : "none"}</Badge>}
+      />
+      <div className="space-y-3 p-4">
+        <p className="text-xs text-muted">{d.settings.fatSecretHint}</p>
+        <Field label={d.settings.fatSecretClientId}>
+          <Input value={form.clientId} onChange={(e) => { setForm({ ...form, clientId: e.target.value }); setSaved(false); }} />
+        </Field>
+        <Field label={d.settings.fatSecretSecret} hint={value.hasSecret ? d.settings.secretStored : undefined}>
+          <Input type="password" value={form.secret} placeholder={value.hasSecret ? "••••••••" : ""} onChange={(e) => { setForm({ ...form, secret: e.target.value }); setSaved(false); }} />
+        </Field>
+        <div className="flex items-center gap-3">
+          <Button
+            variant="primary"
+            disabled={pending}
+            onClick={() =>
+              startTransition(async () => {
+                await saveFatSecretSettings(form);
+                setForm({ ...form, secret: "" });
+                setSaved(true);
+              })
+            }
+          >
+            {d.common.save}
+          </Button>
+          {saved && <span className="text-xs text-ok">✓ {d.common.ok}</span>}
+        </div>
+      </div>
+    </Card>
   );
 }
 

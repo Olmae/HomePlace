@@ -242,7 +242,7 @@ Where this is going, roughly in order.
 - [x] **Jellyfin** — what is playing, what to watch next, with artwork
 - [x] ***arr stack** — queue and health
 - [ ] Deeper *arr: upcoming calendar, search from the panel
-- [ ] **FatSecret** — food diary and nutrition, for a health-tracking tile
+- [x] **FatSecret** — a personal food diary with computed КБЖУ targets, foods from FatSecret search
 - [x] **Proxmox Backup Server** — last backup, datastore usage
 - [ ] **Weather** and a calendar widget for the home-page feel
 - [ ] **Uptime Kuma** import, for people migrating

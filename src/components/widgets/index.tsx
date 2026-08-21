@@ -30,6 +30,8 @@ import { readIcal } from "@/lib/ical";
 import { Wol, type WolMachine } from "./Wol";
 import { ShoppingList } from "./ShoppingList";
 import { getShopping } from "@/lib/shopping";
+import { NutritionDiary } from "./NutritionDiary";
+import { getNutrition } from "@/actions/nutrition";
 import { bytes, percent, duration, ago } from "@/lib/format";
 import type { Dictionary } from "@/i18n";
 
@@ -144,6 +146,14 @@ export async function Widget({ widget, config, title, d, userId, canControl = fa
       return <ShoppingWidget title={title} d={d} canControl={canControl} />;
     case "presence":
       return <PresenceWidget title={title} d={d} />;
+    case "nutrition":
+      return userId ? (
+        <NutritionWidget title={title} d={d} canControl={canControl} />
+      ) : (
+        <Card className="p-4">
+          <p className="text-sm text-muted">{d.widgets.noData}</p>
+        </Card>
+      );
     case "notes":
       return <NotesWidget title={title} text={str(config.text) ?? ""} />;
     default:
@@ -1236,6 +1246,14 @@ async function PresenceWidget({ title, d }: { title: string; d: Dictionary }) {
       </div>
     </Card>
   );
+}
+
+// ─────────────────────────────── Nutrition ───────────────────────────────
+
+/** The personal food diary with КБЖУ targets, backed by FatSecret search. */
+async function NutritionWidget({ title, d, canControl }: { title: string; d: Dictionary; canControl: boolean }) {
+  const state = await getNutrition();
+  return <NutritionDiary d={d} title={title} state={state} canControl={canControl} />;
 }
 
 // ─────────────────────────────────── WoL ─────────────────────────────────

@@ -50,6 +50,7 @@ export type WidgetKind =
   | "wol"
   | "shopping"
   | "presence"
+  | "nutrition"
   | "slideshow"
   | "nowplaying";
 
@@ -59,7 +60,7 @@ const CATEGORIES: Category[] = [
   { key: "monitoring", widgets: ["system", "disks", "load", "chart", "gauge", "uptimestrip", "sla", "recentevents", "containers", "proxmox", "wol"] },
   { key: "services", widgets: ["jellyfin", "qbittorrent", "arr", "pbs"] },
   { key: "smarthome", widgets: ["homegroups", "homeassistant", "scenes", "energy", "presence", "mediaplayer"] },
-  { key: "home", widgets: ["weather", "airquality", "calendar", "ical", "reminders", "shopping", "clock", "worldclocks", "countdown", "rates", "notes", "feed", "embed"] },
+  { key: "home", widgets: ["weather", "airquality", "calendar", "ical", "reminders", "shopping", "nutrition", "clock", "worldclocks", "countdown", "rates", "notes", "feed", "embed"] },
   { key: "atmosphere", widgets: ["slideshow", "nowplaying"] },
 ];
 
@@ -525,6 +526,17 @@ function Preview({ kind }: { kind: WidgetKind }) {
             <span key={i} className="flex items-center gap-1.5">
               <span className={`h-2 w-2 rounded-full ${home ? "bg-ok" : "bg-line"}`} />
               <span className="h-1.5 flex-1 rounded bg-line" />
+            </span>
+          ))}
+        </span>
+      );
+
+    case "nutrition":
+      return (
+        <span className={frame}>
+          {["bg-accent", "bg-ok", "bg-warn", "bg-info"].map((c, i) => (
+            <span key={i} className="h-1.5 overflow-hidden rounded-full bg-line">
+              <span className={`block h-full rounded-full ${c}`} style={{ width: `${70 - i * 15}%` }} />
             </span>
           ))}
         </span>

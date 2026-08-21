@@ -1,6 +1,7 @@
 import "server-only";
 import { getSetting, setSetting } from "./db";
 import { googleConfig, linkedAccount, redirectUri as googleRedirectUri } from "./google";
+import { fatSecretConfig } from "./fatsecret";
 import { decrypt, encrypt } from "./secretBox";
 import {
   prometheus as prometheusEnv,
@@ -241,15 +242,17 @@ export async function integrationStatus() {
 
 /** Settings as the form should show them: secrets masked, never sent raw. */
 export async function integrationsForDisplay(userId?: string) {
-  const [prom, pve, tg, google, linked, tgCommands] = await Promise.all([
+  const [prom, pve, tg, google, linked, tgCommands, fatsecret] = await Promise.all([
     prometheusConfig(),
     proxmoxConfig(),
     telegramConfig(),
     googleConfig(),
     userId ? linkedAccount(userId) : Promise.resolve(null),
     getSetting<boolean>("telegram.commands", false),
+    fatSecretConfig(),
   ]);
   return {
+    fatsecret: { clientId: fatsecret?.clientId ?? "", hasSecret: !!fatsecret?.secret },
     google: {
       clientId: google?.clientId ?? "",
       hasSecret: !!google?.clientSecret,

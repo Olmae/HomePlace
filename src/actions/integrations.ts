@@ -10,6 +10,7 @@ import { prometheusHealth } from "@/lib/prometheus";
 import { proxmoxHealth } from "@/lib/proxmox";
 import { sendWith } from "@/lib/telegram";
 import { saveGoogleConfig, unlinkAccount } from "@/lib/google";
+import { saveFatSecret } from "@/lib/fatsecret";
 import { saveNtfy, ntfyConfig, sendNtfy, saveWebhook, webhookConfig, sendWebhook, saveEmail, emailConfig, sendEmail, type EmailSettings } from "@/lib/notify";
 
 /**
@@ -22,6 +23,14 @@ import { saveNtfy, ntfyConfig, sendNtfy, saveWebhook, webhookConfig, sendWebhook
  */
 
 export type TestResult = { ok: boolean; error?: string };
+
+export async function saveFatSecretSettings(input: { clientId: string; secret: string }): Promise<TestResult> {
+  await requireRole("admin");
+  await saveFatSecret(input);
+  revalidatePath("/settings");
+  revalidatePath("/");
+  return { ok: true };
+}
 
 export async function savePrometheusSettings(input: {
   url: string;

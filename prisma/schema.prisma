@@ -229,6 +229,22 @@ model Schedule {
   createdAt DateTime  @default(now())
 }
 
+// One eaten thing in the food diary. The daily totals are summed from these and
+// compared against the targets computed from the person's profile.
+model FoodLog {
+  id      String   @id @default(cuid())
+  userId  String
+  at      DateTime @default(now())
+  name    String
+  kcal    Float
+  protein Float    @default(0)
+  fat     Float    @default(0)
+  carbs   Float    @default(0)
+  grams   Float?
+
+  @@index([userId, at])
+}
+
 // A change worth remembering: a service went down, came back, a container was
 // restarted, someone logged in. The feed on the dashboard reads this table.
 model Event {
