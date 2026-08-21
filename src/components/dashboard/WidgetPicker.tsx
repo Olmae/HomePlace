@@ -38,16 +38,20 @@ export type WidgetKind =
   | "reminders"
   | "clock"
   | "notes"
+  | "feed"
+  | "embed"
+  | "recentevents"
+  | "sla"
   | "slideshow"
   | "nowplaying";
 
 type Category = { key: "monitoring" | "services" | "smarthome" | "home" | "atmosphere"; widgets: WidgetKind[] };
 
 const CATEGORIES: Category[] = [
-  { key: "monitoring", widgets: ["system", "disks", "load", "chart", "gauge", "uptimestrip", "containers", "proxmox"] },
+  { key: "monitoring", widgets: ["system", "disks", "load", "chart", "gauge", "uptimestrip", "sla", "recentevents", "containers", "proxmox"] },
   { key: "services", widgets: ["jellyfin", "qbittorrent", "arr", "pbs"] },
   { key: "smarthome", widgets: ["homegroups", "homeassistant", "scenes", "energy", "mediaplayer"] },
-  { key: "home", widgets: ["weather", "calendar", "reminders", "clock", "notes"] },
+  { key: "home", widgets: ["weather", "calendar", "reminders", "clock", "notes", "feed", "embed"] },
   { key: "atmosphere", widgets: ["slideshow", "nowplaying"] },
 ];
 
@@ -422,6 +426,49 @@ function Preview({ kind }: { kind: WidgetKind }) {
         <span className={frame}>
           {[100, 90, 60].map((w, i) => (
             <span key={i} className="h-1.5 rounded bg-line" style={{ width: `${w}%` }} />
+          ))}
+        </span>
+      );
+
+    case "feed":
+      return (
+        <span className={frame}>
+          {[0, 1, 2].map((i) => (
+            <span key={i} className="flex items-center gap-1.5">
+              <span className="h-1 w-1 rounded-full bg-accent" />
+              <span className="h-1.5 flex-1 rounded bg-line" style={{ width: `${90 - i * 15}%` }} />
+            </span>
+          ))}
+        </span>
+      );
+
+    case "embed":
+      return (
+        <span className={`${frame} items-stretch justify-stretch p-1`}>
+          <span className="flex-1 rounded border border-dashed border-line bg-surface/60" />
+        </span>
+      );
+
+    case "recentevents":
+      return (
+        <span className={frame}>
+          {["bg-danger", "bg-ok", "bg-warn"].map((c, i) => (
+            <span key={i} className="flex items-center gap-1.5">
+              <span className={`h-1.5 w-1.5 rounded-full ${c}`} />
+              <span className="h-1.5 flex-1 rounded bg-line" />
+            </span>
+          ))}
+        </span>
+      );
+
+    case "sla":
+      return (
+        <span className={frame}>
+          {[99.9, 97.2, 88.5].map((p, i) => (
+            <span key={i} className="flex items-center justify-between gap-1">
+              <span className="h-1.5 w-8 rounded bg-line" />
+              <span className={`font-mono text-[9px] ${p >= 99 ? "text-ok" : p >= 95 ? "text-warn" : "text-danger"}`}>{p}%</span>
+            </span>
           ))}
         </span>
       );

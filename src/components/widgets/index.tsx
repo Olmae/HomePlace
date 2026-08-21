@@ -21,7 +21,9 @@ import { Gauge } from "@/components/Gauge";
 import { Chart } from "@/components/Chart";
 import { prisma } from "@/lib/db";
 import { uptimeBuckets } from "@/lib/status";
-import { bytes, percent, duration } from "@/lib/format";
+import { uptimeRatio } from "@/lib/monitor";
+import { readFeed } from "@/lib/feeds";
+import { bytes, percent, duration, ago } from "@/lib/format";
 import type { Dictionary } from "@/i18n";
 
 /**
@@ -111,6 +113,14 @@ export async function Widget({ widget, config, title, d, userId, canControl = fa
           <p className="text-sm text-muted">{d.widgets.noData}</p>
         </Card>
       );
+    case "feed":
+      return <FeedWidget config={config} title={title} d={d} />;
+    case "embed":
+      return <EmbedWidget config={config} title={title} d={d} />;
+    case "recentevents":
+      return <RecentEventsWidget config={config} title={title} d={d} />;
+    case "sla":
+      return <SlaWidget config={config} title={title} d={d} />;
     case "notes":
       return <NotesWidget title={title} text={str(config.text) ?? ""} />;
     default:
@@ -851,6 +861,161 @@ function background(value: unknown): "drift" | "aurora" | "waves" | "beams" | "p
 }
 
 // ─────────────────────────────────── Note ────────────────────────────────
+
+// ────────────────────────────────── Feed ─────────────────────────────────
+
+/** An RSS/Atom feed — releases, a blog, the news — as a list of latest items. */
+async function FeedWidget({ config, title, d }: { config: Record<string, unknown>; title: string; d: Dictionary }) {
+  const url = str(config.url);
+  if (!url) {
+    return (
+      <Card className="h-full">
+        <CardHeader icon="📰" title={title} />
+        <p className="p-4 text-sm text-muted">{d.widgets.feedHint}</p>
+      </Card>
+    );
+  }
+  const feed = await readFeed(url, num(config.limit, 8));
+  return (
+    <Card className="flex h-full flex-col">
+      <CardHeader icon="📰" title={title} />
+      <div className="min-h-0 flex-1 divide-y divide-line overflow-y-auto">
+        {!feed || feed.items.length === 0 ? (
+          <p className="p-4 text-sm text-muted">{d.widgets.noData}</p>
+        ) : (
+          feed.items.map((item, i) => (
+            <a
+              key={i}
+              href={item.link || "#"}
+              target="_blank"
+              rel="noreferrer"
+              className="block px-4 py-2 transition-colors hover:bg-raised"
+            >
+              <p className="truncate text-sm" title={item.title}>
+                {item.title}
+              </p>
+              {item.at > 0 && <p className="text-[11px] text-faint">{ago(item.at, d)}</p>}
+            </a>
+          ))
+        )}
+      </div>
+    </Card>
+  );
+}
+
+// ────────────────────────────────── Embed ────────────────────────────────
+
+/** Any web page in a tile — a Grafana panel, a camera, another dashboard. */
+async function EmbedWidget({ config, title, d }: { config: Record<string, unknown>; title: string; d: Dictionary }) {
+  const url = str(config.url);
+  if (!url) {
+    return (
+      <Card className="h-full">
+        <CardHeader icon="🖼️" title={title} />
+        <p className="p-4 text-sm text-muted">{d.widgets.embedHint}</p>
+      </Card>
+    );
+  }
+  return (
+    <Card className="flex h-full flex-col overflow-hidden">
+      <CardHeader icon="🖼️" title={title} />
+      {/* A page the operator chose to embed; sandboxed but allowed to run and
+          navigate within itself. */}
+      <iframe
+        src={url}
+        title={title}
+        loading="lazy"
+        sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+        className="min-h-0 w-full flex-1 border-0 bg-white"
+      />
+    </Card>
+  );
+}
+
+// ────────────────────────────── Recent events ────────────────────────────
+
+/** The latest entries from the event feed, on the board. */
+async function RecentEventsWidget({ config, title, d }: { config: Record<string, unknown>; title: string; d: Dictionary }) {
+  const events = await prisma.event.findMany({
+    orderBy: { at: "desc" },
+    take: num(config.limit, 8),
+    include: { item: { select: { title: true } } },
+  });
+
+  const label: Record<string, string> = {
+    down: d.events.wentDown,
+    up: d.events.cameUp,
+    restart: d.events.restarted,
+    login: d.events.signedIn,
+    command: d.events.command,
+    system: d.events.system,
+  };
+
+  return (
+    <Card className="flex h-full flex-col">
+      <CardHeader icon="🔔" title={title} />
+      <div className="min-h-0 flex-1 divide-y divide-line overflow-y-auto">
+        {events.length === 0 ? (
+          <p className="p-4 text-sm text-muted">{d.events.empty}</p>
+        ) : (
+          events.map((e) => (
+            <div key={e.id} className="flex items-start gap-2 px-4 py-2">
+              <span
+                className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${
+                  e.severity === "error" ? "bg-danger" : e.severity === "warn" ? "bg-warn" : "bg-ok"
+                }`}
+                aria-hidden
+              />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm">
+                  <span className="font-medium">{e.item?.title ?? e.title}</span>{" "}
+                  <span className="text-muted">{label[e.type] ?? e.type}</span>
+                </p>
+              </div>
+              <span className="shrink-0 text-[11px] text-faint">{ago(e.at, d)}</span>
+            </div>
+          ))
+        )}
+      </div>
+    </Card>
+  );
+}
+
+// ─────────────────────────────────── SLA ─────────────────────────────────
+
+/** Hard uptime numbers for the services you watch, over a chosen window. */
+async function SlaWidget({ config, title, d }: { config: Record<string, unknown>; title: string; d: Dictionary }) {
+  const only = lines(config.items);
+  const hours = num(config.hours, 24);
+  const all = await prisma.item.findMany({
+    where: { checkKind: { not: "none" } },
+    select: { id: true, title: true },
+    orderBy: { title: "asc" },
+  });
+  const chosen = (only.length > 0 ? all.filter((i) => only.includes(i.title)) : all).slice(0, num(config.limit, 10));
+  const rows = await Promise.all(chosen.map(async (i) => ({ title: i.title, pct: await uptimeRatio(i.id, hours) })));
+
+  return (
+    <Card className="flex h-full flex-col">
+      <CardHeader icon="📈" title={title} action={<span className="text-[11px] text-faint">{hours >= 24 ? `${Math.round(hours / 24)}d` : `${hours}h`}</span>} />
+      <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto p-4">
+        {rows.length === 0 && <p className="text-sm text-muted">{d.widgets.noData}</p>}
+        {rows.map((r) => (
+          <div key={r.title} className="flex items-baseline justify-between gap-2">
+            <span className="truncate text-sm">{r.title}</span>
+            <span
+              className={`shrink-0 font-mono text-sm tabular-nums ${
+                r.pct === null ? "text-faint" : r.pct >= 99 ? "text-ok" : r.pct >= 95 ? "text-warn" : "text-danger"
+              }`}
+            >
+              {r.pct === null ? "—" : percent(r.pct, 2)}
+            </span>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
 
 function NotesWidget({ title, text }: { title: string; text: string }) {
   return (

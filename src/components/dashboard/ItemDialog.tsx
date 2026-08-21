@@ -139,6 +139,8 @@ export function ItemDialog({
     jfShowCounts: config.showCounts !== false,
     // Home-groups widget: which groups to show (empty = all).
     homeGroups: Array.isArray(config.groups) ? (config.groups as string[]) : [],
+    // Feed / embed widgets: the address they read.
+    feedUrl: str(config.url),
     // Extras for a container tile. Off by default: a tile is a link first, and
     // a dashboard of tiles that all sprout meters is a monitoring screen.
     showStats: config.stats === true,
@@ -291,6 +293,18 @@ export function ItemDialog({
         return { entities: form.entities.split("\n").map((e) => e.trim()).filter(Boolean) };
       case "homegroups":
         return { groups: form.homeGroups };
+      case "feed":
+        return { url: form.feedUrl.trim(), limit: Number(form.limit) };
+      case "embed":
+        return { url: form.feedUrl.trim() };
+      case "recentevents":
+        return { limit: Number(form.limit) };
+      case "sla":
+        return {
+          items: form.services.split("\n").map((n) => n.trim()).filter(Boolean),
+          hours: Number(form.hours),
+          limit: Number(form.limit),
+        };
       case "mediaplayer":
         return {
           entities: form.entities.split("\n").map((e) => e.trim()).filter(Boolean),
@@ -602,6 +616,46 @@ export function ItemDialog({
               <Field label={d.widgets.homegroups} hint={d.widgets.homeGroupsHint}>
                 <HomeGroupSelect d={d} value={form.homeGroups} onChange={(ids) => set("homeGroups", ids)} />
               </Field>
+            )}
+
+            {(form.widget === "feed" || form.widget === "embed") && (
+              <>
+                <Field label={d.widgets.url} hint={form.widget === "feed" ? d.widgets.feedUrlHint : d.widgets.embedUrlHint}>
+                  <Input
+                    value={form.feedUrl}
+                    onChange={(e) => set("feedUrl", e.target.value)}
+                    placeholder={form.widget === "feed" ? "https://…/releases.atom" : "https://…"}
+                    className="font-mono text-xs"
+                  />
+                </Field>
+                {form.widget === "feed" && (
+                  <Field label={d.widgets.limit}>
+                    <Input type="number" min={1} max={30} value={form.limit} onChange={(e) => set("limit", Number(e.target.value))} />
+                  </Field>
+                )}
+              </>
+            )}
+
+            {form.widget === "recentevents" && (
+              <Field label={d.widgets.limit}>
+                <Input type="number" min={1} max={30} value={form.limit} onChange={(e) => set("limit", Number(e.target.value))} />
+              </Field>
+            )}
+
+            {form.widget === "sla" && (
+              <>
+                <Field label={d.widgets.onlyServices} hint={d.widgets.onlyServicesHint}>
+                  <Textarea rows={3} value={form.services} onChange={(e) => set("services", e.target.value)} className="text-xs" />
+                </Field>
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label={d.widgets.hours}>
+                    <Input type="number" min={1} value={form.hours} onChange={(e) => set("hours", Number(e.target.value))} />
+                  </Field>
+                  <Field label={d.widgets.limit}>
+                    <Input type="number" min={1} max={20} value={form.limit} onChange={(e) => set("limit", Number(e.target.value))} />
+                  </Field>
+                </div>
+              </>
             )}
 
             {form.widget === "jellyfin" && (
