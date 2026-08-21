@@ -60,8 +60,10 @@ export function HomeGroups({
     kindLabel: (dm) => dm,
   })
     .filter((b) => b.items.some((e) => e.toggleable) || b.groupId !== undefined)
-    // When the widget was told which groups to show, show only those.
-    .filter((b) => !pick || (b.groupId !== undefined && pick.has(b.groupId)));
+    // When the widget was told which sections to show, show only those. A choice
+    // can be a hand-made group (matched by its id) or an automatic room (matched
+    // by the bucket key "area:<name>"), so a widget can be pinned to one room.
+    .filter((b) => !pick || (b.groupId !== undefined && pick.has(b.groupId)) || pick.has(b.key));
 
   function flip(e: HomeGroupsEntity) {
     if (!canControl || !e.toggleable) return;
