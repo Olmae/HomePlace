@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useTransition, useRef } from "react";
+import { useState, useTransition, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardHeader } from "@/components/ui";
 import { Input, Button, Select } from "@/components/form";
-import { saveNutritionProfile, searchFood, logFood, deleteFood, type NutritionState } from "@/actions/nutrition";
+import { saveNutritionProfile, searchFood, searchBarcode, logFood, deleteFood, type NutritionState } from "@/actions/nutrition";
 import type { NutritionProfile } from "@/lib/nutrition";
-import type { FoodMatch } from "@/lib/fatsecret";
-import type { Dictionary } from "@/i18n";
+import type { FoodMatch, SearchResult } from "@/lib/fatsecret";
+import { fill, type Dictionary } from "@/i18n";
 
 /**
  * The food diary on the board.
@@ -138,23 +138,40 @@ function Entries({ d, state, canControl, onChange }: { d: Dictionary; state: Nut
 function AddFood({ d, fatSecret, onAdded, start }: { d: Dictionary; fatSecret: boolean; onAdded: () => void; start: (fn: () => void) => void }) {
   const t = d.widgets;
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<FoodMatch[] | null>(null);
+  const [barcode, setBarcode] = useState("");
+  const [result, setResult] = useState<SearchResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [manual, setManual] = useState(!fatSecret);
+  const [scanning, setScanning] = useState(false);
+  const [canScan, setCanScan] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    setCanScan(typeof window !== "undefined" && "BarcodeDetector" in window && !!navigator.mediaDevices?.getUserMedia);
+  }, []);
 
   function onQuery(v: string) {
     setQuery(v);
     if (timer.current) clearTimeout(timer.current);
-    if (v.trim().length < 2) { setResults(null); return; }
+    if (v.trim().length < 2) { setResult(null); return; }
     timer.current = setTimeout(async () => {
       setBusy(true);
-      try { setResults(await searchFood(v.trim())); } finally { setBusy(false); }
+      try { setResult(await searchFood(v.trim())); } finally { setBusy(false); }
     }, 400);
+  }
+
+  async function lookupBarcode(code?: string) {
+    const c = (code ?? barcode).replace(/\D/g, "");
+    if (c.length < 6) return;
+    setBarcode(c);
+    setQuery("");
+    setBusy(true);
+    try { setResult(await searchBarcode(c)); } finally { setBusy(false); }
   }
 
   if (manual) return <ManualForm d={d} onAdded={onAdded} start={start} onCancel={fatSecret ? () => setManual(false) : undefined} />;
 
+  const foods = result?.foods ?? [];
   return (
     <div className="border-t border-line p-2">
       <div className="flex gap-2">
@@ -163,17 +180,117 @@ function AddFood({ d, fatSecret, onAdded, start }: { d: Dictionary; fatSecret: b
           ✎
         </Button>
       </div>
+      <div className="mt-2 flex gap-2">
+        <Input
+          value={barcode}
+          onChange={(e) => setBarcode(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && lookupBarcode()}
+          inputMode="numeric"
+          placeholder={t.nutritionBarcode}
+          className="flex-1"
+        />
+        {canScan && (
+          <Button variant="quiet" onClick={() => setScanning(true)} title={t.nutritionScan}>
+            📷
+          </Button>
+        )}
+        <Button variant="quiet" onClick={() => lookupBarcode()} disabled={barcode.replace(/\D/g, "").length < 6} title={t.nutritionBarcode}>
+          🔍
+        </Button>
+      </div>
+      {scanning && <BarcodeScanner d={d} onDetected={(code) => { setScanning(false); void lookupBarcode(code); }} onClose={() => setScanning(false)} />}
       {busy && <p className="px-1 pt-2 text-xs text-faint">{d.common.loading}</p>}
-      {results && results.length === 0 && !busy && <p className="px-1 pt-2 text-xs text-faint">{t.nutritionNoResults}</p>}
-      {results && results.length > 0 && (
+      {result?.error && !busy && (
+        <p className="px-1 pt-2 text-xs text-danger">
+          {searchErrorText(result.error, t)}{" "}
+          <button type="button" onClick={() => setManual(true)} className="underline">
+            {t.nutritionManual}
+          </button>
+        </p>
+      )}
+      {result && !result.error && foods.length === 0 && !busy && <p className="px-1 pt-2 text-xs text-faint">{t.nutritionNoResults}</p>}
+      {foods.length > 0 && (
         <div className="mt-2 max-h-48 space-y-1 overflow-y-auto">
-          {results.map((r) => (
-            <FoodResult key={r.id} d={d} match={r} onAdded={() => { setQuery(""); setResults(null); onAdded(); }} start={start} />
+          {foods.map((r) => (
+            <FoodResult key={r.id} d={d} match={r} onAdded={() => { setQuery(""); setResult(null); onAdded(); }} start={start} />
           ))}
         </div>
       )}
     </div>
   );
+}
+
+/**
+ * Live barcode scanning with the browser's own BarcodeDetector.
+ *
+ * No library and no network: where the API exists (Chrome, Android) it reads
+ * the camera frames directly. The button that opens this is only shown when the
+ * API and a camera are both present, so this always has something to do.
+ */
+function BarcodeScanner({ d, onDetected, onClose }: { d: Dictionary; onDetected: (code: string) => void; onClose: () => void }) {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const onDetectedRef = useRef(onDetected);
+  onDetectedRef.current = onDetected;
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let stream: MediaStream | null = null;
+    let raf = 0;
+    let stopped = false;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const Detector = (window as any).BarcodeDetector;
+    const detector = new Detector({ formats: ["ean_13", "ean_8", "upc_a", "upc_e", "code_128"] });
+
+    (async () => {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+        if (stopped) return;
+        const video = videoRef.current;
+        if (!video) return;
+        video.srcObject = stream;
+        await video.play();
+        const tick = async () => {
+          if (stopped || !videoRef.current) return;
+          try {
+            const codes = await detector.detect(videoRef.current);
+            if (codes[0]?.rawValue) { onDetectedRef.current(String(codes[0].rawValue)); return; }
+          } catch {
+            /* a frame that will not decode — try the next one */
+          }
+          raf = requestAnimationFrame(tick);
+        };
+        raf = requestAnimationFrame(tick);
+      } catch {
+        setError(d.widgets.nutritionScanError);
+      }
+    })();
+
+    return () => {
+      stopped = true;
+      cancelAnimationFrame(raf);
+      stream?.getTracks().forEach((tr) => tr.stop());
+    };
+    // Started once when the scanner opens; the detection callback is read from a
+    // ref so a parent re-render never tears the camera down mid-scan.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-3 bg-black/80 p-4" onClick={onClose}>
+      <video ref={videoRef} className="max-h-[60vh] w-full max-w-md rounded-card" muted playsInline onClick={(e) => e.stopPropagation()} />
+      {error ? <p className="text-sm text-danger">{error}</p> : <p className="text-sm text-white/80">{d.widgets.nutritionScanHint}</p>}
+      <Button variant="ghost" onClick={onClose}>
+        {d.common.close}
+      </Button>
+    </div>
+  );
+}
+
+/** Turn a search-error code into something a person can act on. */
+function searchErrorText(error: string, t: Dictionary["widgets"]): string {
+  if (error.startsWith("ip:")) return fill(t.nutritionErrorIp, { ip: error.slice(3) || "—" });
+  if (error === "auth" || error === "not-configured") return t.nutritionErrorAuth;
+  return t.nutritionErrorApi;
 }
 
 function FoodResult({ d, match, onAdded, start }: { d: Dictionary; match: FoodMatch; onAdded: () => void; start: (fn: () => void) => void }) {

@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { getProfile, setProfile, computeTargets, type NutritionProfile, type Targets } from "@/lib/nutrition";
-import { fatSecretSearch, type FoodMatch } from "@/lib/fatsecret";
+import { fatSecretSearch, fatSecretBarcode, type SearchResult } from "@/lib/fatsecret";
 
 /**
  * The food diary.
@@ -64,9 +64,14 @@ export async function saveNutritionProfile(input: NutritionProfile): Promise<voi
   revalidatePath("/");
 }
 
-export async function searchFood(query: string): Promise<FoodMatch[]> {
+export async function searchFood(query: string): Promise<SearchResult> {
   await requireUser();
   return fatSecretSearch(query);
+}
+
+export async function searchBarcode(barcode: string): Promise<SearchResult> {
+  await requireUser();
+  return fatSecretBarcode(barcode);
 }
 
 export async function logFood(input: { name: string; kcal: number; protein: number; fat: number; carbs: number; grams?: number | null }): Promise<void> {

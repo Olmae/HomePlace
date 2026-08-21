@@ -7,6 +7,7 @@ import { addShopping, getShopping } from "./shopping";
 import { haToggle } from "./services";
 import { sendWol } from "./wol";
 import { extractRepeat, repeatLabel } from "./recurrence";
+import { fatSecretSearch, fatSecretBarcode } from "./fatsecret";
 import { dict } from "@/i18n";
 
 /**
@@ -25,9 +26,13 @@ import { dict } from "@/i18n";
  */
 
 const OFFSET_KEY = "telegram.offset";
-const state = new Map<string, "reminder" | "shopping">(); // chatId → what the next message is
+const state = new Map<string, "reminder" | "shopping" | "food">(); // chatId → what the next message is
 
-const MENU = [["➕ Напоминание", "🛒 В список"], ["📋 Напоминания", "📊 Статус"]];
+const MENU = [
+  ["➕ Напоминание", "🛒 В список"],
+  ["🍎 Еда", "📋 Напоминания"],
+  ["📊 Статус"],
+];
 
 export async function pollTelegram(): Promise<void> {
   const cfg = await telegramConfig();
@@ -71,6 +76,22 @@ async function handle(chatId: string, text: string): Promise<void> {
     return;
   }
 
+  // Food mode: every line is a food to look up and log until "готово".
+  if (state.get(chatId) === "food" && !/^\//.test(lower) && !/список|статус|напомин/.test(lower)) {
+    await handleFood(chatId, text);
+    return;
+  }
+
+  if (/^\/(food|eat)|^🍎|^еда$|дневник еды/.test(lower)) {
+    state.set(chatId, "food");
+    await tgSend(
+      chatId,
+      "Что съели? Напишите продукт, можно с граммами: «банан 150», «овсянка», или пришлите цифры штрихкода. «Готово» — закончить." +
+        `\n\n${await todayFoodLine()}`
+    );
+    return;
+  }
+
   if (/^\/(shop|buy)|список покупок|^🛒|в список/.test(lower)) {
     state.set(chatId, "shopping");
     const items = await getShopping();
@@ -89,6 +110,8 @@ async function handle(chatId: string, text: string): Promise<void> {
         "• «Полить цветы каждые 2 дня»\n" +
         "• «Зарядка каждый день 8:00»\n" +
         "• «Оплатить интернет 25.12 10:00 каждый месяц»\n\n" +
+        "🍎 «Еда» — записать съеденное (по названию, граммам или штрихкоду).\n" +
+        "🛒 «В список» — добавить покупки.\n\n" +
         "Команды:\n/restart &lt;имя&gt; — перезапустить контейнер\n/scene &lt;entity&gt; — запустить сцену\n/wake &lt;MAC&gt; — разбудить ПК",
       MENU
     );
@@ -148,13 +171,90 @@ async function handle(chatId: string, text: string): Promise<void> {
   await tgSend(chatId, `✅ Добавлено: <b>${escape(parsed.title)}</b> — ${when}${rep}${hint}`, MENU);
 }
 
-async function createReminder(r: { title: string; at: Date; repeat: string }): Promise<void> {
+/** The account the bot acts as — its reminders and its food diary belong here. */
+async function ownerId(): Promise<string | null> {
   const owner =
     (await prisma.user.findFirst({ where: { role: "owner" }, orderBy: { createdAt: "asc" }, select: { id: true } })) ??
     (await prisma.user.findFirst({ where: { role: "admin" }, orderBy: { createdAt: "asc" }, select: { id: true } })) ??
     (await prisma.user.findFirst({ orderBy: { createdAt: "asc" }, select: { id: true } }));
-  if (!owner) return;
-  await prisma.reminder.create({ data: { userId: owner.id, title: r.title, at: r.at, repeat: r.repeat } });
+  return owner?.id ?? null;
+}
+
+async function createReminder(r: { title: string; at: Date; repeat: string }): Promise<void> {
+  const id = await ownerId();
+  if (!id) return;
+  await prisma.reminder.create({ data: { userId: id, title: r.title, at: r.at, repeat: r.repeat } });
+}
+
+// ─────────────────────────────── Food diary ──────────────────────────────
+
+/**
+ * Look a food up and write it to the diary.
+ *
+ * A line is "<food> <grams>" — "банан 150" — or just a name (100 g assumed), or
+ * a run of digits, which is treated as a barcode. FatSecret answers the same way
+ * it does on the web, allow-list and all, so a blocked IP is reported here too.
+ */
+async function handleFood(chatId: string, text: string): Promise<void> {
+  const bare = text.replace(/\s+/g, "");
+  const isBarcode = /^\d{6,14}$/.test(bare);
+
+  let query = text.trim();
+  let grams = 100;
+  if (!isBarcode) {
+    const m = text.match(/^(.*?)[\s,]+(\d{1,4})\s*(г|гр|грамм\w*|g)?$/i);
+    if (m) {
+      query = m[1].trim();
+      grams = Math.max(1, Number(m[2]) || 100);
+    }
+  }
+
+  const res = isBarcode ? await fatSecretBarcode(bare) : await fatSecretSearch(query);
+  if (res.error) {
+    await tgSend(chatId, foodErrorText(res.error));
+    return;
+  }
+  const match = res.foods.find((f) => f.per100) ?? res.foods[0];
+  if (!match || !match.per100) {
+    await tgSend(chatId, isBarcode ? "Штрихкод не найден. Попробуйте по названию." : "Не нашёл. Уточните название или добавьте вручную на сайте.");
+    return;
+  }
+
+  const id = await ownerId();
+  if (!id) return;
+  const f = grams / 100;
+  const kcal = Math.round(match.per100.kcal * f);
+  const protein = round1(match.per100.protein * f);
+  const fat = round1(match.per100.fat * f);
+  const carbs = round1(match.per100.carbs * f);
+  await prisma.foodLog.create({ data: { userId: id, name: match.name.slice(0, 120), kcal, protein, fat, carbs, grams } });
+
+  await tgSend(
+    chatId,
+    `🍎 Записано: <b>${escape(match.name)}</b> — ${grams} г · ${kcal} ккал (Б${protein} Ж${fat} У${carbs})\n\n${await todayFoodLine()}`
+  );
+}
+
+/** One line: today's running total, for the owner's diary. */
+async function todayFoodLine(): Promise<string> {
+  const id = await ownerId();
+  if (!id) return "";
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  const rows = await prisma.foodLog.findMany({ where: { userId: id, at: { gte: start } }, select: { kcal: true, protein: true, fat: true, carbs: true } });
+  if (rows.length === 0) return "Сегодня пока пусто.";
+  const sum = rows.reduce((a, r) => ({ kcal: a.kcal + r.kcal, protein: a.protein + r.protein, fat: a.fat + r.fat, carbs: a.carbs + r.carbs }), { kcal: 0, protein: 0, fat: 0, carbs: 0 });
+  return `📊 Сегодня: <b>${Math.round(sum.kcal)}</b> ккал · Б${Math.round(sum.protein)} Ж${Math.round(sum.fat)} У${Math.round(sum.carbs)}`;
+}
+
+function foodErrorText(error: string): string {
+  if (error.startsWith("ip:")) return `⚠ FatSecret отклонил IP сервера (${escape(error.slice(3) || "—")}). Добавьте его в белый список в аккаунте FatSecret.`;
+  if (error === "auth" || error === "not-configured") return "⚠ FatSecret не настроен или недоступен. Проверьте ключи в настройках.";
+  return "⚠ Ошибка FatSecret. Попробуйте ещё раз.";
+}
+
+function round1(n: number): number {
+  return Math.round(n * 10) / 10;
 }
 
 async function remindersText(): Promise<string> {
