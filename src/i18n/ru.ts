@@ -596,6 +596,8 @@ export const ru: Dictionary = {
     telegramChatId: "ID чата",
     telegramDelay: "Сообщать через",
     telegramRecovery: "Сообщать и о восстановлении",
+    telegramCommands: "Добавлять напоминания из чата",
+    telegramCommandsHint: "Бот читает ваши сообщения: напишите ему напоминание — оно появится на сайте. Отвечает только вашему чату.",
     telegramQuiet: "Тихие часы",
     telegramQuietHint: "23:00-08:00 — в этом окне ничего не отправляется",
     telegramProxy: "Прокси",

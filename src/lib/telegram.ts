@@ -177,6 +177,47 @@ export async function send(text: string): Promise<SendResult> {
   return sendWith(cfg, text);
 }
 
+/**
+ * One Bot API call, through the configured proxy.
+ *
+ * The inbound side (the command bot) needs more than sendMessage — getUpdates,
+ * and replies that carry a keyboard — so this is the general form the poller
+ * uses. Returns the parsed `result`, or null on any failure, so a hiccup in the
+ * bot never takes the monitor tick down with it.
+ */
+export async function tgApi<T = unknown>(method: string, body: Record<string, unknown>): Promise<T | null> {
+  const cfg = await telegramConfig();
+  if (!cfg?.botToken) return null;
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${cfg.botToken}/${method}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+      cache: "no-store",
+      signal: AbortSignal.timeout(40_000),
+      // @ts-expect-error — undici's dispatcher option is not in the DOM types.
+      dispatcher: proxyDispatcher(cfg.proxyUrl ?? ""),
+    });
+    if (!res.ok) return null;
+    const json = (await res.json()) as { ok: boolean; result: T };
+    return json.ok ? json.result : null;
+  } catch (e) {
+    console.error(`telegram ${method} failed:`, e instanceof Error ? e.message : e);
+    return null;
+  }
+}
+
+/** Reply to one chat, optionally with a reply keyboard. */
+export async function tgSend(chatId: string | number, text: string, keyboard?: string[][]): Promise<void> {
+  await tgApi("sendMessage", {
+    chat_id: chatId,
+    text,
+    parse_mode: "HTML",
+    disable_web_page_preview: true,
+    ...(keyboard ? { reply_markup: { keyboard: keyboard.map((row) => row.map((t) => ({ text: t }))), resize_keyboard: true } } : {}),
+  });
+}
+
 // Quiet hours live in their own module so they can be unit-tested without
 // dragging the HTTP stack in; re-exported here because this is where callers
 // expect to find them.

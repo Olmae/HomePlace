@@ -8,6 +8,7 @@ import {
   saveProxmoxSettings,
   saveTelegramSettings,
   testTelegram,
+  setTelegramCommands,
   rotateNowPlayingToken,
   disableNowPlaying,
   setIconPack,
@@ -43,6 +44,7 @@ type Display = {
     quietHours: string;
     proxyUrl: string;
     source: string;
+    commands: boolean;
   };
 };
 
@@ -250,6 +252,7 @@ function TelegramForm({ d, value }: { d: Dictionary; value: Display["telegram"] 
     notifyRecovery: value.notifyRecovery,
     quietHours: value.quietHours,
     proxyUrl: value.proxyUrl,
+    commands: value.commands,
   });
   const [result, setResult] = useState<TestResult | null>(null);
   const [pending, startTransition] = useTransition();
@@ -326,6 +329,24 @@ function TelegramForm({ d, value }: { d: Dictionary; value: Display["telegram"] 
               onChange={(e) => setForm({ ...form, notifyRecovery: e.target.checked })}
             />
             {d.settings.telegramRecovery}
+          </label>
+
+          {/* Independent of Save: the bot poll reads this setting directly, so
+              flipping it takes effect on the next tick without a save. */}
+          <label className="flex items-start gap-2 text-sm text-muted">
+            <input
+              type="checkbox"
+              checked={form.commands}
+              disabled={pending}
+              onChange={(e) => {
+                setForm({ ...form, commands: e.target.checked });
+                startTransition(() => void setTelegramCommands(e.target.checked));
+              }}
+            />
+            <span>
+              {d.settings.telegramCommands}
+              <span className="block text-[11px] text-faint">{d.settings.telegramCommandsHint}</span>
+            </span>
           </label>
 
           <div className="flex flex-wrap items-center gap-3">

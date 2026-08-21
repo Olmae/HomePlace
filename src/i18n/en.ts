@@ -597,6 +597,8 @@ export const en = {
     telegramChatId: "Chat ID",
     telegramDelay: "Notify after",
     telegramRecovery: "Also notify on recovery",
+    telegramCommands: "Add reminders from the chat",
+    telegramCommandsHint: "Let the bot read your messages: write a reminder to it and it appears on the site. Only your configured chat is answered.",
     telegramQuiet: "Quiet hours",
     telegramQuietHint: "23:00-08:00 — nothing is sent during this window",
     telegramProxy: "Proxy",

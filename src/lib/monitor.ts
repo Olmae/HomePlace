@@ -6,6 +6,7 @@ import { processAlerts } from "./alerts";
 import { evaluateRules } from "./rules";
 import { processReminders } from "./reminders";
 import { runDueSchedules } from "./schedules";
+import { pollTelegram } from "./telegramBot";
 import { sampleContainers } from "./containerHistory";
 import { sampleContainersToDb, pruneMetrics } from "./metricStore";
 import { prometheusConfig } from "./integrations";
@@ -56,6 +57,9 @@ async function tick(): Promise<void> {
     await evaluateRules();
     await processReminders();
     await runDueSchedules();
+    // Read anything the Telegram bot was told to add. Outbound only, so it
+    // works behind NAT; a stumble here never stops the probes.
+    await pollTelegram().catch((e) => console.error("telegram poll failed:", e));
     // Cheap enough to ride along on the same tick, and it is what gives the
     // containers page a history without Prometheus.
     await sampleContainers();

@@ -241,12 +241,13 @@ export async function integrationStatus() {
 
 /** Settings as the form should show them: secrets masked, never sent raw. */
 export async function integrationsForDisplay(userId?: string) {
-  const [prom, pve, tg, google, linked] = await Promise.all([
+  const [prom, pve, tg, google, linked, tgCommands] = await Promise.all([
     prometheusConfig(),
     proxmoxConfig(),
     telegramConfig(),
     googleConfig(),
     userId ? linkedAccount(userId) : Promise.resolve(null),
+    getSetting<boolean>("telegram.commands", false),
   ]);
   return {
     google: {
@@ -272,6 +273,7 @@ export async function integrationsForDisplay(userId?: string) {
           quietHours: tg.quietHours,
           proxyUrl: tg.proxyUrl,
           source: tg.source,
+          commands: tgCommands ?? false,
         }
       : {
           enabled: false,
@@ -282,6 +284,7 @@ export async function integrationsForDisplay(userId?: string) {
           quietHours: "",
           proxyUrl: "",
           source: "none" as Source,
+          commands: tgCommands ?? false,
         },
   };
 }

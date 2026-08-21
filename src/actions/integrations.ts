@@ -68,6 +68,13 @@ export async function saveTelegramSettings(input: {
 }
 
 /** Send a real message, so "it works" means it arrived. */
+/** Let the Telegram bot read commands (add reminders, ask status) from its chat. */
+export async function setTelegramCommands(enabled: boolean): Promise<void> {
+  await requireRole("admin");
+  await setSetting("telegram.commands", enabled);
+  revalidatePath("/settings");
+}
+
 export async function testTelegram(): Promise<TestResult> {
   await requireRole("admin");
   const cfg = await telegramConfig();
