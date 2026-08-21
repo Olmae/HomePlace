@@ -2,8 +2,10 @@ import "server-only";
 import { prisma, getSetting, setSetting } from "./db";
 import { telegramConfig } from "./integrations";
 import { tgApi, tgSend } from "./telegram";
-import { listContainers } from "./docker";
+import { listContainers, controlContainer } from "./docker";
 import { addShopping, getShopping } from "./shopping";
+import { haToggle } from "./services";
+import { sendWol } from "./wol";
 
 /**
  * The Telegram command bot.
@@ -78,12 +80,39 @@ async function handle(chatId: string, text: string): Promise<void> {
 
   if (/^\/(start|help)|^меню$|^menu$/.test(lower)) {
     state.delete(chatId);
-    await tgSend(chatId, "Что добавить? Выберите или просто напишите напоминание — например «Купить хлеб завтра 18:00».", MENU);
+    await tgSend(
+      chatId,
+      "Напишите напоминание (например «Купить хлеб завтра 18:00») или выберите ниже.\n\n" +
+        "Команды:\n/restart &lt;имя&gt; — перезапустить контейнер\n/scene &lt;entity&gt; — запустить сцену\n/wake &lt;MAC&gt; — разбудить ПК",
+      MENU
+    );
     return;
   }
   if (/^\/status|статус/.test(lower)) {
     state.delete(chatId);
     await tgSend(chatId, await statusText(), MENU);
+    return;
+  }
+
+  // Control commands: /restart <name>, /scene <entity>, /wake <mac>.
+  const restart = /^\/restart\s+(.+)$/i.exec(text);
+  if (restart) {
+    state.delete(chatId);
+    await tgSend(chatId, await restartContainer(restart[1].trim()));
+    return;
+  }
+  const scene = /^\/scene\s+(\S+)/i.exec(text);
+  if (scene) {
+    state.delete(chatId);
+    const r = await haToggle(scene[1]);
+    await tgSend(chatId, r.ok ? `▶️ Запущено: <b>${escape(scene[1])}</b>` : `⚠ ${escape(r.error ?? "ошибка")}`);
+    return;
+  }
+  const wake = /^\/wake\s+([0-9a-f:\-]+)/i.exec(text);
+  if (wake) {
+    state.delete(chatId);
+    const r = await sendWol(wake[1]);
+    await tgSend(chatId, r.ok ? `⏻ Magic-пакет отправлен на ${escape(wake[1])}` : `⚠ ${escape(r.error ?? "ошибка")}`);
     return;
   }
   if (/^\/list|^📋/.test(lower)) {
@@ -125,6 +154,13 @@ async function remindersText(): Promise<string> {
   return rows
     .map((r) => `• ${escape(r.title)} — ${r.at.toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}`)
     .join("\n");
+}
+
+async function restartContainer(name: string): Promise<string> {
+  const c = (await listContainers()).find((x) => x.name === name);
+  if (!c) return `⚠ Контейнер «${escape(name)}» не найден`;
+  const r = await controlContainer(c.hostKey, c.id, "restart");
+  return r.ok ? `🔁 Перезапущен: <b>${escape(name)}</b>` : `⚠ ${escape(r.error ?? "ошибка")}`;
 }
 
 async function statusText(): Promise<string> {
