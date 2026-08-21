@@ -27,6 +27,7 @@ import { uptimeBuckets } from "@/lib/status";
 import { uptimeRatio } from "@/lib/monitor";
 import { readFeed } from "@/lib/feeds";
 import { readIcal } from "@/lib/ical";
+import { Wol, type WolMachine } from "./Wol";
 import { bytes, percent, duration, ago } from "@/lib/format";
 import type { Dictionary } from "@/i18n";
 
@@ -135,6 +136,8 @@ export async function Widget({ widget, config, title, d, userId, canControl = fa
       return <AirQualityWidget config={config} title={title} d={d} />;
     case "rates":
       return <RatesWidget config={config} title={title} d={d} />;
+    case "wol":
+      return <WolWidget config={config} title={title} d={d} canControl={canControl} />;
     case "notes":
       return <NotesWidget title={title} text={str(config.text) ?? ""} />;
     default:
@@ -1183,6 +1186,35 @@ async function RatesWidget({ config, title, d }: { config: Record<string, unknow
 
 function formatRate(r: number): string {
   return r >= 100 ? r.toFixed(2) : r >= 1 ? r.toFixed(3) : r.toFixed(5);
+}
+
+// ─────────────────────────────────── WoL ─────────────────────────────────
+
+/** Wake-on-LAN buttons for the machines the operator listed. */
+function WolWidget({
+  config,
+  title,
+  d,
+  canControl,
+}: {
+  config: Record<string, unknown>;
+  title: string;
+  d: Dictionary;
+  canControl: boolean;
+}) {
+  const machines: WolMachine[] = Array.isArray(config.machines)
+    ? (config.machines as WolMachine[]).filter((m) => m && typeof m.mac === "string" && m.mac)
+    : [];
+
+  if (machines.length === 0) {
+    return (
+      <Card className="h-full">
+        <CardHeader icon="⏻" title={title} />
+        <p className="p-4 text-sm text-muted">{d.widgets.wolHint}</p>
+      </Card>
+    );
+  }
+  return <Wol d={d} title={title} machines={machines} canControl={canControl} />;
 }
 
 function NotesWidget({ title, text }: { title: string; text: string }) {

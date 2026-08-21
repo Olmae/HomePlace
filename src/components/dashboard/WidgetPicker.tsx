@@ -47,13 +47,14 @@ export type WidgetKind =
   | "ical"
   | "airquality"
   | "rates"
+  | "wol"
   | "slideshow"
   | "nowplaying";
 
 type Category = { key: "monitoring" | "services" | "smarthome" | "home" | "atmosphere"; widgets: WidgetKind[] };
 
 const CATEGORIES: Category[] = [
-  { key: "monitoring", widgets: ["system", "disks", "load", "chart", "gauge", "uptimestrip", "sla", "recentevents", "containers", "proxmox"] },
+  { key: "monitoring", widgets: ["system", "disks", "load", "chart", "gauge", "uptimestrip", "sla", "recentevents", "containers", "proxmox", "wol"] },
   { key: "services", widgets: ["jellyfin", "qbittorrent", "arr", "pbs"] },
   { key: "smarthome", widgets: ["homegroups", "homeassistant", "scenes", "energy", "mediaplayer"] },
   { key: "home", widgets: ["weather", "airquality", "calendar", "ical", "reminders", "clock", "worldclocks", "countdown", "rates", "notes", "feed", "embed"] },
@@ -486,6 +487,18 @@ function Preview({ kind }: { kind: WidgetKind }) {
             <span key={i} className="flex items-center justify-between">
               <span className="font-mono text-[9px]">{c}</span>
               <span className="h-1.5 w-8 rounded bg-line" />
+            </span>
+          ))}
+        </span>
+      );
+
+    case "wol":
+      return (
+        <span className={frame}>
+          {[0, 1].map((i) => (
+            <span key={i} className="flex items-center justify-between gap-1">
+              <span className="h-1.5 w-10 rounded bg-line" />
+              <span className="rounded bg-accent/20 px-1 text-[9px] leading-none text-accent">⏻</span>
             </span>
           ))}
         </span>

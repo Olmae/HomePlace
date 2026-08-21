@@ -148,6 +148,12 @@ export function ItemDialog({
     // Currency rates widget.
     ratesBase: str(config.base) || "USD",
     ratesSymbols: Array.isArray(config.symbols) ? (config.symbols as string[]).join("\n") : str(config.symbols),
+    // Wake-on-LAN machines, one per line as "Name | MAC | broadcast".
+    wolMachines: Array.isArray(config.machines)
+      ? (config.machines as { name?: string; mac?: string; broadcast?: string }[])
+          .map((m) => [m.name, m.mac, m.broadcast].filter(Boolean).join(" | "))
+          .join("\n")
+      : str(config.machines),
     // Extras for a container tile. Off by default: a tile is a link first, and
     // a dashboard of tiles that all sprout meters is a monitoring screen.
     showStats: config.stats === true,
@@ -311,6 +317,16 @@ export function ItemDialog({
         return {
           base: form.ratesBase.trim().toUpperCase(),
           symbols: form.ratesSymbols.split("\n").map((s) => s.trim().toUpperCase()).filter(Boolean),
+        };
+      case "wol":
+        return {
+          machines: form.wolMachines
+            .split("\n")
+            .map((line) => {
+              const [name, mac, broadcast] = line.split("|").map((s) => s.trim());
+              return mac ? { name: name || mac, mac, broadcast: broadcast || undefined } : null;
+            })
+            .filter(Boolean),
         };
       case "worldclocks":
         return { zones: form.zones.split("\n").map((z) => z.trim()).filter(Boolean) };
@@ -656,6 +672,18 @@ export function ItemDialog({
                   </Field>
                 )}
               </>
+            )}
+
+            {form.widget === "wol" && (
+              <Field label={d.widgets.wolMachines} hint={d.widgets.wolMachinesHint}>
+                <Textarea
+                  rows={4}
+                  value={form.wolMachines}
+                  onChange={(e) => set("wolMachines", e.target.value)}
+                  className="font-mono text-xs"
+                  placeholder={"Desktop | AA:BB:CC:DD:EE:FF\nNAS | 11:22:33:44:55:66 | 192.168.0.255"}
+                />
+              </Field>
             )}
 
             {form.widget === "rates" && (
