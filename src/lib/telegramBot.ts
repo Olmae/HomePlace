@@ -8,6 +8,7 @@ import { haToggle } from "./services";
 import { sendWol } from "./wol";
 import { extractRepeat, repeatLabel } from "./recurrence";
 import { foodSearch, foodByBarcode } from "./food";
+import type { FoodMatch } from "./fatsecret";
 import { dict } from "@/i18n";
 
 /**
@@ -195,7 +196,25 @@ async function createReminder(r: { title: string; at: Date; repeat: string }): P
  * a run of digits, which is treated as a barcode. FatSecret answers the same way
  * it does on the web, allow-list and all, so a blocked IP is reported here too.
  */
+/** Foods offered as a numbered choice, waiting for the user to pick one. */
+const foodChoices = new Map<string, { items: FoodMatch[]; grams: number }>();
+
 async function handleFood(chatId: string, text: string): Promise<void> {
+  // Picking a number from a list we just offered.
+  const pending = foodChoices.get(chatId);
+  const asNum = /^\s*(\d{1,2})\s*$/.exec(text);
+  if (pending && asNum) {
+    const chosen = pending.items[Number(asNum[1]) - 1];
+    foodChoices.delete(chatId);
+    if (chosen) {
+      await logFoodMatch(chatId, chosen, pending.grams);
+      return;
+    }
+    await tgSend(chatId, "Такого номера нет. Напишите продукт заново.");
+    return;
+  }
+  foodChoices.delete(chatId);
+
   const bare = text.replace(/\s+/g, "");
   const isBarcode = /^\d{6,14}$/.test(bare);
 
@@ -214,12 +233,27 @@ async function handleFood(chatId: string, text: string): Promise<void> {
     await tgSend(chatId, foodErrorText(res.error));
     return;
   }
-  const match = res.foods.find((f) => f.per100) ?? res.foods[0];
-  if (!match || !match.per100) {
+  const withMacros = res.foods.filter((f) => f.per100);
+  if (withMacros.length === 0) {
     await tgSend(chatId, isBarcode ? "Штрихкод не найден. Попробуйте по названию." : "Не нашёл. Уточните название или добавьте вручную на сайте.");
     return;
   }
 
+  // A barcode or a single hit goes straight in; several by name become a choice.
+  if (isBarcode || withMacros.length === 1) {
+    await logFoodMatch(chatId, withMacros[0], grams);
+    return;
+  }
+
+  const items = withMacros.slice(0, 6);
+  foodChoices.set(chatId, { items, grams });
+  const list = items.map((f, i) => `${i + 1}. ${escape(f.name)} — ${f.per100!.kcal} ккал/100 г`).join("\n");
+  await tgSend(chatId, `Нашёл несколько${grams !== 100 ? ` (на ${grams} г)` : ""} — пришлите номер:\n${list}`);
+}
+
+/** Write one match to the diary and confirm with the day's running total. */
+async function logFoodMatch(chatId: string, match: FoodMatch, grams: number): Promise<void> {
+  if (!match.per100) return;
   const id = await ownerId();
   if (!id) return;
   const f = grams / 100;

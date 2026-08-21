@@ -60,6 +60,9 @@ export function HomeGroups({
     kindLabel: (dm) => dm,
   })
     .filter((b) => b.items.some((e) => e.toggleable) || b.groupId !== undefined)
+    // Never the "unplaced" catch-all: this widget is about real groups and rooms,
+    // and a bucket of everything that belongs to neither is just noise here.
+    .filter((b) => b.key !== "unplaced")
     // When the widget was told which sections to show, show only those. A choice
     // can be a hand-made group (matched by its id) or an automatic room (matched
     // by the bucket key "area:<name>"), so a widget can be pinned to one room.
