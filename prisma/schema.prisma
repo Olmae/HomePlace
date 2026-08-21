@@ -203,6 +203,32 @@ model MetricSample {
   @@index([name, at])
 }
 
+// A scheduled action: do a thing at a time or on an interval — restart a
+// container, run a Home Assistant scene, send a notification. Evaluated on the
+// monitor tick, so it needs no separate scheduler process.
+model Schedule {
+  id      String  @id @default(cuid())
+  name    String
+  enabled Boolean @default(true)
+
+  // When: "daily" (timeOfDay), "weekly" (timeOfDay + weekday), or "interval".
+  kind            String
+  timeOfDay       String? // "HH:MM"
+  weekday         Int? // 0 (Sunday) – 6
+  intervalMinutes Int?
+
+  // What: "restart" | "scene" | "notify".
+  action        String
+  hostKey       String?
+  containerName String?
+  entityId      String?
+  title         String?
+  body          String?
+
+  lastRunAt DateTime?
+  createdAt DateTime  @default(now())
+}
+
 // A change worth remembering: a service went down, came back, a container was
 // restarted, someone logged in. The feed on the dashboard reads this table.
 model Event {

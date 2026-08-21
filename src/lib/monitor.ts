@@ -5,6 +5,7 @@ import { listContainers } from "./docker";
 import { processAlerts } from "./alerts";
 import { evaluateRules } from "./rules";
 import { processReminders } from "./reminders";
+import { runDueSchedules } from "./schedules";
 import { sampleContainers } from "./containerHistory";
 import { sampleContainersToDb, pruneMetrics } from "./metricStore";
 import { prometheusConfig } from "./integrations";
@@ -54,6 +55,7 @@ async function tick(): Promise<void> {
     // everything the panel watches, and nothing to schedule separately.
     await evaluateRules();
     await processReminders();
+    await runDueSchedules();
     // Cheap enough to ride along on the same tick, and it is what gives the
     // containers page a history without Prometheus.
     await sampleContainers();

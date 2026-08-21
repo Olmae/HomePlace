@@ -17,6 +17,7 @@ import { ago } from "@/lib/format";
 import { PasswordForm } from "./PasswordForm";
 import { IntegrationForms } from "./IntegrationForms";
 import { RuleForms } from "./RuleForms";
+import { ScheduleForms } from "./ScheduleForms";
 import { ServiceForms } from "./ServiceForms";
 import { PushCard } from "./PushCard";
 import { NotifierForms } from "./NotifierForms";
@@ -197,16 +198,35 @@ async function ServicesSection({ d }: { d: ReturnType<typeof dict> }) {
 // ──────────────────────── Alerts and notifications ───────────────────────
 
 async function AlertsSection({ d, userId }: { d: ReturnType<typeof dict>; userId: string }) {
-  const [rules, notifiers, pushCount, policyRaw] = await Promise.all([
+  const [rules, notifiers, pushCount, policyRaw, schedules] = await Promise.all([
     prisma.alertRule.findMany({ orderBy: { createdAt: "asc" } }),
     notifiersForDisplay(),
     prisma.pushSubscription.count({ where: { userId } }),
     getSetting<unknown>(NOTIFY_POLICY_KEY, null),
+    prisma.schedule.findMany({ orderBy: { createdAt: "asc" } }),
   ]);
 
   return (
     <div className="space-y-3">
       <RuleForms d={d} rules={rules} />
+      <ScheduleForms
+        d={d}
+        schedules={schedules.map((s) => ({
+          id: s.id,
+          name: s.name,
+          enabled: s.enabled,
+          kind: s.kind,
+          timeOfDay: s.timeOfDay ?? undefined,
+          weekday: s.weekday,
+          intervalMinutes: s.intervalMinutes,
+          action: s.action,
+          hostKey: s.hostKey,
+          containerName: s.containerName,
+          entityId: s.entityId,
+          title: s.title,
+          body: s.body,
+        }))}
+      />
       <NotifyPolicyForm d={d} policy={normalizePolicy(policyRaw)} />
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
         <PushCard d={d} count={pushCount} />
