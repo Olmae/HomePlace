@@ -654,7 +654,7 @@ export const en = {
     telegramQuiet: "Quiet hours",
     telegramQuietHint: "23:00-08:00 — nothing is sent during this window",
     telegramProxy: "Proxy",
-    telegramProxyHint: "socks5://host:1080 or http://host:3128, if Telegram is not reachable directly",
+    telegramProxyHint: "For when Telegram is not reachable directly. SOCKS5 or HTTP only — MTProto proxies work with the Telegram app, not with the Bot API this uses.",
     telegramTest: "Send a test message",
     nowPlaying: "Now playing",
     nowPlayingHint:

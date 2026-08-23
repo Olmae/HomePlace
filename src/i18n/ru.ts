@@ -651,7 +651,7 @@ export const ru: Dictionary = {
     telegramQuiet: "Тихие часы",
     telegramQuietHint: "23:00-08:00 — в этом окне ничего не отправляется",
     telegramProxy: "Прокси",
-    telegramProxyHint: "socks5://хост:1080 или http://хост:3128, если Telegram напрямую недоступен",
+    telegramProxyHint: "Если Telegram напрямую недоступен. Только SOCKS5 или HTTP — MTProto-прокси работает с приложением Telegram, а не с Bot API, который здесь используется.",
     telegramTest: "Отправить тестовое сообщение",
     nowPlaying: "Сейчас играет",
     nowPlayingHint:

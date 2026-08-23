@@ -288,6 +288,19 @@ function ProxmoxForm({ d, value }: { d: Dictionary; value: Display["proxmox"] })
 
 // ──────────────────────────────── Telegram ───────────────────────────────
 
+/** Split a stored proxy URL into a type and an address for the two controls. */
+function parseProxy(url: string): { type: string; addr: string } {
+  const trimmed = (url ?? "").trim();
+  if (!trimmed) return { type: "none", addr: "" };
+  const m = /^(socks5h?|socks|https?):\/\/(.*)$/i.exec(trimmed);
+  if (m) {
+    const scheme = m[1].toLowerCase();
+    return { type: scheme.startsWith("socks") ? "socks5" : scheme, addr: m[2] };
+  }
+  // A bare "host:port" from before the scheme was explicit — assume SOCKS5.
+  return { type: "socks5", addr: trimmed };
+}
+
 function TelegramForm({ d, value }: { d: Dictionary; value: Display["telegram"] }) {
   const [form, setForm] = useState({
     enabled: value.enabled,
@@ -301,6 +314,19 @@ function TelegramForm({ d, value }: { d: Dictionary; value: Display["telegram"] 
   });
   const [result, setResult] = useState<TestResult | null>(null);
   const [pending, startTransition] = useTransition();
+
+  // The proxy is stored as one URL ("socks5://host:port") but edited as a type
+  // and an address, so the choice of protocol is a menu rather than something to
+  // remember how to spell. MTProto is deliberately absent: it cannot carry the
+  // Bot API's HTTPS, only SOCKS5 and HTTP can.
+  const initialProxy = parseProxy(value.proxyUrl);
+  const [proxyType, setProxyType] = useState(initialProxy.type);
+  const [proxyAddr, setProxyAddr] = useState(initialProxy.addr);
+  function updateProxy(type: string, addr: string) {
+    setProxyType(type);
+    setProxyAddr(addr);
+    setForm((f) => ({ ...f, proxyUrl: type === "none" || !addr.trim() ? "" : `${type}://${addr.trim()}` }));
+  }
 
   return (
     <Card>
@@ -359,12 +385,22 @@ function TelegramForm({ d, value }: { d: Dictionary; value: Display["telegram"] 
           </div>
 
           <Field label={d.settings.telegramProxy} hint={d.settings.telegramProxyHint}>
-            <Input
-              value={form.proxyUrl}
-              onChange={(e) => setForm({ ...form, proxyUrl: e.target.value })}
-              placeholder="socks5://192.168.0.10:10808"
-              className="font-mono text-xs"
-            />
+            <div className="flex gap-2">
+              <Select value={proxyType} onChange={(e) => updateProxy(e.target.value, proxyAddr)} className="w-32">
+                <option value="none">{d.common.none}</option>
+                <option value="socks5">SOCKS5</option>
+                <option value="http">HTTP</option>
+                <option value="https">HTTPS</option>
+              </Select>
+              {proxyType !== "none" && (
+                <Input
+                  value={proxyAddr}
+                  onChange={(e) => updateProxy(proxyType, e.target.value)}
+                  placeholder="user:pass@192.168.0.10:10808"
+                  className="flex-1 font-mono text-xs"
+                />
+              )}
+            </div>
           </Field>
 
           <label className="flex items-center gap-2 text-sm text-muted">
