@@ -6,7 +6,7 @@ import { processAlerts } from "./alerts";
 import { evaluateRules } from "./rules";
 import { processReminders } from "./reminders";
 import { runDueSchedules } from "./schedules";
-import { pollTelegram } from "./telegramBot";
+import { startTelegramPolling } from "./telegramBot";
 import { sampleContainers } from "./containerHistory";
 import { sampleContainersToDb, pruneMetrics } from "./metricStore";
 import { prometheusConfig } from "./integrations";
@@ -38,6 +38,9 @@ let running = false;
  * guard makes the call idempotent however many pages render.
  */
 export function startMonitor(): void {
+  // The Telegram command bot has its own long-polling loop and is independent of
+  // the probe monitor — start it even if uptime monitoring is switched off.
+  startTelegramPolling();
   if (timer || !settings.monitorEnabled()) return;
   // A first pass shortly after boot, so the dashboard is not blank on arrival.
   setTimeout(() => void tick(), 3000);
@@ -57,9 +60,9 @@ async function tick(): Promise<void> {
     await evaluateRules();
     await processReminders();
     await runDueSchedules();
-    // Read anything the Telegram bot was told to add. Outbound only, so it
-    // works behind NAT; a stumble here never stops the probes.
-    await pollTelegram().catch((e) => console.error("telegram poll failed:", e));
+    // The Telegram bot runs its own long-polling loop (startTelegramPolling) so
+    // replies are instant rather than up to a tick late — it is not driven from
+    // here any more.
     // Cheap enough to ride along on the same tick, and it is what gives the
     // containers page a history without Prometheus.
     await sampleContainers();

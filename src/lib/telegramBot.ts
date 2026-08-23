@@ -36,14 +36,54 @@ const MENU = [
   ["📊 Статус"],
 ];
 
-export async function pollTelegram(): Promise<void> {
+let looping = false;
+
+/**
+ * A long-polling loop, started once with the server.
+ *
+ * The bot used to be checked on the 10-second monitor tick with a non-blocking
+ * getUpdates, so an answer could lag by up to a tick — which is what "the bot is
+ * slow" was, not the proxy. Long polling holds one request open for up to 25
+ * seconds and returns the instant a message lands, so replies are as fast as the
+ * round-trip. It is one held connection at a time — fewer requests than polling,
+ * not more. When Telegram or its command mode is off, it idles and re-checks.
+ */
+export function startTelegramPolling(): void {
+  if (looping) return;
+  looping = true;
+  void pollLoop();
+}
+
+async function pollLoop(): Promise<void> {
+  for (;;) {
+    try {
+      const active = await pollTelegram(25);
+      // Not configured / commands off: back off so the loop is not a busy-wait.
+      if (!active) await sleep(15_000);
+    } catch (e) {
+      console.error("telegram poll loop error:", e);
+      await sleep(5_000); // transient network trouble — retry after a breath
+    }
+  }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+/**
+ * One round of getUpdates. Returns false when the bot is not active (so the loop
+ * can idle), true otherwise. `longPollSeconds` is passed to Telegram, which then
+ * holds the request until a message arrives or the time is up.
+ */
+export async function pollTelegram(longPollSeconds = 0): Promise<boolean> {
   const cfg = await telegramConfig();
-  if (!cfg?.enabled) return;
-  if (!(await getSetting<boolean>("telegram.commands", false))) return;
+  if (!cfg?.enabled) return false;
+  if (!(await getSetting<boolean>("telegram.commands", false))) return false;
 
   const offset = (await getSetting<number>(OFFSET_KEY, 0)) || 0;
-  const updates = await tgApi<TgUpdate[]>("getUpdates", { offset: offset + 1, timeout: 0, allowed_updates: ["message"] });
-  if (!updates || updates.length === 0) return;
+  const updates = await tgApi<TgUpdate[]>("getUpdates", { offset: offset + 1, timeout: longPollSeconds, allowed_updates: ["message"] });
+  if (!updates || updates.length === 0) return true;
 
   await setSetting(OFFSET_KEY, updates[updates.length - 1].update_id);
 
@@ -60,6 +100,7 @@ export async function pollTelegram(): Promise<void> {
       console.error("telegram command failed:", e);
     }
   }
+  return true;
 }
 
 /**
