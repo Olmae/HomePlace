@@ -632,6 +632,8 @@ export const en = {
     fatSecretClientId: "Client ID",
     fatSecretSecret: "Client secret",
     secretStored: "A secret is stored — leave blank to keep it.",
+    secretSet: "Saved",
+    secretReplaceHint: "Enter a new value to replace the saved one.",
     connected: "Connected",
     failing: "Not responding",
     configuredIn: "Configured in .env",

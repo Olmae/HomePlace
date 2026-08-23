@@ -629,6 +629,8 @@ export const ru: Dictionary = {
     fatSecretClientId: "Client ID",
     fatSecretSecret: "Client secret",
     secretStored: "Секрет сохранён — оставьте пустым, чтобы не менять.",
+    secretSet: "Сохранён",
+    secretReplaceHint: "Введите новое значение, чтобы заменить сохранённое.",
     connected: "Работает",
     failing: "Не отвечает",
     configuredIn: "Настраивается в .env",

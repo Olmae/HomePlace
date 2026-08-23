@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect } from "react";
 import { Card, CardHeader, Badge } from "@/components/ui";
 import { Field, Input, Select, Button } from "@/components/form";
 import {
@@ -109,9 +109,13 @@ function FatSecretForm({ d, value }: { d: Dictionary; value: Display["fatsecret"
         <Field label={d.settings.fatSecretClientId}>
           <Input value={form.clientId} onChange={(e) => { setForm({ ...form, clientId: e.target.value }); setSaved(false); }} />
         </Field>
-        <Field label={d.settings.fatSecretSecret} hint={value.hasSecret ? d.settings.secretStored : undefined}>
-          <Input type="password" value={form.secret} placeholder={value.hasSecret ? "••••••••" : ""} onChange={(e) => { setForm({ ...form, secret: e.target.value }); setSaved(false); }} />
-        </Field>
+        <SecretField
+          d={d}
+          label={d.settings.fatSecretSecret}
+          hasSecret={value.hasSecret}
+          value={form.secret}
+          onChange={(v) => { setForm({ ...form, secret: v }); setSaved(false); }}
+        />
         <div className="flex items-center gap-3">
           <Button
             variant="primary"
@@ -130,6 +134,61 @@ function FatSecretForm({ d, value }: { d: Dictionary; value: Display["fatsecret"
         </div>
       </div>
     </Card>
+  );
+}
+
+/**
+ * A field for a secret that may already be stored.
+ *
+ * The old empty password box with a dotted placeholder left one question
+ * unanswered — "did I already put a token here or not?" This answers it: a
+ * stored secret shows as a green "saved" with a Change button, and only asking
+ * to change reveals an input. A blank slate is just the input, as before.
+ * Leaving the box untouched keeps whatever was saved.
+ */
+function SecretField({
+  d,
+  label,
+  hasSecret,
+  value,
+  onChange,
+  placeholder,
+}: {
+  d: Dictionary;
+  label: string;
+  hasSecret: boolean;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+}) {
+  const [editing, setEditing] = useState(!hasSecret);
+  // After a save the server reports the secret as stored; fold the editor back
+  // to the locked "saved" state so the result is unmistakable.
+  useEffect(() => {
+    if (hasSecret) setEditing(false);
+  }, [hasSecret]);
+
+  if (hasSecret && !editing) {
+    return (
+      <Field label={label}>
+        <div className="flex h-9 items-center gap-3">
+          <span className="text-xs text-ok">✓ {d.settings.secretSet}</span>
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            className="text-xs text-muted underline underline-offset-2 transition-colors hover:text-text"
+          >
+            {d.common.change}
+          </button>
+        </div>
+      </Field>
+    );
+  }
+
+  return (
+    <Field label={label} hint={hasSecret ? d.settings.secretReplaceHint : undefined}>
+      <Input type="password" value={value} placeholder={placeholder} autoFocus={hasSecret} onChange={(e) => onChange(e.target.value)} />
+    </Field>
   );
 }
 
@@ -189,14 +248,13 @@ function PrometheusForm({ d, value }: { d: Dictionary; value: Display["prometheu
             <Field label={d.settings.username}>
               <Input value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} />
             </Field>
-            <Field label={d.settings.password} hint={value.hasPassword ? d.settings.secretKept : undefined}>
-              <Input
-                type="password"
-                value={form.password}
-                onChange={(e) => setForm({ ...form, password: e.target.value })}
-                placeholder={value.hasPassword ? "••••••••" : ""}
-              />
-            </Field>
+            <SecretField
+              d={d}
+              label={d.settings.password}
+              hasSecret={value.hasPassword}
+              value={form.password}
+              onChange={(v) => setForm({ ...form, password: v })}
+            />
           </div>
           <div className="flex items-center gap-3">
             <Button
@@ -253,14 +311,13 @@ function ProxmoxForm({ d, value }: { d: Dictionary; value: Display["proxmox"] })
                 className="font-mono text-xs"
               />
             </Field>
-            <Field label={d.settings.tokenSecret} hint={value.hasSecret ? d.settings.secretKept : undefined}>
-              <Input
-                type="password"
-                value={form.tokenSecret}
-                onChange={(e) => setForm({ ...form, tokenSecret: e.target.value })}
-                placeholder={value.hasSecret ? "••••••••" : ""}
-              />
-            </Field>
+            <SecretField
+              d={d}
+              label={d.settings.tokenSecret}
+              hasSecret={value.hasSecret}
+              value={form.tokenSecret}
+              onChange={(v) => setForm({ ...form, tokenSecret: v })}
+            />
           </div>
           <label className="flex items-center gap-2 text-sm text-muted">
             <input
@@ -348,14 +405,14 @@ function TelegramForm({ d, value }: { d: Dictionary; value: Display["telegram"] 
           </label>
 
           <div className="grid grid-cols-2 gap-3">
-            <Field label={d.settings.telegramBotToken} hint={value.hasToken ? d.settings.secretKept : undefined}>
-              <Input
-                type="password"
-                value={form.botToken}
-                onChange={(e) => setForm({ ...form, botToken: e.target.value })}
-                placeholder={value.hasToken ? "••••••••" : "123456:ABC…"}
-              />
-            </Field>
+            <SecretField
+              d={d}
+              label={d.settings.telegramBotToken}
+              hasSecret={value.hasToken}
+              value={form.botToken}
+              onChange={(v) => setForm({ ...form, botToken: v })}
+              placeholder="123456:ABC…"
+            />
             <Field label={d.settings.telegramChatId}>
               <Input
                 value={form.chatId}
@@ -385,8 +442,8 @@ function TelegramForm({ d, value }: { d: Dictionary; value: Display["telegram"] 
           </div>
 
           <Field label={d.settings.telegramProxy} hint={d.settings.telegramProxyHint}>
-            <div className="flex gap-2">
-              <Select value={proxyType} onChange={(e) => updateProxy(e.target.value, proxyAddr)} className="w-32">
+            <div className="space-y-2">
+              <Select value={proxyType} onChange={(e) => updateProxy(e.target.value, proxyAddr)} className="w-full">
                 <option value="none">{d.common.none}</option>
                 <option value="socks5">SOCKS5</option>
                 <option value="http">HTTP</option>
@@ -397,7 +454,7 @@ function TelegramForm({ d, value }: { d: Dictionary; value: Display["telegram"] 
                   value={proxyAddr}
                   onChange={(e) => updateProxy(proxyType, e.target.value)}
                   placeholder="user:pass@192.168.0.10:10808"
-                  className="flex-1 font-mono text-xs"
+                  className="w-full font-mono text-xs"
                 />
               )}
             </div>
@@ -567,14 +624,13 @@ function GoogleCard({ d, value }: { d: Dictionary; value: Display["google"] }) {
                   className="font-mono text-xs"
                 />
               </Field>
-              <Field label="Client secret" hint={value.hasSecret ? d.settings.secretKept : undefined}>
-                <Input
-                  type="password"
-                  value={form.clientSecret}
-                  onChange={(e) => setForm({ ...form, clientSecret: e.target.value })}
-                  placeholder={value.hasSecret ? "••••••••" : ""}
-                />
-              </Field>
+              <SecretField
+                d={d}
+                label="Client secret"
+                hasSecret={value.hasSecret}
+                value={form.clientSecret}
+                onChange={(v) => setForm({ ...form, clientSecret: v })}
+              />
             </div>
             <div>
               <Button
