@@ -31,8 +31,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <div className="flex min-h-screen flex-col">
       <AppNav d={d} user={{ name: user.name, role: user.role, avatarUrl: user.avatarUrl }} />
       {/* The bottom padding is for the floating navigation on a phone: without
-          it the last tile ends up underneath the pill. */}
-      <main className="mx-auto w-full max-w-[1400px] flex-1 px-4 py-5 pb-28 sm:px-6 sm:pb-5">{children}</main>
+          it the last tile ends up underneath the pill. The pill sits a safe-area
+          inset above the screen edge and is ~56px tall, so the clearance has to
+          account for the inset too — a fixed value alone leaves the last card
+          under the bar on tall, notched phones. */}
+      <main className="mx-auto w-full max-w-[1400px] flex-1 px-4 py-5 pb-[calc(7rem+env(safe-area-inset-bottom))] sm:px-6 sm:pb-5">{children}</main>
 
       {/* Deliberately a sibling of the header, not a child of it. `position:
           fixed` is positioned against the nearest ancestor with a filter,
