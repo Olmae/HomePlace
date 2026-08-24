@@ -89,8 +89,18 @@ export function ContainerTable({
 }) {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<"all" | "running" | "stopped" | "problems">("all");
-  const [sort, setSort] = useState<"name" | "cpu" | "memory" | "project">("name");
+  const [host, setHost] = useState<string>("all");
+  const [sort, setSort] = useState<"name" | "cpu" | "memory" | "project" | "state" | "host">("name");
+
+  // The distinct hosts, for the host filter — only worth showing on a multi-host
+  // setup, where "which machine is this on" is a real question.
+  const hosts = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const r of rows) if (!seen.has(r.hostKey)) seen.set(r.hostKey, r.hostLabel);
+    return [...seen].map(([key, label]) => ({ key, label }));
+  }, [rows]);
   const [grouped, setGrouped] = useState(true);
+  const [showCharts, setShowCharts] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [updates, setUpdates] = useState<Record<string, "update" | "current" | "unknown">>({});
@@ -127,6 +137,7 @@ export function ContainerTable({
 
     return rows
       .filter((row) => {
+        if (host !== "all" && row.hostKey !== host) return false;
         if (filter === "running" && row.state !== "running") return false;
         if (filter === "stopped" && row.state === "running") return false;
         if (filter === "problems" && !problem(row)) return false;
@@ -137,11 +148,13 @@ export function ContainerTable({
         if (sort === "cpu") return (b.cpu ?? -1) - (a.cpu ?? -1);
         if (sort === "memory") return (b.memory ?? -1) - (a.memory ?? -1);
         if (sort === "project") return (a.project ?? "~").localeCompare(b.project ?? "~") || a.name.localeCompare(b.name);
+        if (sort === "state") return a.state.localeCompare(b.state) || a.name.localeCompare(b.name);
+        if (sort === "host") return a.hostLabel.localeCompare(b.hostLabel) || a.name.localeCompare(b.name);
         return a.name.localeCompare(b.name);
       });
-  }, [rows, query, filter, sort]);
+  }, [rows, query, filter, host, sort]);
 
-  const searching = query.trim().length > 0 || filter !== "all";
+  const searching = query.trim().length > 0 || filter !== "all" || host !== "all";
 
   // Grouping is off while searching: a search wants every match in one place,
   // not scattered under headers half of which are then empty.
@@ -251,7 +264,7 @@ export function ContainerTable({
           {running && row.cpu !== undefined ? (
             <>
               <p className="text-right font-mono text-[11px] tabular-nums">{percent(row.cpu, 1)}</p>
-              {row.cpuHistory && row.cpuHistory.length > 2 ? (
+              {showCharts && row.cpuHistory && row.cpuHistory.length > 2 ? (
                 <span className="block h-5 [&_svg]:h-5">
                   <Sparkline points={row.cpuHistory} min={0} height={20} />
                 </span>
@@ -268,7 +281,7 @@ export function ContainerTable({
           {running && row.memory !== undefined ? (
             <>
               <p className="text-right font-mono text-[11px] tabular-nums">{bytes(row.memory)}</p>
-              {row.memoryHistory && row.memoryHistory.length > 2 ? (
+              {showCharts && row.memoryHistory && row.memoryHistory.length > 2 ? (
                 <span className="block h-5 [&_svg]:h-5">
                   <Sparkline points={row.memoryHistory} tone="ok" height={20} />
                 </span>
@@ -334,9 +347,21 @@ export function ContainerTable({
           <option value="stopped">{d.status.stopped}</option>
           <option value="problems">{d.containers.filterProblems}</option>
         </Select>
+        {hosts.length > 1 && (
+          <Select value={host} onChange={(e) => setHost(e.target.value)} className="w-40">
+            <option value="all">{d.containers.allHosts}</option>
+            {hosts.map((h) => (
+              <option key={h.key} value={h.key}>
+                {h.label}
+              </option>
+            ))}
+          </Select>
+        )}
         <Select value={sort} onChange={(e) => setSort(e.target.value as typeof sort)} className="w-40">
           <option value="name">{d.containers.sortName}</option>
           <option value="project">{d.containers.sortProject}</option>
+          <option value="state">{d.containers.sortState}</option>
+          {hosts.length > 1 && <option value="host">{d.containers.sortHost}</option>}
           <option value="cpu">{d.monitoring.cpu}</option>
           <option value="memory">{d.monitoring.memory}</option>
         </Select>
@@ -347,6 +372,14 @@ export function ContainerTable({
               {checking ? d.common.loading : d.containers.checkUpdates}
             </Button>
           )}
+          <Button
+            size="sm"
+            variant={showCharts ? "ghost" : "quiet"}
+            onClick={() => setShowCharts((v) => !v)}
+            title={d.containers.toggleCharts}
+          >
+            {showCharts ? "📈" : "📉"}
+          </Button>
           <Button
             size="sm"
             variant={grouped ? "ghost" : "quiet"}

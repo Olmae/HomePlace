@@ -221,6 +221,7 @@ export const en = {
     moveToGroup: "Move to group",
     grouped: "Grouped",
     flat: "Flat list",
+    toggleCharts: "Show or hide the mini charts",
     hideGroup: "Hide",
     unhideGroup: "Show",
 
@@ -238,6 +239,9 @@ export const en = {
     filterProblems: "Problems",
     sortName: "By name",
     sortProject: "By stack",
+    sortState: "By state",
+    sortHost: "By host",
+    allHosts: "All hosts",
     problems: "Problems",
     open: "Open",
 

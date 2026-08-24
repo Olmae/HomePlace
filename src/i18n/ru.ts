@@ -218,6 +218,7 @@ export const ru: Dictionary = {
     moveToGroup: "В группу",
     grouped: "По группам",
     flat: "Списком",
+    toggleCharts: "Показать или скрыть мини-графики",
     hideGroup: "Скрыть",
     unhideGroup: "Показать",
 
@@ -235,6 +236,9 @@ export const ru: Dictionary = {
     filterProblems: "Проблемные",
     sortName: "По имени",
     sortProject: "По стеку",
+    sortState: "По состоянию",
+    sortHost: "По хосту",
+    allHosts: "Все хосты",
     problems: "Проблемы",
     open: "Открыть",
 
