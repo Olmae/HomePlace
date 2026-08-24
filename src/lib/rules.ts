@@ -127,10 +127,13 @@ function escapeHtml(s: string): string {
 export const RULE_TEMPLATES = [
   {
     name: "Disk almost full",
-    query: '100 - (min(node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"}) / min(node_filesystem_size_bytes{fstype!~"tmpfs|overlay"}) * 100)',
+    // Highest used-percent across real filesystems. Computed per filesystem then
+    // maxed — not min(avail)/min(size), which mixes one filesystem's free space
+    // with another's total and reports a meaningless ratio.
+    query: 'max(100 * (1 - node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{fstype!~"tmpfs|overlay"}))',
     comparison: "gt",
     threshold: 90,
-    forSeconds: 600,
+    forSeconds: 120,
     unit: "percent",
     severity: "error",
   },

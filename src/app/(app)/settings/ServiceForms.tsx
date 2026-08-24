@@ -12,6 +12,7 @@ import {
   type ServiceResult,
 } from "@/actions/services";
 import { addServiceWidget } from "@/actions/dashboard";
+import { SecretField } from "./SecretField";
 import type { Dictionary } from "@/i18n";
 
 /**
@@ -98,14 +99,14 @@ function JellyfinForm({ d, value }: { d: Dictionary; value: ServicesDisplay["jel
             className="font-mono text-xs"
           />
         </Field>
-        <Field label="API key" hint={value.hasKey ? d.settings.secretKept : d.settings.jellyfinKeyHint}>
-          <Input
-            type="password"
-            value={form.apiKey}
-            onChange={(e) => setForm({ ...form, apiKey: e.target.value })}
-            placeholder={value.hasKey ? "••••••••" : ""}
-          />
-        </Field>
+        <SecretField
+          d={d}
+          label="API key"
+          hasSecret={value.hasKey}
+          value={form.apiKey}
+          onChange={(v) => setForm({ ...form, apiKey: v })}
+          hint={d.settings.jellyfinKeyHint}
+        />
         <div className="flex items-center gap-3">
           <Button variant="primary" disabled={pending} onClick={() => startTransition(async () => setResult(await saveJellyfinSettings(form)))}>
             {d.common.save}
@@ -139,14 +140,13 @@ function QbitForm({ d, value }: { d: Dictionary; value: ServicesDisplay["qbittor
           <Field label={d.settings.username}>
             <Input value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} />
           </Field>
-          <Field label={d.settings.password} hint={value.hasPassword ? d.settings.secretKept : undefined}>
-            <Input
-              type="password"
-              value={form.password}
-              onChange={(e) => setForm({ ...form, password: e.target.value })}
-              placeholder={value.hasPassword ? "••••••••" : ""}
-            />
-          </Field>
+          <SecretField
+            d={d}
+            label={d.settings.password}
+            hasSecret={value.hasPassword}
+            value={form.password}
+            onChange={(v) => setForm({ ...form, password: v })}
+          />
         </div>
         <div className="flex items-center gap-3">
           <Button variant="primary" disabled={pending} onClick={() => startTransition(async () => setResult(await saveQbitSettings(form)))}>
@@ -202,14 +202,13 @@ function ArrForm({ d, value }: { d: Dictionary; value: ServicesDisplay["arr"] })
                 className="font-mono text-xs"
               />
             </Field>
-            <Field label="API key" hint={value[i]?.hasKey ? d.settings.secretKept : undefined}>
-              <Input
-                type="password"
-                value={row.apiKey}
-                onChange={(e) => update(i, { apiKey: e.target.value })}
-                placeholder={value[i]?.hasKey ? "••••••••" : ""}
-              />
-            </Field>
+            <SecretField
+              d={d}
+              label="API key"
+              hasSecret={!!value[i]?.hasKey}
+              value={row.apiKey}
+              onChange={(v) => update(i, { apiKey: v })}
+            />
           </div>
         ))}
 
@@ -259,14 +258,13 @@ function PbsForm({ d, value }: { d: Dictionary; value: ServicesDisplay["pbs"] })
               className="font-mono text-xs"
             />
           </Field>
-          <Field label={d.settings.tokenSecret} hint={value.hasSecret ? d.settings.secretKept : undefined}>
-            <Input
-              type="password"
-              value={form.tokenSecret}
-              onChange={(e) => setForm({ ...form, tokenSecret: e.target.value })}
-              placeholder={value.hasSecret ? "••••••••" : ""}
-            />
-          </Field>
+          <SecretField
+            d={d}
+            label={d.settings.tokenSecret}
+            hasSecret={value.hasSecret}
+            value={form.tokenSecret}
+            onChange={(v) => setForm({ ...form, tokenSecret: v })}
+          />
         </div>
         <label className="flex items-center gap-2 text-sm text-muted">
           <input type="checkbox" checked={form.verifyTls} onChange={(e) => setForm({ ...form, verifyTls: e.target.checked })} />
@@ -301,14 +299,14 @@ function HaForm({ d, value }: { d: Dictionary; value: ServicesDisplay["homeassis
             className="font-mono text-xs"
           />
         </Field>
-        <Field label={d.settings.haToken} hint={value.hasToken ? d.settings.secretKept : d.settings.haTokenHint}>
-          <Input
-            type="password"
-            value={form.token}
-            onChange={(e) => setForm({ ...form, token: e.target.value })}
-            placeholder={value.hasToken ? "••••••••" : ""}
-          />
-        </Field>
+        <SecretField
+          d={d}
+          label={d.settings.haToken}
+          hasSecret={value.hasToken}
+          value={form.token}
+          onChange={(v) => setForm({ ...form, token: v })}
+          hint={d.settings.haTokenHint}
+        />
         <div className="flex items-center gap-3">
           <Button variant="primary" disabled={pending} onClick={() => startTransition(async () => setResult(await saveHaSettings(form)))}>
             {d.common.save}
