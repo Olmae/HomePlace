@@ -24,6 +24,7 @@ export type Entity = {
   domain: string;
   toggleable: boolean;
   area?: string;
+  device?: string;
   deviceClass?: string;
   brightness?: number;
   rgb?: string;
@@ -64,8 +65,11 @@ export function SmartHome({
   config: HomeConfig;
 }) {
   const [query, setQuery] = useState("");
-  const [group, setGroup] = useState<"area" | "domain">(areas.length > 0 ? "area" : "domain");
+  const [group, setGroup] = useState<"area" | "domain" | "device">(areas.length > 0 ? "area" : "domain");
   const [only, setOnly] = useState<"all" | "controls" | "sensors" | "on">("all");
+  // Which device cards are expanded. In device view a card starts collapsed —
+  // the point is to see one device at a time, not every sensor at once.
+  const [openDevices, setOpenDevices] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -91,7 +95,7 @@ export function SmartHome({
       if (only === "sensors" && e.toggleable) return false;
       if (only === "on" && !isOn(e)) return false;
       if (!needle) return true;
-      return `${nameOf(e)} ${e.id} ${e.area ?? ""}`.toLowerCase().includes(needle);
+      return `${nameOf(e)} ${e.id} ${e.area ?? ""} ${e.device ?? ""}`.toLowerCase().includes(needle);
     });
     // nameOf depends on config.names; recompute when it changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -100,11 +104,22 @@ export function SmartHome({
   const buckets = useMemo(
     () =>
       groupEntities(shown, config, group, {
-        unplaced: group === "area" ? d.home.noArea : d.home.unplaced,
+        unplaced: group === "area" ? d.home.noArea : group === "device" ? d.home.noDevice : d.home.unplaced,
         kindLabel: (dm) => dm,
       }),
-    [shown, config, group, d.home.noArea, d.home.unplaced]
+    [shown, config, group, d.home.noArea, d.home.noDevice, d.home.unplaced]
   );
+
+  // In device view, a card is collapsed unless opened; searching opens all so
+  // matches are never hidden behind a closed card.
+  const searchingDevices = group === "device" && query.trim().length > 0;
+  const isDeviceOpen = (key: string) => searchingDevices || openDevices.has(key);
+  const toggleDevice = (key: string) =>
+    setOpenDevices((prev) => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
 
   const active = entities.filter(isOn).length;
 
@@ -141,6 +156,7 @@ export function SmartHome({
         <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={d.common.search} className="w-52" />
         <Select value={group} onChange={(e) => setGroup(e.target.value as typeof group)} className="w-40">
           <option value="area">{d.home.byRoom}</option>
+          <option value="device">{d.home.byDevice}</option>
           <option value="domain">{d.home.byKind}</option>
         </Select>
         <Select value={only} onChange={(e) => setOnly(e.target.value as typeof only)} className="w-40">
@@ -170,11 +186,24 @@ export function SmartHome({
           return (
             <section key={bucket.key}>
               <div className="mb-2 flex items-center gap-2">
-                <h2 className="flex min-w-0 items-center gap-1.5 text-sm font-semibold tracking-tight">
+                <button
+                  type="button"
+                  onClick={() => group === "device" && toggleDevice(bucket.key)}
+                  className={`flex min-w-0 items-center gap-1.5 text-left text-sm font-semibold tracking-tight ${
+                    group === "device" ? "transition-colors hover:text-accent" : "cursor-default"
+                  }`}
+                  aria-expanded={group === "device" ? isDeviceOpen(bucket.key) : undefined}
+                >
+                  {group === "device" && (
+                    <span className="text-faint" aria-hidden>
+                      {isDeviceOpen(bucket.key) ? "▾" : "▸"}
+                    </span>
+                  )}
                   {bucket.icon && <span aria-hidden>{bucket.icon}</span>}
                   <span className="truncate">{bucket.name}</span>
                   <span className="text-muted">· {bucket.items.length}</span>
-                </h2>
+                  {switchable.length > 0 && anyOn && <span className="text-[11px] font-medium text-accent">· {switchable.filter(isOn).length} on</span>}
+                </button>
 
                 {/* Control the whole group at once — the switchable ones in it.
                     Individual devices stay independently switchable below. */}
@@ -215,7 +244,7 @@ export function SmartHome({
 
               {bucket.items.length === 0 ? (
                 <p className="text-xs text-muted">{d.home.groupMembersHint}</p>
-              ) : (
+              ) : group === "device" && !isDeviceOpen(bucket.key) ? null : (
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
                   {bucket.items.map((entity) => {
                     const on = isOn(entity);

@@ -537,6 +537,9 @@ export type HaEntity = {
   toggleable: boolean;
   /** Room, when Home Assistant knows one. */
   area?: string;
+  /** The physical device this entity belongs to — "Washing machine", "Archer
+   *  AX53" — so a device's dozen sensors can be shown as one card. */
+  device?: string;
   /**
    * Home Assistant's own classification of a sensor — "duration", "timestamp",
    * "data_size", "temperature"… It is what lets a raw number be shown as days
@@ -579,6 +582,9 @@ export async function saveHa(input: HaSettings | null): Promise<void> {
  * does not move often.
  */
 const areaCache = new Map<string, string>();
+// Entity → physical device name. Filled by the same template call as areas, so
+// grouping the smart-home page by device costs no extra request.
+const deviceCache = new Map<string, string>();
 let areasFetchedAt = 0;
 
 export async function haAreas(): Promise<string[]> {
@@ -592,9 +598,13 @@ export async function haAreas(): Promise<string[]> {
     const res = await fetch(`${cfg.url}/api/template`, {
       method: "POST",
       headers: { authorization: `Bearer ${cfg.token}`, "content-type": "application/json" },
-      // One template renders the whole entity → area mapping in a single call.
+      // One template renders entity → area and entity → device in a single call.
+      // device_attr must not be called with a null id (it 400s), hence the guard.
       body: JSON.stringify({
-        template: "{% for s in states %}{{ s.entity_id }}|{{ area_name(s.entity_id) or '' }}\n{% endfor %}",
+        template:
+          "{% for s in states %}{% set did = device_id(s.entity_id) %}" +
+          "{{ s.entity_id }}|{{ area_name(s.entity_id) or '' }}|" +
+          "{{ (device_attr(did, 'name_by_user') or device_attr(did, 'name')) if did else '' }}\n{% endfor %}",
       }),
       cache: "no-store",
       signal: AbortSignal.timeout(10000),
@@ -603,9 +613,13 @@ export async function haAreas(): Promise<string[]> {
 
     const text = await res.text();
     areaCache.clear();
+    deviceCache.clear();
     for (const line of text.split("\n")) {
-      const [id, area] = line.split("|");
-      if (id && area && area.trim() && area.trim() !== "None") areaCache.set(id.trim(), area.trim());
+      const [id, area, device] = line.split("|");
+      const eid = id?.trim();
+      if (!eid) continue;
+      if (area && area.trim() && area.trim() !== "None") areaCache.set(eid, area.trim());
+      if (device && device.trim() && device.trim() !== "None") deviceCache.set(eid, device.trim());
     }
     areasFetchedAt = Date.now();
     return [...new Set(areaCache.values())].sort();
@@ -616,6 +630,10 @@ export async function haAreas(): Promise<string[]> {
 
 function areaOf(entityId: string): string | undefined {
   return areaCache.get(entityId);
+}
+
+function deviceOf(entityId: string): string | undefined {
+  return deviceCache.get(entityId);
 }
 
 /**
@@ -661,6 +679,7 @@ export async function haStates(ids?: string[]): Promise<HaEntity[] | null> {
         domain,
         toggleable: TOGGLEABLE.has(domain),
         area: areaOf(id),
+        device: deviceOf(id),
         deviceClass: e.attributes?.device_class ? String(e.attributes.device_class) : undefined,
         brightness:
           domain === "light" && e.attributes?.brightness != null

@@ -55,6 +55,7 @@ export default async function SmartHomePage() {
           domain: e.domain,
           toggleable: e.toggleable,
           area: e.area,
+          device: e.device,
           deviceClass: e.deviceClass,
           brightness: e.brightness,
           rgb: e.rgb,

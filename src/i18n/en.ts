@@ -785,12 +785,14 @@ export const en = {
     notConfiguredHint: "Add its address and a long-lived token in Settings → Services, and the whole house appears here.",
     unreachable: "Home Assistant did not answer",
     byRoom: "By room",
+    byDevice: "By device",
     byKind: "By kind",
     everything: "Everything",
     controls: "Only switches",
     sensors: "Only sensors",
     onlyOn: "Only what is on",
     noArea: "No room",
+    noDevice: "No device",
     on: "on",
 
     // Grouping — the same three-way switch the containers page has: by room, by

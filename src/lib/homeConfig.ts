@@ -64,10 +64,10 @@ export type HomeBucket<T> = {
  * the remainder split by the chosen automatic dimension (room or kind), then a
  * final catch-all for whatever has neither.
  */
-export function groupEntities<T extends { id: string; area?: string; domain: string }>(
+export function groupEntities<T extends { id: string; area?: string; domain: string; device?: string }>(
   items: T[],
   config: HomeConfig,
-  autoBy: "area" | "domain",
+  autoBy: "area" | "domain" | "device",
   labels: { unplaced: string; kindLabel: (domain: string) => string },
 ): HomeBucket<T>[] {
   const assigned = new Map<string, HomeGroup>();
@@ -89,7 +89,7 @@ export function groupEntities<T extends { id: string; area?: string; domain: str
       custom.get(inGroup.id)!.items.push(item);
       continue;
     }
-    const dim = autoBy === "area" ? item.area : item.domain;
+    const dim = autoBy === "area" ? item.area : autoBy === "device" ? item.device : item.domain;
     if (dim) {
       let bucket = auto.get(dim);
       if (!bucket) {
