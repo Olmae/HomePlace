@@ -76,6 +76,23 @@ export async function searchBarcode(barcode: string): Promise<SearchResult> {
   return foodByBarcode(barcode);
 }
 
+/**
+ * Decode a barcode from an uploaded photo, then look it up.
+ *
+ * The browser hands over a JPEG (it normalises whatever the phone took), the
+ * server reads the bars — at any rotation — and the found number goes through
+ * the same lookup as a typed one. `code` is echoed back so the UI can show what
+ * it read, or say it read nothing.
+ */
+export async function scanFoodPhoto(jpegBase64: string): Promise<{ code: string | null; result: SearchResult }> {
+  await requireUser();
+  const { decodeBarcodeFromJpeg } = await import("@/lib/barcodeDecode");
+  const base64 = jpegBase64.includes(",") ? jpegBase64.slice(jpegBase64.indexOf(",") + 1) : jpegBase64;
+  const code = decodeBarcodeFromJpeg(Buffer.from(base64, "base64"));
+  if (!code) return { code: null, result: { foods: [] } };
+  return { code, result: await foodByBarcode(code) };
+}
+
 export async function logFood(input: { name: string; kcal: number; protein: number; fat: number; carbs: number; grams?: number | null }): Promise<void> {
   const user = await requireUser();
   const name = input.name.trim().slice(0, 120);

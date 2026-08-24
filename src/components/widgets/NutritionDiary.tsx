@@ -4,7 +4,7 @@ import { useState, useTransition, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardHeader } from "@/components/ui";
 import { Input, Button, Select } from "@/components/form";
-import { saveNutritionProfile, searchFood, searchBarcode, logFood, deleteFood, type NutritionState } from "@/actions/nutrition";
+import { saveNutritionProfile, searchFood, searchBarcode, scanFoodPhoto, logFood, deleteFood, type NutritionState } from "@/actions/nutrition";
 import type { NutritionProfile } from "@/lib/nutrition";
 import type { FoodMatch, SearchResult } from "@/lib/fatsecret";
 import { fill, type Dictionary } from "@/i18n";
@@ -145,6 +145,7 @@ function AddFood({ d, lookup, onAdded, start }: { d: Dictionary; lookup: boolean
   const [scanning, setScanning] = useState(false);
   const [canScan, setCanScan] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fileRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     // A camera is enough — the scanner uses the native BarcodeDetector where it
@@ -172,6 +173,24 @@ function AddFood({ d, lookup, onAdded, start }: { d: Dictionary; lookup: boolean
     try { setResult(await searchBarcode(c)); } finally { setBusy(false); }
   }
 
+  // A photo of a barcode: normalise it to a modest JPEG in the browser (so any
+  // format and any size works, and the upload stays small), then let the server
+  // read the bars at any rotation and look the number up.
+  async function onPhoto(file: File) {
+    setQuery("");
+    setBusy(true);
+    try {
+      const jpeg = await toJpegDataUrl(file);
+      const { code, result } = await scanFoodPhoto(jpeg);
+      if (code) setBarcode(code);
+      setResult(code ? result : { foods: [], error: "photo" });
+    } catch {
+      setResult({ foods: [], error: "photo" });
+    } finally {
+      setBusy(false);
+    }
+  }
+
   if (manual) return <ManualForm d={d} onAdded={onAdded} start={start} onCancel={lookup ? () => setManual(false) : undefined} />;
 
   const foods = result?.foods ?? [];
@@ -197,6 +216,20 @@ function AddFood({ d, lookup, onAdded, start }: { d: Dictionary; lookup: boolean
             📷
           </Button>
         )}
+        <Button variant="quiet" onClick={() => fileRef.current?.click()} title={t.nutritionPhoto}>
+          🖼
+        </Button>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) void onPhoto(file);
+            e.target.value = "";
+          }}
+        />
         <Button variant="quiet" onClick={() => lookupBarcode()} disabled={barcode.replace(/\D/g, "").length < 6} title={t.nutritionBarcode}>
           🔍
         </Button>
@@ -304,14 +337,55 @@ function BarcodeScanner({ d, onDetected, onClose }: { d: Dictionary; onDetected:
 /** Turn a search-error code into something a person can act on. */
 function searchErrorText(error: string, t: Dictionary["widgets"]): string {
   if (error.startsWith("ip:")) return fill(t.nutritionErrorIp, { ip: error.slice(3) || "—" });
+  if (error === "photo") return t.nutritionPhotoFail;
   if (error === "auth" || error === "not-configured") return t.nutritionErrorAuth;
   return t.nutritionErrorApi;
 }
 
+/**
+ * Normalise any picked image to a modest JPEG data URL, in the browser.
+ *
+ * Redrawing through a canvas means any format the browser can open works (and
+ * strips the orientation quirks of raw camera files), and the downscale keeps
+ * the upload small and the server-side decode quick.
+ */
+async function toJpegDataUrl(file: File): Promise<string> {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const im = new Image();
+      im.onload = () => resolve(im);
+      im.onerror = () => reject(new Error("image load failed"));
+      im.src = url;
+    });
+    const max = 1600;
+    const scale = Math.min(1, max / Math.max(img.width, img.height));
+    const w = Math.max(1, Math.round(img.width * scale));
+    const h = Math.max(1, Math.round(img.height * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("no 2d context");
+    ctx.drawImage(img, 0, 0, w, h);
+    return canvas.toDataURL("image/jpeg", 0.82);
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
 function FoodResult({ d, match, onAdded, start }: { d: Dictionary; match: FoodMatch; onAdded: () => void; start: (fn: () => void) => void }) {
+  const t = d.widgets;
   const [grams, setGrams] = useState("100");
   const [open, setOpen] = useState(false);
   const per = match.per100;
+
+  // Manual values for a match the database has no КБЖУ for. Calories are all
+  // that is required; the macros are welcome but optional.
+  const [mk, setMk] = useState("");
+  const [mp, setMp] = useState("");
+  const [mf, setMf] = useState("");
+  const [mc, setMc] = useState("");
 
   const g = Number(grams) || 0;
   const f = per ? g / 100 : 1;
@@ -319,7 +393,20 @@ function FoodResult({ d, match, onAdded, start }: { d: Dictionary; match: FoodMa
 
   function add() {
     if (!scaled) return;
-    start(() => void logFood({ name: match.name, ...scaled, grams: per ? g : null }).then(onAdded));
+    start(() => void logFood({ name: match.name, ...scaled, grams: g }).then(onAdded));
+  }
+  function addManual() {
+    if (!mk) return;
+    start(() =>
+      void logFood({
+        name: match.name,
+        kcal: Number(mk) || 0,
+        protein: Number(mp) || 0,
+        fat: Number(mf) || 0,
+        carbs: Number(mc) || 0,
+        grams: Number(grams) || null,
+      }).then(onAdded)
+    );
   }
 
   return (
@@ -328,21 +415,32 @@ function FoodResult({ d, match, onAdded, start }: { d: Dictionary; match: FoodMa
         <span className="min-w-0 flex-1 truncate">{match.name}</span>
         {per && <span className="shrink-0 text-xs text-faint">{per.kcal} / 100g</span>}
       </button>
-      {open && (
-        <div className="mt-1.5 flex items-center gap-2">
-          {per ? (
-            <>
-              <Input value={grams} onChange={(e) => setGrams(e.target.value)} inputMode="numeric" className="w-16" />
-              <span className="text-xs text-faint">g · {Math.round(scaled!.kcal)} {d.widgets.nutritionKcal}</span>
-              <Button variant="quiet" onClick={add} className="ml-auto">
-                ＋
-              </Button>
-            </>
-          ) : (
-            <span className="text-xs text-faint">{d.widgets.nutritionNoMacros}</span>
-          )}
-        </div>
-      )}
+      {open &&
+        (per ? (
+          <div className="mt-1.5 flex items-center gap-2">
+            <Input value={grams} onChange={(e) => setGrams(e.target.value)} inputMode="numeric" className="w-16" />
+            <span className="text-xs text-faint">
+              g · {Math.round(scaled!.kcal)} {t.nutritionKcal}
+            </span>
+            <Button variant="quiet" onClick={add} className="ml-auto">
+              ＋
+            </Button>
+          </div>
+        ) : (
+          // No numbers in the database — fill them in. Only calories are needed.
+          <div className="mt-1.5 space-y-1.5">
+            <p className="text-[11px] text-faint">{t.nutritionFillIn}</p>
+            <div className="grid grid-cols-4 gap-1.5">
+              <Field value={mk} set={setMk} ph={`${t.nutritionKcal}*`} />
+              <Field value={mp} set={setMp} ph={t.nutritionProtein} />
+              <Field value={mf} set={setMf} ph={t.nutritionFat} />
+              <Field value={mc} set={setMc} ph={t.nutritionCarbs} />
+            </div>
+            <Button variant="quiet" onClick={addManual} disabled={!mk} className="w-full">
+              {d.common.add}
+            </Button>
+          </div>
+        ))}
     </div>
   );
 }
