@@ -200,6 +200,8 @@ export const en = {
     checkUpdatesHint: "Ask each container's registry whether a newer image exists (uses the internet).",
     updateAvailable: "A newer image is available",
     update: "update",
+    updateHowTo: "Pull the new image, then recreate the container:",
+    updateComposeNote: "With Compose: run docker compose pull && docker compose up -d in the stack's folder.",
     onlyMatches: "Only matching lines",
     downloadLogs: "Download logs",
     pause: "Pause",

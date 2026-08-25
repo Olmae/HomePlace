@@ -197,6 +197,8 @@ export const ru: Dictionary = {
     checkUpdatesHint: "Спросить у реестра каждого контейнера, есть ли новый образ (нужен интернет).",
     updateAvailable: "Доступен новый образ",
     update: "обновление",
+    updateHowTo: "Скачайте новый образ и пересоздайте контейнер:",
+    updateComposeNote: "Через Compose: docker compose pull && docker compose up -d в папке стека.",
     onlyMatches: "Только совпадения",
     downloadLogs: "Скачать логи",
     pause: "Пауза",

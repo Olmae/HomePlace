@@ -126,6 +126,7 @@ export function ContainerTable({
   const [error, setError] = useState<string | null>(null);
   const [updates, setUpdates] = useState<Record<string, "update" | "current" | "unknown">>(initialUpdates);
   const [checking, setChecking] = useState(false);
+  const [hintFor, setHintFor] = useState<string | null>(null);
 
   function checkUpdates() {
     setChecking(true);
@@ -262,11 +263,30 @@ export function ContainerTable({
             </Link>
             {row.onDashboard && <span className="text-[10px] text-faint" title={d.containers.onDashboard}>◈</span>}
             {updates[row.name] === "update" && (
-              <span
-                className="rounded-control bg-warn/15 px-1.5 text-[10px] font-medium text-warn"
-                title={d.containers.updateAvailable}
-              >
-                ↑ {d.containers.update}
+              <span className="relative inline-flex">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    setHintFor((n) => (n === row.name ? null : row.name));
+                  }}
+                  title={d.containers.updateAvailable}
+                  aria-label={d.containers.updateAvailable}
+                  className="inline-flex h-[18px] w-[18px] items-center justify-center rounded-full bg-accent/15 text-accent transition-colors hover:bg-accent/25"
+                >
+                  <svg width="11" height="11" viewBox="0 0 12 12" fill="none" aria-hidden>
+                    <path
+                      d="M6 9.25V3.4M6 3.4 3.4 6M6 3.4 8.6 6"
+                      stroke="currentColor"
+                      strokeWidth="1.6"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </button>
+                {hintFor === row.name && (
+                  <UpdateHint d={d} image={row.image} onClose={() => setHintFor(null)} />
+                )}
               </span>
             )}
           </div>
@@ -791,5 +811,49 @@ function GroupDialog({
         </div>
       </div>
     </Dialog>
+  );
+}
+
+/**
+ * The "how to update" popover behind the update dot.
+ *
+ * The panel talks to Docker only through the read-mostly socket proxy — it
+ * cannot pull an image or safely rebuild a Compose-managed container from here
+ * without risking the very config Compose owns. So the honest one click is: show
+ * exactly what to run, ready to copy, rather than pretend to do it and drift the
+ * stack.
+ */
+function UpdateHint({ d, image, onClose }: { d: Dictionary; image: string; onClose: () => void }) {
+  const [copied, setCopied] = useState(false);
+  const cmd = `docker pull ${image}`;
+  return (
+    <>
+      <button
+        type="button"
+        aria-hidden
+        tabIndex={-1}
+        className="fixed inset-0 z-10 cursor-default"
+        onClick={onClose}
+      />
+      <div className="absolute left-0 top-6 z-20 w-72 max-w-[calc(100vw-2rem)] rounded-card border border-line bg-surface p-3 text-left shadow-pop">
+        <p className="text-sm font-semibold text-accent">{d.containers.updateAvailable}</p>
+        <p className="mt-1 text-xs text-muted">{d.containers.updateHowTo}</p>
+        <div className="mt-2 flex items-center gap-2 rounded-control border border-line bg-raised px-2 py-1.5">
+          <code className="min-w-0 flex-1 truncate font-mono text-[11px]">{cmd}</code>
+          <button
+            type="button"
+            onClick={() => {
+              navigator.clipboard?.writeText(cmd);
+              setCopied(true);
+              setTimeout(() => setCopied(false), 1500);
+            }}
+            className="shrink-0 text-[11px] text-muted transition-colors hover:text-text"
+          >
+            {copied ? d.common.copied : d.common.copy}
+          </button>
+        </div>
+        <p className="mt-2 text-[11px] text-faint">{d.containers.updateComposeNote}</p>
+      </div>
+    </>
   );
 }

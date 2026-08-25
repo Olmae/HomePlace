@@ -32,6 +32,11 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3200
+# Bind to every interface, not just the container's own hostname. Docker sets
+# HOSTNAME to the container id, and Next's standalone server binds to exactly
+# that — which leaves 127.0.0.1 refusing connections, so the healthcheck (and
+# anything else on loopback inside the container) could never reach the app.
+ENV HOSTNAME=0.0.0.0
 # Default location of the database, also used by scripts run via `docker exec`.
 ENV DATA_DIR=/data
 
