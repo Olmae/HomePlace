@@ -245,6 +245,22 @@ export async function tgSend(chatId: string | number, text: string, keyboard?: s
   });
 }
 
+/** Send a message with inline buttons that call back with `data`. */
+export async function tgSendInline(chatId: string | number, text: string, buttons: { text: string; data: string }[][]): Promise<void> {
+  await tgApi("sendMessage", {
+    chat_id: chatId,
+    text,
+    parse_mode: "HTML",
+    disable_web_page_preview: true,
+    reply_markup: { inline_keyboard: buttons.map((row) => row.map((b) => ({ text: b.text, callback_data: b.data }))) },
+  });
+}
+
+/** Acknowledge a button tap so Telegram stops its spinner; optional toast. */
+export async function tgAnswerCallback(id: string, text?: string): Promise<void> {
+  await tgApi("answerCallbackQuery", { callback_query_id: id, ...(text ? { text } : {}) });
+}
+
 // Quiet hours live in their own module so they can be unit-tested without
 // dragging the HTTP stack in; re-exported here because this is where callers
 // expect to find them.

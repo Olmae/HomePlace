@@ -1,7 +1,7 @@
 import "server-only";
 import { prisma, getSetting, setSetting } from "./db";
 import { telegramConfig } from "./integrations";
-import { tgApi, tgSend, tgFetchFile } from "./telegram";
+import { tgApi, tgSend, tgSendInline, tgAnswerCallback, tgFetchFile } from "./telegram";
 import { decodeBarcodeFromJpeg } from "./barcodeDecode";
 import { listContainers, controlContainer } from "./docker";
 import { addShopping, getShopping } from "./shopping";
@@ -82,23 +82,64 @@ export async function pollTelegram(longPollSeconds = 0): Promise<boolean> {
   if (!(await getSetting<boolean>("telegram.commands", false))) return false;
 
   const offset = (await getSetting<number>(OFFSET_KEY, 0)) || 0;
-  const updates = await tgApi<TgUpdate[]>("getUpdates", { offset: offset + 1, timeout: longPollSeconds, allowed_updates: ["message"] });
+  const updates = await tgApi<TgUpdate[]>("getUpdates", { offset: offset + 1, timeout: longPollSeconds, allowed_updates: ["message", "callback_query"] });
   if (!updates || updates.length === 0) return true;
 
   await setSetting(OFFSET_KEY, updates[updates.length - 1].update_id);
 
   for (const u of updates) {
-    const msg = u.message;
-    if (!msg?.chat) continue;
-    // Only the configured chat is trusted — anyone else is a stranger with the
-    // bot's username, and this is a control surface.
-    if (String(msg.chat.id) !== String(cfg.chatId)) continue;
     try {
+      if (u.callback_query) {
+        const cb = u.callback_query;
+        const chatId = cb.message?.chat?.id;
+        if (chatId === undefined || String(chatId) !== String(cfg.chatId)) continue;
+        await handleCallback(String(chatId), cb);
+        continue;
+      }
+      const msg = u.message;
+      if (!msg?.chat) continue;
+      // Only the configured chat is trusted — anyone else is a stranger with the
+      // bot's username, and this is a control surface.
+      if (String(msg.chat.id) !== String(cfg.chatId)) continue;
       if (msg.text) await handle(String(msg.chat.id), msg.text.trim());
       else if (msg.photo?.length) await handlePhoto(String(msg.chat.id), msg.photo);
     } catch (e) {
       console.error("telegram command failed:", e);
     }
+  }
+  return true;
+}
+
+/** A tapped inline button: pick a food from a list, or tick a reminder off. */
+async function handleCallback(chatId: string, cb: { id: string; data?: string }): Promise<void> {
+  await tgAnswerCallback(cb.id);
+  const data = cb.data ?? "";
+
+  if (data.startsWith("food:")) {
+    const pending = foodChoices.get(chatId);
+    const chosen = pending?.items[Number(data.slice(5))];
+    if (pending && chosen) {
+      foodChoices.delete(chatId);
+      await logFoodMatch(chatId, chosen, pending.grams);
+    }
+    return;
+  }
+  if (data.startsWith("done:")) {
+    const ok = await completeReminderById(data.slice(5));
+    await tgSend(chatId, ok ? "✅ Отмечено выполненным." : "Напоминание не найдено.");
+    return;
+  }
+}
+
+/** Tick a reminder off — repeating ones move to their next time, like the web. */
+async function completeReminderById(id: string): Promise<boolean> {
+  const r = await prisma.reminder.findUnique({ where: { id } });
+  if (!r) return false;
+  if (r.repeat === "none") {
+    await prisma.reminder.update({ where: { id }, data: { done: true } });
+  } else {
+    const { nextOccurrence } = await import("./recurrence");
+    await prisma.reminder.update({ where: { id }, data: { at: nextOccurrence(r.at, r.repeat), notifiedAt: null } });
   }
   return true;
 }
@@ -221,7 +262,7 @@ async function handle(chatId: string, text: string): Promise<void> {
   }
   if (/^\/list|^📋/.test(lower)) {
     state.delete(chatId);
-    await tgSend(chatId, await remindersText(), MENU);
+    await sendRemindersList(chatId);
     return;
   }
   if (/^\/remind|^➕/.test(lower)) {
@@ -322,7 +363,9 @@ async function handleFood(chatId: string, text: string): Promise<void> {
   const items = withMacros.slice(0, 6);
   foodChoices.set(chatId, { items, grams });
   const list = items.map((f, i) => `${i + 1}. ${escape(f.name)} — ${f.per100!.kcal} ккал/100 г`).join("\n");
-  await tgSend(chatId, `Нашёл несколько${grams !== 100 ? ` (на ${grams} г)` : ""} — пришлите номер:\n${list}`);
+  // Inline buttons 1..N so a tap picks it — the number still works as a reply.
+  const buttons = [items.map((_, i) => ({ text: String(i + 1), data: `food:${i}` }))];
+  await tgSendInline(chatId, `Нашёл несколько${grams !== 100 ? ` (на ${grams} г)` : ""} — выберите:\n${list}`, buttons);
 }
 
 /** Write one match to the diary and confirm with the day's running total. */
@@ -365,12 +408,18 @@ function round1(n: number): number {
   return Math.round(n * 10) / 10;
 }
 
-async function remindersText(): Promise<string> {
+async function sendRemindersList(chatId: string): Promise<void> {
   const rows = await prisma.reminder.findMany({ where: { done: false }, orderBy: { at: "asc" }, take: 10 });
-  if (rows.length === 0) return "Напоминаний нет.";
-  return rows
+  if (rows.length === 0) {
+    await tgSend(chatId, "Напоминаний нет.", MENU);
+    return;
+  }
+  const text = rows
     .map((r) => `• ${escape(r.title)} — ${r.at.toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}`)
     .join("\n");
+  // One ✓ button per reminder — a tap ticks it off (repeating ones roll forward).
+  const buttons = rows.map((r) => [{ text: `✓ ${r.title.slice(0, 24)}`, data: `done:${r.id}` }]);
+  await tgSendInline(chatId, text, buttons);
 }
 
 async function restartContainer(name: string): Promise<string> {
@@ -492,4 +541,8 @@ function escape(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-type TgUpdate = { update_id: number; message?: { text?: string; chat?: { id: number }; photo?: { file_id: string }[] } };
+type TgUpdate = {
+  update_id: number;
+  message?: { text?: string; chat?: { id: number }; photo?: { file_id: string }[] };
+  callback_query?: { id: string; data?: string; message?: { chat?: { id: number } } };
+};
