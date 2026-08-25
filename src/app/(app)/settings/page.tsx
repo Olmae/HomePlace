@@ -7,7 +7,7 @@ import { prometheusHealth } from "@/lib/prometheus";
 import { proxmoxHealth } from "@/lib/proxmox";
 import { settings as cfg } from "@/lib/config";
 import { effectiveOrigin } from "@/lib/origin";
-import { integrationStatus, integrationsForDisplay, dockerHostsForDisplay } from "@/lib/integrations";
+import { integrationStatus, integrationsForDisplay, dockerHostsForDisplay, proxmoxConfig } from "@/lib/integrations";
 import { DockerHostsForm } from "./DockerHostsForm";
 import { notifiersForDisplay } from "@/lib/notify";
 import { NOTIFY_POLICY_KEY, normalizePolicy } from "@/lib/notifyPolicy";
@@ -18,6 +18,8 @@ import { PasswordForm } from "./PasswordForm";
 import { IntegrationForms } from "./IntegrationForms";
 import { RuleForms } from "./RuleForms";
 import { ScheduleForms } from "./ScheduleForms";
+import { SmartCard } from "./SmartCard";
+import { smartConfig } from "@/lib/smart";
 import { ServiceForms } from "./ServiceForms";
 import { PushCard } from "./PushCard";
 import { NotifierForms } from "./NotifierForms";
@@ -198,17 +200,20 @@ async function ServicesSection({ d }: { d: ReturnType<typeof dict> }) {
 // ──────────────────────── Alerts and notifications ───────────────────────
 
 async function AlertsSection({ d, userId }: { d: ReturnType<typeof dict>; userId: string }) {
-  const [rules, notifiers, pushCount, policyRaw, schedules] = await Promise.all([
+  const [rules, notifiers, pushCount, policyRaw, schedules, smart, pve] = await Promise.all([
     prisma.alertRule.findMany({ orderBy: { createdAt: "asc" } }),
     notifiersForDisplay(),
     prisma.pushSubscription.count({ where: { userId } }),
     getSetting<unknown>(NOTIFY_POLICY_KEY, null),
     prisma.schedule.findMany({ orderBy: { createdAt: "asc" } }),
+    smartConfig(),
+    proxmoxConfig(),
   ]);
 
   return (
     <div className="space-y-3">
       <RuleForms d={d} rules={rules} />
+      {pve && <SmartCard d={d} config={smart} />}
       <ScheduleForms
         d={d}
         schedules={schedules.map((s) => ({

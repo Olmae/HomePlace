@@ -33,6 +33,31 @@ export type SmartDisk = {
 const SNAPSHOT_KEY = "smart.snapshot";
 type Snapshot = Record<string, { reallocated: number | null; pending: number | null; uncorrectable: number | null; health: string }>;
 
+/**
+ * What to watch, and whether to watch at all.
+ *
+ * This is an open-source panel and not everyone wants a disk nanny, so the whole
+ * thing is switchable and each counter is opt-out. Defaults are "on and watch
+ * everything" — the useful behaviour for the people who do want it.
+ */
+export type SmartConfig = { enabled: boolean; reallocated: boolean; pending: boolean; uncorrectable: boolean; health: boolean };
+const CONFIG_KEY = "smart.config";
+
+export async function smartConfig(): Promise<SmartConfig> {
+  const c = await getSetting<Partial<SmartConfig> | null>(CONFIG_KEY, null);
+  return {
+    enabled: c?.enabled ?? true,
+    reallocated: c?.reallocated ?? true,
+    pending: c?.pending ?? true,
+    uncorrectable: c?.uncorrectable ?? true,
+    health: c?.health ?? true,
+  };
+}
+
+export async function saveSmartConfig(input: SmartConfig): Promise<void> {
+  await setSetting(CONFIG_KEY, input);
+}
+
 let cache: { at: number; disks: SmartDisk[] } | null = null;
 let lastCheck = 0;
 
@@ -67,6 +92,8 @@ export async function smartDisks(): Promise<SmartDisk[]> {
 export async function checkSmartDrift(): Promise<void> {
   if (Date.now() - lastCheck < 3_600_000) return;
   if (!(await proxmoxConfig())) return;
+  const cfg = await smartConfig();
+  if (!cfg.enabled) return;
   lastCheck = Date.now();
 
   const current = await smartDisks();
@@ -85,12 +112,12 @@ export async function checkSmartDrift(): Promise<void> {
       before != null && after != null && after > before ? `${label} ${before} → ${after}` : null;
 
     const changes = [
-      rose("reallocated", was.reallocated, d.counters.reallocated),
-      rose("pending", was.pending, d.counters.pending),
-      rose("uncorrectable", was.uncorrectable, d.counters.uncorrectable),
+      cfg.reallocated ? rose("reallocated", was.reallocated, d.counters.reallocated) : null,
+      cfg.pending ? rose("pending", was.pending, d.counters.pending) : null,
+      cfg.uncorrectable ? rose("uncorrectable", was.uncorrectable, d.counters.uncorrectable) : null,
     ].filter((x): x is string => x !== null);
 
-    const healthFell = was.health === "PASSED" && d.health !== "PASSED";
+    const healthFell = cfg.health && was.health === "PASSED" && d.health !== "PASSED";
 
     if (changes.length > 0 || healthFell) {
       const name = `${d.model || d.devpath} (${d.sizeGB}GB)`;
