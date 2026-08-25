@@ -10,6 +10,7 @@ import { startTelegramPolling } from "./telegramBot";
 import { sampleContainers } from "./containerHistory";
 import { sampleContainersToDb, pruneMetrics } from "./metricStore";
 import { prometheusConfig } from "./integrations";
+import { checkSmartDrift } from "./smart";
 
 /**
  * The availability prober.
@@ -60,6 +61,9 @@ async function tick(): Promise<void> {
     await evaluateRules();
     await processReminders();
     await runDueSchedules();
+    // Watch the disks' failing-sector counters for any worsening. Self-throttled
+    // to once an hour, so riding the tick costs nothing most of the time.
+    await checkSmartDrift().catch((e) => console.error("smart check failed:", e));
     // The Telegram bot runs its own long-polling loop (startTelegramPolling) so
     // replies are instant rather than up to a tick late — it is not driven from
     // here any more.

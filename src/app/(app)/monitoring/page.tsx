@@ -6,7 +6,8 @@ import { pageUser } from "@/lib/pageUser";
 // missing on this one.
 import { prometheusConfig, proxmoxConfig } from "@/lib/integrations";
 import { query, queryOne, queryRange, Q } from "@/lib/prometheus";
-import { nodes, guests, disks, storages } from "@/lib/proxmox";
+import { guests, storages } from "@/lib/proxmox";
+import { smartDisks } from "@/lib/smart";
 import { dict } from "@/i18n";
 import { Card, CardHeader, Meter, Badge, EmptyState, SectionTitle } from "@/components/ui";
 import { Sparkline } from "@/components/Sparkline";
@@ -399,11 +400,13 @@ async function HostView({ d, instance, range }: { d: ReturnType<typeof dict>; in
 // ───────────────────────────────── Proxmox ───────────────────────────────
 
 async function ProxmoxView({ d }: { d: ReturnType<typeof dict> }) {
-  const nodeList = await nodes();
-  const [diskLists, stores] = await Promise.all([
-    Promise.all(nodeList.map(async (n) => ({ node: n.node, list: await disks(n.node) }))),
-    storages(),
-  ]);
+  const [smart, stores] = await Promise.all([smartDisks(), storages()]);
+  const byNode = new Map<string, typeof smart>();
+  for (const disk of smart) {
+    const arr = byNode.get(disk.node) ?? [];
+    arr.push(disk);
+    byNode.set(disk.node, arr);
+  }
 
   return (
     <div className="space-y-6">
@@ -412,26 +415,37 @@ async function ProxmoxView({ d }: { d: ReturnType<typeof dict> }) {
       <section>
         <SectionTitle>{d.monitoring.disks}</SectionTitle>
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-          {diskLists.map(({ node, list }) => (
+          {[...byNode].map(([node, list]) => (
             <Card key={node}>
               <CardHeader title={<span className="font-mono text-xs">{node}</span>} />
               <div className="divide-y divide-line">
-                {list.map((disk) => (
-                  <div key={disk.devpath} className="flex items-center justify-between gap-3 px-4 py-2.5">
-                    <div className="min-w-0">
-                      <p className="truncate font-mono text-xs">{disk.devpath}</p>
-                      <p className="truncate text-[11px] text-faint">
-                        {disk.model} · {bytes(disk.size)} · {disk.type}
-                      </p>
+                {list.map((disk) => {
+                  const c = disk.counters;
+                  return (
+                    <div key={disk.devpath} className="flex items-center justify-between gap-3 px-4 py-2.5">
+                      <div className="min-w-0">
+                        <p className="truncate font-mono text-xs">{disk.devpath}</p>
+                        <p className="truncate text-[11px] text-faint">
+                          {disk.model} · {disk.sizeGB} GB · {disk.type}
+                        </p>
+                        {/* Failing-sector counters — the numbers that creep before a disk dies. */}
+                        {(c.reallocated || c.pending || c.uncorrectable) ? (
+                          <p className="mt-0.5 truncate font-mono text-[11px]">
+                            {c.reallocated ? <span className="text-warn">realloc {c.reallocated}</span> : null}
+                            {c.pending ? <span className="ml-1.5 text-danger">pending {c.pending}</span> : null}
+                            {c.uncorrectable ? <span className="ml-1.5 text-danger">uncorr {c.uncorrectable}</span> : null}
+                          </p>
+                        ) : null}
+                      </div>
+                      <div className="flex shrink-0 items-center gap-1.5">
+                        {disk.wearout !== undefined && <span className="font-mono text-[11px] text-faint">{disk.wearout}%</span>}
+                        <Badge tone={disk.health === "PASSED" ? "ok" : disk.health === "UNKNOWN" ? "neutral" : "danger"}>
+                          {disk.health === "PASSED" ? d.monitoring.smartPassed : disk.health}
+                        </Badge>
+                      </div>
                     </div>
-                    <div className="flex shrink-0 items-center gap-1.5">
-                      {disk.wearout !== undefined && <span className="font-mono text-[11px] text-faint">{disk.wearout}%</span>}
-                      <Badge tone={disk.health === "PASSED" ? "ok" : disk.health === "UNKNOWN" ? "neutral" : "danger"}>
-                        {disk.health === "PASSED" ? d.monitoring.smartPassed : disk.health}
-                      </Badge>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
                 {list.length === 0 && <p className="px-4 py-3 text-sm text-muted">{d.widgets.noData}</p>}
               </div>
             </Card>

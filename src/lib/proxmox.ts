@@ -126,6 +126,36 @@ export async function disks(node: string): Promise<PveDisk[]> {
   }));
 }
 
+/** The three SMART counters worth watching for a disk about to fail: */
+export type DiskSmartCounters = {
+  /** id 5 — sectors the drive gave up on and remapped. */
+  reallocated: number | null;
+  /** id 197 — sectors flagged unstable, awaiting reallocation. */
+  pending: number | null;
+  /** id 198 — sectors it could not read or remap. */
+  uncorrectable: number | null;
+};
+
+/**
+ * Read the failing-sector counters from one disk's full SMART report.
+ *
+ * ATA drives expose them as numbered attributes; NVMe uses a different format
+ * with no such ids, so those come back null (the health verdict still applies).
+ */
+export async function diskSmart(node: string, devpath: string): Promise<DiskSmartCounters> {
+  const data = await pve<{ attributes?: Record<string, unknown>[] }>(
+    `/nodes/${encodeURIComponent(node)}/disks/smart?disk=${encodeURIComponent(devpath)}`
+  );
+  const attrs = Array.isArray(data?.attributes) ? data!.attributes! : [];
+  const raw = (id: number): number | null => {
+    const a = attrs.find((x) => Number(x.id) === id);
+    if (!a) return null;
+    const v = Number(a.raw ?? a.value);
+    return Number.isFinite(v) ? v : null;
+  };
+  return { reallocated: raw(5), pending: raw(197), uncorrectable: raw(198) };
+}
+
 export async function storages(): Promise<PveStorage[]> {
   const rows = await pve<Record<string, unknown>[]>("/cluster/resources?type=storage");
   if (!rows) return [];
