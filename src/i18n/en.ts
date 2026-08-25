@@ -438,6 +438,7 @@ export const en = {
     feedUrlHint: "An RSS or Atom feed — a blog, the news, a repo's releases.atom.",
     embedHint: "Set an address to embed a page here.",
     embedUrlHint: "Any web page — a Grafana panel, a camera, another dashboard.",
+    homeGroupBy: "Group by",
     homeGroupsHint: "Which groups or rooms to show — pick one for a single-room tile. None chosen shows them all.",
     noHomeGroups: "No groups or rooms yet — make groups on the Smart home page.",
     noScenes: "No scenes or scripts in Home Assistant.",

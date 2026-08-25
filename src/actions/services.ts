@@ -163,20 +163,25 @@ export async function addToArr(instanceLabel: string, externalId: number): Promi
 }
 
 /**
- * What the Home-groups widget's picker can show: the hand-made groups, plus the
- * automatic rooms (areas) from Home Assistant. Rooms are keyed "area:<name>" to
- * match the widget's own bucket keys, so a widget can be pinned to a single room
- * without having to build a group for it first.
+ * What the Home-groups widget's picker can show. In "area" mode: the hand-made
+ * groups plus the automatic rooms ("area:<name>"). In "device" mode: the
+ * physical devices ("device:<name>") — so a widget can be pinned to one device,
+ * a washing machine's dozen sensors shown as a single tile. The keys match the
+ * widget's own bucket keys, so no group has to be built first.
  */
-export async function listHomeGroups(): Promise<{ id: string; name: string; icon?: string }[]> {
+export async function listHomeGroups(mode: "area" | "device" = "area"): Promise<{ id: string; name: string; icon?: string }[]> {
   await requireRole("admin");
+  const entities = (await haStates()) ?? [];
+
+  if (mode === "device") {
+    const devices = [...new Set(entities.map((e) => e.device).filter((x): x is string => !!x))].sort((a, b) => a.localeCompare(b));
+    return devices.map((dv) => ({ id: `device:${dv}`, name: dv, icon: "🔌" }));
+  }
+
   const config = normalizeHome(await getSetting(HOME_CONFIG_KEY, null));
   const groups = config.groups.map((g) => ({ id: g.id, name: g.name, icon: g.icon }));
-
-  const entities = (await haStates()) ?? [];
   const areas = [...new Set(entities.map((e) => e.area).filter((a): a is string => !!a))].sort((a, b) => a.localeCompare(b));
   const rooms = areas.map((a) => ({ id: `area:${a}`, name: a, icon: "🏠" }));
-
   return [...groups, ...rooms];
 }
 

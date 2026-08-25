@@ -141,6 +141,7 @@ export function ItemDialog({
     jfShowCounts: config.showCounts !== false,
     // Home-groups widget: which groups to show (empty = all).
     homeGroups: Array.isArray(config.groups) ? (config.groups as string[]) : [],
+    homeGroupBy: str(config.groupBy) === "device" ? "device" : "area",
     // Feed / embed widgets: the address they read.
     feedUrl: str(config.url),
     // World clocks and the countdown.
@@ -308,7 +309,7 @@ export function ItemDialog({
       case "homeassistant":
         return { entities: form.entities.split("\n").map((e) => e.trim()).filter(Boolean) };
       case "homegroups":
-        return { groups: form.homeGroups };
+        return { groups: form.homeGroups, groupBy: form.homeGroupBy };
       case "energy":
         return { price: Number(form.price) || 0, currency: form.currency.trim() || "₽", limit: Number(form.limit) };
       case "feed":
@@ -652,9 +653,23 @@ export function ItemDialog({
             )}
 
             {form.widget === "homegroups" && (
-              <Field label={d.widgets.homegroups} hint={d.widgets.homeGroupsHint}>
-                <HomeGroupSelect d={d} value={form.homeGroups} onChange={(ids) => set("homeGroups", ids)} />
-              </Field>
+              <>
+                <Field label={d.widgets.homeGroupBy}>
+                  <Select
+                    value={form.homeGroupBy}
+                    onChange={(e) => {
+                      set("homeGroupBy", e.target.value);
+                      set("homeGroups", []); // the sections differ between modes
+                    }}
+                  >
+                    <option value="area">{d.home.byRoom}</option>
+                    <option value="device">{d.home.byDevice}</option>
+                  </Select>
+                </Field>
+                <Field label={d.widgets.homegroups} hint={d.widgets.homeGroupsHint}>
+                  <HomeGroupSelect d={d} groupBy={form.homeGroupBy} value={form.homeGroups} onChange={(ids) => set("homeGroups", ids)} />
+                </Field>
+              </>
             )}
 
             {form.widget === "energy" && (
@@ -1235,22 +1250,25 @@ function HomeGroupSelect({
   d,
   value,
   onChange,
+  groupBy = "area",
 }: {
   d: Dictionary;
   value: string[];
   onChange: (ids: string[]) => void;
+  groupBy?: string;
 }) {
   const [groups, setGroups] = useState<{ id: string; name: string; icon?: string }[] | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    void listHomeGroups().then((g) => {
+    setGroups(null);
+    void listHomeGroups(groupBy === "device" ? "device" : "area").then((g) => {
       if (!cancelled) setGroups(g);
     });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [groupBy]);
 
   function toggle(id: string) {
     onChange(value.includes(id) ? value.filter((x) => x !== id) : [...value, id]);

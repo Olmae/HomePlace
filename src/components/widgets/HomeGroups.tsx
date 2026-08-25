@@ -15,6 +15,7 @@ export type HomeGroupsEntity = {
   domain: string;
   toggleable: boolean;
   area?: string;
+  device?: string;
   brightness?: number;
   rgb?: string;
   supportsColor?: boolean;
@@ -37,14 +38,17 @@ export function HomeGroups({
   config,
   canControl,
   showGroups,
+  groupBy,
 }: {
   d: Dictionary;
   title: string;
   entities: HomeGroupsEntity[];
   config: HomeConfig;
   canControl: boolean;
-  /** Custom group ids to show. Empty or undefined shows every group. */
+  /** Section keys to show. Empty or undefined shows every section. */
   showGroups?: string[];
+  /** Split the remainder by room (default) or by physical device. */
+  groupBy?: "area" | "device";
 }) {
   const [over, setOver] = useState<Record<string, string>>({});
   const [openGroup, setOpenGroup] = useState<string | null>(null);
@@ -55,7 +59,7 @@ export function HomeGroups({
   const isOn = (e: HomeGroupsEntity) => ["on", "open", "home", "playing"].includes(stateOf(e));
 
   const pick = showGroups && showGroups.length > 0 ? new Set(showGroups) : null;
-  const buckets = groupEntities(entities, config, "area", {
+  const buckets = groupEntities(entities, config, groupBy ?? "area", {
     unplaced: d.home.unplaced,
     kindLabel: (dm) => dm,
   })

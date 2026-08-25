@@ -772,6 +772,7 @@ async function HomeGroupsWidget({
       canControl={canControl}
       config={normalizeHome(configRaw)}
       showGroups={lines(config.groups)}
+      groupBy={str(config.groupBy) === "device" ? "device" : "area"}
       entities={entities.map((e) => ({
         id: e.id,
         name: e.name,
@@ -779,6 +780,7 @@ async function HomeGroupsWidget({
         domain: e.domain,
         toggleable: e.toggleable,
         area: e.area,
+        device: e.device,
         brightness: e.brightness,
         rgb: e.rgb,
         supportsColor: e.supportsColor,
