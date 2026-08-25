@@ -29,6 +29,7 @@ import { checkContainerUpdatesDue } from "./imageUpdates";
 const TICK_MS = 10_000;
 let timer: NodeJS.Timeout | null = null;
 let running = false;
+let lastRuleEval = 0;
 
 /**
  * Started from the first server render rather than from an instrumentation
@@ -58,9 +59,13 @@ async function tick(): Promise<void> {
   running = true;
   try {
     await probeDue();
-    // Metric rules are evaluated on the same tick as the probes: one clock for
-    // everything the panel watches, and nothing to schedule separately.
-    await evaluateRules();
+    // Metric rules run against Prometheus; every 30s is plenty (a breach still
+    // surfaces well within its hold time) and a third of the query load of the
+    // 10-second tick.
+    if (Date.now() - lastRuleEval > 30_000) {
+      lastRuleEval = Date.now();
+      await evaluateRules();
+    }
     await processReminders();
     await runDueSchedules();
     // Watch the disks' failing-sector counters for any worsening. Self-throttled
@@ -75,12 +80,14 @@ async function tick(): Promise<void> {
     // The Telegram bot runs its own long-polling loop (startTelegramPolling) so
     // replies are instant rather than up to a tick late — it is not driven from
     // here any more.
-    // Cheap enough to ride along on the same tick, and it is what gives the
-    // containers page a history without Prometheus.
-    await sampleContainers();
-    // The durable version, only when there is no Prometheus doing this better:
-    // a coarse per-minute sample kept a week, so a chart survives a restart.
-    if (!(await prometheusConfig())) await sampleContainersToDb();
+    // Container CPU/memory history is only sampled when there is no Prometheus
+    // to provide it — otherwise this fired a stats call per container every few
+    // seconds for nothing, which was most of the panel's own CPU. Prometheus
+    // installs read their history straight from Prometheus.
+    if (!(await prometheusConfig())) {
+      await sampleContainers();
+      await sampleContainersToDb();
+    }
     await pruneOldChecks();
     await pruneMetrics();
   } catch (e) {
