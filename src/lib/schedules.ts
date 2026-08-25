@@ -3,6 +3,7 @@ import { prisma } from "./db";
 import { controlContainer, listContainers } from "./docker";
 import { haToggle } from "./services";
 import { notify } from "./notify";
+import { createBackup } from "./backup";
 
 /**
  * Scheduled actions.
@@ -89,6 +90,10 @@ async function runAction(s: Schedule): Promise<void> {
   } else if (s.action === "notify") {
     await notify({ title: s.title || s.name, body: s.body || "", type: "system", severity: "info" });
     detail = s.title || s.name;
+  } else if (s.action === "backup") {
+    const r = await createBackup();
+    ok = r.ok;
+    detail = r.ok ? `backup ${r.name}` : `backup failed: ${r.error ?? "unknown"}`;
   } else {
     ok = false;
     detail = "action not configured";

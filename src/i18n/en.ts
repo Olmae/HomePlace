@@ -574,6 +574,7 @@ export const en = {
     sa_restart: "Restart container",
     sa_scene: "Run HA scene",
     sa_notify: "Send notification",
+    sa_backup: "Back up the database",
     dockerHosts: "Docker hosts",
     dockerHostsHint: "Add another machine's Docker socket proxy. Its containers appear alongside the rest, tagged with the host.",
     dockerHostLabel: "Label",

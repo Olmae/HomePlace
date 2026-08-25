@@ -571,6 +571,7 @@ export const ru: Dictionary = {
     sa_restart: "Перезапуск контейнера",
     sa_scene: "Запуск сцены HA",
     sa_notify: "Отправить уведомление",
+    sa_backup: "Бэкап базы данных",
     dockerHosts: "Docker-хосты",
     dockerHostsHint: "Добавьте прокси docker-сокета другой машины. Её контейнеры появятся рядом с остальными, помеченные хостом.",
     dockerHostLabel: "Название",
