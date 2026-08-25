@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { prisma } from "@/lib/db";
+import { prisma, getSetting, setSetting } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { getProfile, setProfile, computeTargets, type NutritionProfile, type Targets } from "@/lib/nutrition";
 import { foodSearch, foodByBarcode } from "@/lib/food";
@@ -26,10 +26,25 @@ export type NutritionState = {
   totals: DayTotals;
   /** The last seven days (oldest → today), calories per day. */
   week: DayKcal[];
+  /** Glasses of water logged today, and the most recent body weight (kg). */
+  water: number;
+  weight: number | null;
   // Whether online food lookup is available. Always true now — Open Food Facts
   // is keyless, so search and barcode work even without FatSecret configured.
   lookup: boolean;
 };
+
+function todayKey(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+}
+function waterKey(userId: string): string {
+  return `nutrition.water:${userId}`;
+}
+function weightKey(userId: string): string {
+  return `nutrition.weight:${userId}`;
+}
+type WeightPoint = { at: string; kg: number };
 
 function startOfToday(): Date {
   const d = new Date();
@@ -64,14 +79,45 @@ export async function getNutrition(): Promise<NutritionState> {
     week.push({ label: day.toLocaleDateString(undefined, { weekday: "short" }), kcal: Math.round(kcal) });
   }
 
+  const waterRaw = await getSetting<{ date: string; count: number } | null>(waterKey(user.id), null);
+  const water = waterRaw && waterRaw.date === todayKey() ? waterRaw.count : 0;
+  const weights = (await getSetting<WeightPoint[] | null>(weightKey(user.id), null)) ?? [];
+  const weight = weights.length > 0 ? weights[weights.length - 1].kg : null;
+
   return {
     profile,
     targets: profile ? computeTargets(profile) : null,
     entries,
     totals: { kcal: Math.round(totals.kcal), protein: Math.round(totals.protein), fat: Math.round(totals.fat), carbs: Math.round(totals.carbs) },
     week,
+    water,
+    weight,
     lookup: true,
   };
+}
+
+/** Add (or remove) a glass of water for today; never goes below zero. */
+export async function addWater(delta: number): Promise<void> {
+  const user = await requireUser();
+  const raw = await getSetting<{ date: string; count: number } | null>(waterKey(user.id), null);
+  const today = todayKey();
+  const count = raw && raw.date === today ? raw.count : 0;
+  await setSetting(waterKey(user.id), { date: today, count: Math.max(0, count + delta) });
+  revalidatePath("/");
+}
+
+/** Record today's weight (kg), keeping a rolling history for the trend. */
+export async function logWeight(kg: number): Promise<void> {
+  const user = await requireUser();
+  const value = Math.round((Number(kg) || 0) * 10) / 10;
+  if (!(value > 0 && value < 500)) return;
+  const history = (await getSetting<WeightPoint[] | null>(weightKey(user.id), null)) ?? [];
+  const today = todayKey();
+  // One point per day — a second weigh-in replaces the first.
+  const withoutToday = history.filter((p) => p.at !== today);
+  const next = [...withoutToday, { at: today, kg: value }].slice(-60);
+  await setSetting(weightKey(user.id), next);
+  revalidatePath("/");
 }
 
 export async function saveNutritionProfile(input: NutritionProfile): Promise<void> {

@@ -400,6 +400,8 @@ export const ru: Dictionary = {
     nutritionCarbs: "Углеводы",
     nutritionLeft: "осталось",
     nutritionWeek: "7 дней",
+    nutritionWater: "Вода (стаканы)",
+    nutritionKg: "кг",
     nutritionEmpty: "Сегодня ничего не записано.",
     nutritionSearch: "Найти продукт…",
     nutritionManual: "Ввести вручную",

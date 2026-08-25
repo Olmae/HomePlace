@@ -403,6 +403,8 @@ export const en = {
     nutritionCarbs: "Carbs",
     nutritionLeft: "left",
     nutritionWeek: "Last 7 days",
+    nutritionWater: "Water (glasses)",
+    nutritionKg: "kg",
     nutritionEmpty: "Nothing logged today.",
     nutritionSearch: "Search a food…",
     nutritionManual: "Enter by hand",

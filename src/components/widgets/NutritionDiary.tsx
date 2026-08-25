@@ -4,7 +4,7 @@ import { useState, useTransition, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardHeader } from "@/components/ui";
 import { Input, Button, Select } from "@/components/form";
-import { saveNutritionProfile, searchFood, searchBarcode, scanFoodPhoto, logFood, deleteFood, type NutritionState } from "@/actions/nutrition";
+import { saveNutritionProfile, searchFood, searchBarcode, scanFoodPhoto, logFood, deleteFood, addWater, logWeight, type NutritionState } from "@/actions/nutrition";
 import type { NutritionProfile } from "@/lib/nutrition";
 import type { FoodMatch, SearchResult } from "@/lib/fatsecret";
 import { fill, type Dictionary } from "@/i18n";
@@ -82,6 +82,43 @@ function Totals({ d, state }: { d: Dictionary; state: NutritionState }) {
       <Bar label={t.nutritionFat} value={totals.fat} target={targets.fat} accent="bg-warn" unit="g" />
       <Bar label={t.nutritionCarbs} value={totals.carbs} target={targets.carbs} accent="bg-info" unit="g" />
       <WeekStrip d={d} week={state.week} target={targets.kcal} />
+      <BodyRow d={d} water={state.water} weight={state.weight} />
+    </div>
+  );
+}
+
+/** Water for today (glasses) and the latest body weight — a tap and a number. */
+function BodyRow({ d, water, weight }: { d: Dictionary; water: number; weight: number | null }) {
+  const t = d.widgets;
+  const router = useRouter();
+  const [, start] = useTransition();
+  const [w, setW] = useState(weight != null ? String(weight) : "");
+  const refresh = () => router.refresh();
+  const round = (v: number) => (
+    <button
+      type="button"
+      onClick={() => start(() => void addWater(v).then(refresh))}
+      className="flex h-6 w-6 items-center justify-center rounded-full border border-line text-sm text-muted transition-colors hover:bg-raised hover:text-text"
+    >
+      {v > 0 ? "＋" : "−"}
+    </button>
+  );
+
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-line pt-2 text-sm">
+      <div className="flex items-center gap-1.5" title={t.nutritionWater}>
+        <span aria-hidden>💧</span>
+        {round(-1)}
+        <span className="w-5 text-center tabular-nums">{water}</span>
+        {round(1)}
+      </div>
+      <div className="ml-auto flex items-center gap-1.5" title={t.nutritionWeight}>
+        <span aria-hidden>⚖️</span>
+        <Input value={w} onChange={(e) => setW(e.target.value)} inputMode="decimal" className="w-16 text-center" placeholder={t.nutritionKg} />
+        <Button variant="quiet" onClick={() => start(() => void logWeight(Number(w)).then(refresh))} disabled={!w}>
+          ✓
+        </Button>
+      </div>
     </div>
   );
 }
