@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { Card, Badge, Meter } from "@/components/ui";
 import { Sparkline } from "@/components/Sparkline";
@@ -101,6 +101,25 @@ export function ContainerTable({
   }, [rows]);
   const [grouped, setGrouped] = useState(true);
   const [showCharts, setShowCharts] = useState(true);
+  const [showCpu, setShowCpu] = useState(true);
+  const [showMemory, setShowMemory] = useState(true);
+  const [displayOpen, setDisplayOpen] = useState(false);
+
+  // Display choices are a personal preference, not shared state — keep them in
+  // the browser so they survive a reload without a round trip.
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem("hp.containers.display") ?? "{}");
+      if (typeof saved.charts === "boolean") setShowCharts(saved.charts);
+      if (typeof saved.cpu === "boolean") setShowCpu(saved.cpu);
+      if (typeof saved.memory === "boolean") setShowMemory(saved.memory);
+    } catch {
+      /* nothing saved yet */
+    }
+  }, []);
+  useEffect(() => {
+    localStorage.setItem("hp.containers.display", JSON.stringify({ charts: showCharts, cpu: showCpu, memory: showMemory }));
+  }, [showCharts, showCpu, showMemory]);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [updates, setUpdates] = useState<Record<string, "update" | "current" | "unknown">>({});
@@ -260,39 +279,43 @@ export function ContainerTable({
           </span>
         )}
 
-        <div className="w-24 shrink-0">
-          {running && row.cpu !== undefined ? (
-            <>
-              <p className="text-right font-mono text-[11px] tabular-nums">{percent(row.cpu, 1)}</p>
-              {showCharts && row.cpuHistory && row.cpuHistory.length > 2 ? (
-                <span className="block h-5 [&_svg]:h-5">
-                  <Sparkline points={row.cpuHistory} min={0} height={20} />
-                </span>
-              ) : (
-                <Meter value={Math.min(100, row.cpu)} />
-              )}
-            </>
-          ) : (
-            <span className="block text-right text-[11px] text-faint">—</span>
-          )}
-        </div>
+        {showCpu && (
+          <div className="w-24 shrink-0">
+            {running && row.cpu !== undefined ? (
+              <>
+                <p className="text-right font-mono text-[11px] tabular-nums">{percent(row.cpu, 1)}</p>
+                {showCharts && row.cpuHistory && row.cpuHistory.length > 2 ? (
+                  <span className="block h-5 [&_svg]:h-5">
+                    <Sparkline points={row.cpuHistory} min={0} height={20} />
+                  </span>
+                ) : (
+                  <Meter value={Math.min(100, row.cpu)} />
+                )}
+              </>
+            ) : (
+              <span className="block text-right text-[11px] text-faint">—</span>
+            )}
+          </div>
+        )}
 
-        <div className="w-28 shrink-0">
-          {running && row.memory !== undefined ? (
-            <>
-              <p className="text-right font-mono text-[11px] tabular-nums">{bytes(row.memory)}</p>
-              {showCharts && row.memoryHistory && row.memoryHistory.length > 2 ? (
-                <span className="block h-5 [&_svg]:h-5">
-                  <Sparkline points={row.memoryHistory} tone="ok" height={20} />
-                </span>
-              ) : (
-                memoryPercent !== null && <Meter value={memoryPercent} />
-              )}
-            </>
-          ) : (
-            <span className="block text-right text-[11px] text-faint">—</span>
-          )}
-        </div>
+        {showMemory && (
+          <div className="w-28 shrink-0">
+            {running && row.memory !== undefined ? (
+              <>
+                <p className="text-right font-mono text-[11px] tabular-nums">{bytes(row.memory)}</p>
+                {showCharts && row.memoryHistory && row.memoryHistory.length > 2 ? (
+                  <span className="block h-5 [&_svg]:h-5">
+                    <Sparkline points={row.memoryHistory} tone="ok" height={20} />
+                  </span>
+                ) : (
+                  memoryPercent !== null && <Meter value={memoryPercent} />
+                )}
+              </>
+            ) : (
+              <span className="block text-right text-[11px] text-faint">—</span>
+            )}
+          </div>
+        )}
 
         <div className="flex shrink-0 items-center gap-0.5">
           <Button size="sm" variant="quiet" title={d.containers.viewLogs} onClick={() => setLogsRow(row)}>
@@ -372,14 +395,31 @@ export function ContainerTable({
               {checking ? d.common.loading : d.containers.checkUpdates}
             </Button>
           )}
-          <Button
-            size="sm"
-            variant={showCharts ? "ghost" : "quiet"}
-            onClick={() => setShowCharts((v) => !v)}
-            title={d.containers.toggleCharts}
-          >
-            {showCharts ? "📈" : "📉"}
-          </Button>
+          <div className="relative">
+            <Button size="sm" variant="quiet" onClick={() => setDisplayOpen((v) => !v)} title={d.containers.display}>
+              ⚙
+            </Button>
+            {displayOpen && (
+              <>
+                <div className="fixed inset-0 z-10" onClick={() => setDisplayOpen(false)} aria-hidden />
+                <div className="absolute right-0 z-20 mt-1 w-44 rounded-control border border-line bg-surface p-2 shadow-pop">
+                  <p className="mb-1 px-1 text-[11px] font-medium text-muted">{d.containers.display}</p>
+                  {(
+                    [
+                      [d.containers.colCharts, showCharts, setShowCharts],
+                      [d.monitoring.cpu, showCpu, setShowCpu],
+                      [d.monitoring.memory, showMemory, setShowMemory],
+                    ] as [string, boolean, (v: (p: boolean) => boolean) => void][]
+                  ).map(([label, on, set]) => (
+                    <label key={label} className="flex items-center gap-2 rounded-control px-1 py-1 text-sm hover:bg-raised">
+                      <input type="checkbox" checked={on} onChange={() => set((p) => !p)} />
+                      {label}
+                    </label>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
           <Button
             size="sm"
             variant={grouped ? "ghost" : "quiet"}

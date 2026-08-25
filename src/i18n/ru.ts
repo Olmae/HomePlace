@@ -219,6 +219,8 @@ export const ru: Dictionary = {
     grouped: "По группам",
     flat: "Списком",
     toggleCharts: "Показать или скрыть мини-графики",
+    display: "Колонки",
+    colCharts: "Мини-графики",
     hideGroup: "Скрыть",
     unhideGroup: "Показать",
 

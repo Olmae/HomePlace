@@ -222,6 +222,8 @@ export const en = {
     grouped: "Grouped",
     flat: "Flat list",
     toggleCharts: "Show or hide the mini charts",
+    display: "Columns",
+    colCharts: "Mini charts",
     hideGroup: "Hide",
     unhideGroup: "Show",
 
