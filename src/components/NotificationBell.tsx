@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { fetchNotifications, markNotificationsSeen } from "@/actions/notifications";
 import { ago } from "@/lib/format";
@@ -22,6 +22,22 @@ export function NotificationBell({ d, initialUnread }: { d: Dictionary; initialU
   const [items, setItems] = useState<Item[]>([]);
   const [unread, setUnread] = useState(initialUnread);
   const [loaded, setLoaded] = useState(false);
+
+  // Keep the badge honest without a page navigation: while the panel is closed
+  // and the tab is visible, re-count every minute. The panel being open already
+  // means everything is read, so polling then would only fight the "seen" write.
+  useEffect(() => {
+    if (open) return;
+    const id = setInterval(() => {
+      if (document.hidden) return;
+      void fetchNotifications().then((feed) => {
+        setItems(feed.items);
+        setLoaded(true);
+        setUnread(feed.unread);
+      });
+    }, 60_000);
+    return () => clearInterval(id);
+  }, [open]);
 
   async function toggle() {
     const next = !open;
