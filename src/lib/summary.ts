@@ -62,7 +62,28 @@ export async function dailySummary(): Promise<string> {
       const target = profile ? computeTargets(profile) : null;
       lines.push(`🍎 Съедено: ${kcal}${target ? ` / ${target.kcal}` : ""} ккал`);
     }
+
+    // A seven-day calorie sparkline — a chart small enough to send as text.
+    const weekStart = new Date(start);
+    weekStart.setDate(weekStart.getDate() - 6);
+    const weekRows = await prisma.foodLog.findMany({ where: { userId: oid, at: { gte: weekStart } }, select: { at: true, kcal: true } });
+    const perDay: number[] = [];
+    for (let i = 6; i >= 0; i--) {
+      const day = new Date(start);
+      day.setDate(day.getDate() - i);
+      const next = new Date(day);
+      next.setDate(next.getDate() + 1);
+      perDay.push(weekRows.filter((r) => r.at >= day && r.at < next).reduce((s, r) => s + r.kcal, 0));
+    }
+    if (perDay.some((v) => v > 0)) lines.push(`📈 ${sparkline(perDay)} <i>неделя</i>`);
   }
 
   return lines.join("\n");
+}
+
+/** A tiny bar chart made of block characters — a graph that fits in a message. */
+function sparkline(values: number[]): string {
+  const blocks = "▁▂▃▄▅▆▇█";
+  const max = Math.max(...values, 1);
+  return values.map((v) => blocks[Math.min(7, Math.floor((v / max) * 7.999))]).join("");
 }
