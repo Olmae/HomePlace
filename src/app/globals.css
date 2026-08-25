@@ -608,3 +608,12 @@ body {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Kiosk mode (?kiosk=1): a wall tablet wants only the board. */
+[data-kiosk] .app-nav,
+[data-kiosk] .mobile-nav {
+  display: none !important;
+}
+[data-kiosk] main {
+  padding-bottom: 1rem !important;
+}

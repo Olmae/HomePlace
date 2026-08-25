@@ -32,7 +32,7 @@ export function AppNav({
   ];
 
   return (
-    <header className="sticky top-0 z-30 border-b border-line bg-bg/85 backdrop-blur">
+    <header className="app-nav sticky top-0 z-30 border-b border-line bg-bg/85 backdrop-blur">
       <div className="mx-auto flex h-14 w-full max-w-[1400px] items-center gap-1 px-4 sm:px-6">
         <Link href="/" className="mr-3 flex items-center gap-2 font-semibold tracking-tight">
           <span className="flex h-7 w-7 items-center justify-center rounded-control bg-accent text-accent-fg text-sm">

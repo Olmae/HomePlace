@@ -8,6 +8,7 @@ import { statusFor } from "@/lib/status";
 import { dict } from "@/i18n";
 import { EmptyState } from "@/components/ui";
 import { AutoRefresh } from "@/components/AutoRefresh";
+import { KioskController } from "@/components/dashboard/KioskController";
 import { Board } from "@/components/dashboard/Board";
 import { EditModeProvider, EditToggle, EditHints } from "@/components/dashboard/EditMode";
 import { Tile, type TileLive } from "@/components/dashboard/Tile";
@@ -167,6 +168,7 @@ export default async function DashboardPage({
   return (
     <>
       <AutoRefresh seconds={30} />
+      <KioskController tabs={dashboards.map((x) => x.slug ?? x.id)} />
 
       {/* The dashboard's own photo, behind everything. Set per tab, so a
           "home" tab can look like a home and a "servers" tab like a panel. */}

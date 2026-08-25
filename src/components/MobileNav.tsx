@@ -29,7 +29,7 @@ export function MobileNav({ d }: { d: Dictionary }) {
 
   return (
     <nav
-      className="fixed inset-x-0 bottom-0 z-40 flex justify-center px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:hidden"
+      className="mobile-nav fixed inset-x-0 bottom-0 z-40 flex justify-center px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:hidden"
       aria-label={d.nav.dashboard}
     >
       <div className="flex items-center gap-1 rounded-full border border-line bg-surface/90 p-1.5 shadow-pop backdrop-blur-xl">
