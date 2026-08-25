@@ -142,6 +142,7 @@ export function ItemDialog({
     // Home-groups widget: which groups to show (empty = all).
     homeGroups: Array.isArray(config.groups) ? (config.groups as string[]) : [],
     homeGroupBy: str(config.groupBy) === "device" ? "device" : "area",
+    habitsList: Array.isArray(config.habits) ? (config.habits as string[]).join("\n") : str(config.habits),
     // Feed / embed widgets: the address they read.
     feedUrl: str(config.url),
     // World clocks and the countdown.
@@ -312,6 +313,8 @@ export function ItemDialog({
         return { groups: form.homeGroups, groupBy: form.homeGroupBy };
       case "energy":
         return { price: Number(form.price) || 0, currency: form.currency.trim() || "₽", limit: Number(form.limit) };
+      case "habits":
+        return { habits: form.habitsList.split("\n").map((h) => h.trim()).filter(Boolean) };
       case "feed":
         return { url: form.feedUrl.trim(), limit: Number(form.limit) };
       case "embed":
@@ -688,6 +691,17 @@ export function ItemDialog({
                   <Input value={form.currency} onChange={(e) => set("currency", e.target.value)} className="w-20" />
                 </Field>
               </div>
+            )}
+
+            {form.widget === "habits" && (
+              <Field label={d.widgets.habitsList} hint={d.widgets.habitsHint}>
+                <Textarea
+                  rows={5}
+                  value={form.habitsList}
+                  onChange={(e) => set("habitsList", e.target.value)}
+                  placeholder={"Зарядка\nВитамины\nЧтение"}
+                />
+              </Field>
             )}
 
             {(form.widget === "feed" || form.widget === "embed" || form.widget === "ical") && (

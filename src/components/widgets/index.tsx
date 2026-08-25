@@ -32,6 +32,8 @@ import { ShoppingList } from "./ShoppingList";
 import { getShopping } from "@/lib/shopping";
 import { NutritionDiary } from "./NutritionDiary";
 import { getNutrition } from "@/actions/nutrition";
+import { Habits } from "./Habits";
+import { habitsState } from "@/lib/habits";
 import { bytes, percent, duration, ago } from "@/lib/format";
 import type { Dictionary } from "@/i18n";
 
@@ -149,6 +151,14 @@ export async function Widget({ widget, config, title, d, userId, canControl = fa
     case "nutrition":
       return userId ? (
         <NutritionWidget title={title} d={d} canControl={canControl} />
+      ) : (
+        <Card className="p-4">
+          <p className="text-sm text-muted">{d.widgets.noData}</p>
+        </Card>
+      );
+    case "habits":
+      return userId ? (
+        <HabitsWidget title={title} d={d} config={config} userId={userId} canControl={canControl} />
       ) : (
         <Card className="p-4">
           <p className="text-sm text-muted">{d.widgets.noData}</p>
@@ -1275,6 +1285,14 @@ async function PresenceWidget({ title, d }: { title: string; d: Dictionary }) {
 async function NutritionWidget({ title, d, canControl }: { title: string; d: Dictionary; canControl: boolean }) {
   const state = await getNutrition();
   return <NutritionDiary d={d} title={title} state={state} canControl={canControl} />;
+}
+
+// ──────────────────────────────── Habits ─────────────────────────────────
+
+/** The personal daily habit checklist with streaks. */
+async function HabitsWidget({ title, d, config, userId, canControl }: { title: string; d: Dictionary; config: Record<string, unknown>; userId: string; canControl: boolean }) {
+  const habits = await habitsState(userId, lines(config.habits));
+  return <Habits d={d} title={title} habits={habits} canControl={canControl} />;
 }
 
 // ─────────────────────────────────── WoL ─────────────────────────────────
