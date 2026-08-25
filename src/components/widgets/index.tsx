@@ -16,7 +16,8 @@ import { JellyfinWidget, QbitWidget, ArrWidget, PbsWidget, HomeAssistantWidget }
 import { MediaPlayerWidget } from "./MediaPlayer";
 import { HomeGroups } from "./HomeGroups";
 import { Scenes } from "./Scenes";
-import { haConfig, haMediaPlayers, haStates } from "@/lib/services";
+import { haConfig, haMediaPlayers, haStates, haCameras } from "@/lib/services";
+import { Cameras } from "./Cameras";
 import { getSetting } from "@/lib/db";
 import { EMPTY_HOME, HOME_CONFIG_KEY, normalizeHome } from "@/lib/homeConfig";
 import { RemindersWidget } from "./Reminders";
@@ -120,6 +121,8 @@ export async function Widget({ widget, config, title, d, userId, canControl = fa
       return <ScenesWidget config={config} title={title} d={d} canControl={canControl} />;
     case "energy":
       return <EnergyWidget config={config} title={title} d={d} />;
+    case "cameras":
+      return <CamerasWidget config={config} title={title} d={d} />;
     case "reminders":
       return userId ? (
         <RemindersList title={title} d={d} userId={userId} />
@@ -1285,6 +1288,18 @@ async function PresenceWidget({ title, d }: { title: string; d: Dictionary }) {
 async function NutritionWidget({ title, d, canControl }: { title: string; d: Dictionary; canControl: boolean }) {
   const state = await getNutrition();
   return <NutritionDiary d={d} title={title} state={state} canControl={canControl} />;
+}
+
+// ──────────────────────────────── Cameras ────────────────────────────────
+
+/** Home Assistant camera snapshots, refreshed on a timer. */
+async function CamerasWidget({ config, title, d }: { config: Record<string, unknown>; title: string; d: Dictionary }) {
+  if (!(await haConfig())) {
+    return <NotConfigured title={title} message={d.home.notConfigured} hint={d.home.notConfiguredHint} />;
+  }
+  const cameras = await haCameras(lines(config.entities));
+  if (!cameras) return <NotConfigured title={title} message={d.home.unreachable} hint={d.home.notConfiguredHint} />;
+  return <Cameras d={d} title={title} cameras={cameras} refreshSeconds={num(config.refreshSeconds, 10)} />;
 }
 
 // ──────────────────────────────── Habits ─────────────────────────────────

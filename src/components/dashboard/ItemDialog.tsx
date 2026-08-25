@@ -143,6 +143,7 @@ export function ItemDialog({
     homeGroups: Array.isArray(config.groups) ? (config.groups as string[]) : [],
     homeGroupBy: str(config.groupBy) === "device" ? "device" : "area",
     habitsList: Array.isArray(config.habits) ? (config.habits as string[]).join("\n") : str(config.habits),
+    refreshSeconds: Number(config.refreshSeconds ?? 10),
     // Feed / embed widgets: the address they read.
     feedUrl: str(config.url),
     // World clocks and the countdown.
@@ -315,6 +316,8 @@ export function ItemDialog({
         return { price: Number(form.price) || 0, currency: form.currency.trim() || "₽", limit: Number(form.limit) };
       case "habits":
         return { habits: form.habitsList.split("\n").map((h) => h.trim()).filter(Boolean) };
+      case "cameras":
+        return { entities: form.entities.split("\n").map((e) => e.trim()).filter(Boolean), refreshSeconds: Number(form.refreshSeconds) || 10 };
       case "feed":
         return { url: form.feedUrl.trim(), limit: Number(form.limit) };
       case "embed":
@@ -702,6 +705,22 @@ export function ItemDialog({
                   placeholder={"Зарядка\nВитамины\nЧтение"}
                 />
               </Field>
+            )}
+
+            {form.widget === "cameras" && (
+              <>
+                <Field label={d.widgets.cameras} hint={d.widgets.camerasHint}>
+                  <HaEntityPicker
+                    d={d}
+                    only="camera"
+                    value={form.entities.split("\n").map((e) => e.trim()).filter(Boolean)}
+                    onChange={(ids) => set("entities", ids.join("\n"))}
+                  />
+                </Field>
+                <Field label={`${d.widgets.camerasRefresh}, ${d.dashboard.seconds}`}>
+                  <Input type="number" min={2} value={form.refreshSeconds} onChange={(e) => set("refreshSeconds", Number(e.target.value))} className="w-24" />
+                </Field>
+              </>
             )}
 
             {(form.widget === "feed" || form.widget === "embed" || form.widget === "ical") && (

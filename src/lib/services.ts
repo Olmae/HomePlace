@@ -654,6 +654,33 @@ function interesting(attributes: Record<string, any>): Record<string, string> {
 /** Domains a tile may switch. Everything else is read-only, deliberately. */
 const TOGGLEABLE = new Set(["light", "switch", "input_boolean", "fan", "automation", "script", "scene"]);
 
+export type HaCamera = { id: string; name: string; url: string };
+
+/**
+ * Camera entities and a snapshot URL for each.
+ *
+ * Home Assistant signs a snapshot URL into every camera's `entity_picture`
+ * attribute (a token in the query string), so a plain <img> can show it without
+ * a header — the same trick the Jellyfin posters use. The token rotates, so the
+ * URL is re-fetched on each load; the widget cache-busts to pull a fresh frame.
+ */
+export async function haCameras(ids?: string[]): Promise<HaCamera[] | null> {
+  const cfg = await haConfig();
+  if (!cfg) return null;
+  const all = await get<Record<string, any>[]>({ url: `${cfg.url}/api/states`, headers: { authorization: `Bearer ${cfg.token}` } });
+  if (!all) return null;
+
+  const wanted = ids && ids.length > 0 ? new Set(ids) : null;
+  return all
+    .filter((e) => String(e.entity_id).startsWith("camera.") && e.attributes?.entity_picture)
+    .filter((e) => !wanted || wanted.has(String(e.entity_id)))
+    .map((e) => ({
+      id: String(e.entity_id),
+      name: String(e.attributes?.friendly_name ?? e.entity_id),
+      url: `${cfg.url}${e.attributes.entity_picture}`,
+    }));
+}
+
 export async function haStates(ids?: string[]): Promise<HaEntity[] | null> {
   const cfg = await haConfig();
   if (!cfg) return null;
