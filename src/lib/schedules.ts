@@ -4,6 +4,8 @@ import { controlContainer, listContainers } from "./docker";
 import { haToggle } from "./services";
 import { notify } from "./notify";
 import { createBackup } from "./backup";
+import { send } from "./telegram";
+import { dailySummary } from "./summary";
 
 /**
  * Scheduled actions.
@@ -94,6 +96,10 @@ async function runAction(s: Schedule): Promise<void> {
     const r = await createBackup();
     ok = r.ok;
     detail = r.ok ? `backup ${r.name}` : `backup failed: ${r.error ?? "unknown"}`;
+  } else if (s.action === "summary") {
+    const r = await send(await dailySummary());
+    ok = r.ok;
+    detail = r.ok ? "summary sent" : `summary failed: ${r.error ?? "unknown"}`;
   } else {
     ok = false;
     detail = "action not configured";

@@ -159,6 +159,7 @@ function ScheduleDialog({ d, value, onClose }: { d: Dictionary; value: ScheduleR
             <option value="scene">{d.settings.sa_scene}</option>
             <option value="notify">{d.settings.sa_notify}</option>
             <option value="backup">{d.settings.sa_backup}</option>
+            <option value="summary">{d.settings.sa_summary}</option>
           </Select>
         </Field>
 
