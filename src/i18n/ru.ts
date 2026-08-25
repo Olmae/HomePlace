@@ -536,6 +536,12 @@ export const ru: Dictionary = {
     noMatches: "Ничего не найдено",
 
   },
+  bell: {
+    title: "Уведомления",
+    empty: "Тихо — ничего нового",
+    all: "Все события",
+    aria: "Уведомления",
+  },
   settings: {
     addToBoard: "Вынести на доску",
     addedToBoard: "На доске",

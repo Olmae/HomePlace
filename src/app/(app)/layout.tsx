@@ -5,6 +5,7 @@ import { dict } from "@/i18n";
 import { AppNav } from "@/components/AppNav";
 import { MobileNav } from "@/components/MobileNav";
 import { startMonitor } from "@/lib/monitor";
+import { unreadFor } from "@/lib/notifications";
 
 export const dynamic = "force-dynamic";
 
@@ -26,10 +27,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   if (!user) redirect("/login");
 
   const d = dict(user.locale);
+  const unread = await unreadFor(user.id);
 
   return (
     <div className="flex min-h-screen flex-col">
-      <AppNav d={d} user={{ name: user.name, role: user.role, avatarUrl: user.avatarUrl }} />
+      <AppNav d={d} user={{ name: user.name, role: user.role, avatarUrl: user.avatarUrl }} unread={unread} />
       {/* The bottom padding is for the floating navigation on a phone: without
           it the last tile ends up underneath the pill. The pill sits a safe-area
           inset above the screen edge and is ~56px tall, so the clearance has to

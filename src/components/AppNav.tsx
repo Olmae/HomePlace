@@ -7,6 +7,7 @@ import { signOut } from "@/actions/auth";
 import { AppearanceMenu } from "./AppearanceMenu";
 import { CommandPalette } from "./CommandPalette";
 import { Help } from "./Help";
+import { NotificationBell } from "./NotificationBell";
 import type { Dictionary } from "@/i18n";
 
 /**
@@ -16,9 +17,11 @@ import type { Dictionary } from "@/i18n";
 export function AppNav({
   d,
   user,
+  unread,
 }: {
   d: Dictionary;
   user: { name: string; role: string; avatarUrl: string | null };
+  unread: number;
 }) {
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -77,6 +80,7 @@ export function AppNav({
               {d.palette.hint}
             </kbd>
           </button>
+          <NotificationBell d={d} initialUnread={unread} />
           <Help d={d} />
           <AppearanceMenu d={d} />
           <div className="relative">

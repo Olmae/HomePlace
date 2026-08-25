@@ -539,6 +539,12 @@ export const en = {
     noMatches: "Nothing matches that",
 
   },
+  bell: {
+    title: "Notifications",
+    empty: "All quiet — nothing new",
+    all: "All events",
+    aria: "Notifications",
+  },
   settings: {
     addToBoard: "Put on the board",
     addedToBoard: "On the board",
