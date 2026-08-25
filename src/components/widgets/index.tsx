@@ -37,6 +37,8 @@ import { Habits } from "./Habits";
 import { habitsState } from "@/lib/habits";
 import { upcomingEvents } from "@/lib/google";
 import { getProfile, computeTargets } from "@/lib/nutrition";
+import { NetMonitor } from "./NetMonitor";
+import { internetSamples } from "@/lib/netmon";
 import { bytes, percent, duration, ago } from "@/lib/format";
 import type { Dictionary } from "@/i18n";
 
@@ -125,6 +127,8 @@ export async function Widget({ widget, config, title, d, userId, canControl = fa
       return <EnergyWidget config={config} title={title} d={d} />;
     case "cameras":
       return <CamerasWidget config={config} title={title} d={d} />;
+    case "netmon":
+      return <NetMonWidget title={title} d={d} />;
     case "reminders":
       return userId ? (
         <RemindersList title={title} d={d} userId={userId} />
@@ -1298,6 +1302,14 @@ async function PresenceWidget({ title, d }: { title: string; d: Dictionary }) {
 async function NutritionWidget({ title, d, canControl }: { title: string; d: Dictionary; canControl: boolean }) {
   const state = await getNutrition();
   return <NutritionDiary d={d} title={title} state={state} canControl={canControl} />;
+}
+
+// ─────────────────────────────── Internet ────────────────────────────────
+
+/** The panel's own internet latency/speed watch. */
+async function NetMonWidget({ title, d }: { title: string; d: Dictionary }) {
+  const samples = await internetSamples();
+  return <NetMonitor d={d} title={title} samples={samples} />;
 }
 
 // ──────────────────────────────── Agenda ─────────────────────────────────

@@ -11,6 +11,7 @@ import { sampleContainers } from "./containerHistory";
 import { sampleContainersToDb, pruneMetrics } from "./metricStore";
 import { prometheusConfig } from "./integrations";
 import { checkSmartDrift } from "./smart";
+import { probeInternet } from "./netmon";
 
 /**
  * The availability prober.
@@ -64,6 +65,9 @@ async function tick(): Promise<void> {
     // Watch the disks' failing-sector counters for any worsening. Self-throttled
     // to once an hour, so riding the tick costs nothing most of the time.
     await checkSmartDrift().catch((e) => console.error("smart check failed:", e));
+    // Internet latency/speed watch — self-throttled, and only runs at all when
+    // an internet-monitor widget is on a board.
+    await probeInternet().catch((e) => console.error("internet probe failed:", e));
     // The Telegram bot runs its own long-polling loop (startTelegramPolling) so
     // replies are instant rather than up to a tick late — it is not driven from
     // here any more.

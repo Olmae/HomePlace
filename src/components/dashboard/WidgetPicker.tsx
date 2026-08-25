@@ -28,6 +28,7 @@ export type WidgetKind =
   | "qbittorrent"
   | "arr"
   | "pbs"
+  | "netmon"
   | "homeassistant"
   | "homegroups"
   | "scenes"
@@ -60,7 +61,7 @@ export type WidgetKind =
 type Category = { key: "monitoring" | "services" | "smarthome" | "home" | "atmosphere"; widgets: WidgetKind[] };
 
 const CATEGORIES: Category[] = [
-  { key: "monitoring", widgets: ["system", "disks", "load", "chart", "gauge", "uptimestrip", "sla", "recentevents", "containers", "proxmox", "wol"] },
+  { key: "monitoring", widgets: ["system", "disks", "load", "chart", "gauge", "uptimestrip", "sla", "recentevents", "containers", "proxmox", "netmon", "wol"] },
   { key: "services", widgets: ["jellyfin", "qbittorrent", "arr", "pbs"] },
   { key: "smarthome", widgets: ["homegroups", "homeassistant", "scenes", "energy", "cameras", "presence", "mediaplayer"] },
   { key: "home", widgets: ["weather", "airquality", "calendar", "agenda", "ical", "reminders", "shopping", "nutrition", "habits", "clock", "worldclocks", "countdown", "rates", "notes", "feed", "embed"] },
@@ -563,6 +564,15 @@ function Preview({ kind }: { kind: WidgetKind }) {
               <span className="h-1.5 w-4 rounded bg-line" />
               <span className="h-1.5 flex-1 rounded bg-line" />
             </span>
+          ))}
+        </span>
+      );
+
+    case "netmon":
+      return (
+        <span className="flex h-14 w-full items-end justify-between gap-1 rounded bg-raised p-2">
+          {[40, 70, 30, 55, 45, 80, 35].map((h, i) => (
+            <span key={i} className="w-1.5 rounded-sm bg-accent/60" style={{ height: `${h}%` }} />
           ))}
         </span>
       );
