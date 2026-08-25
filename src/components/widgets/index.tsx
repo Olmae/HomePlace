@@ -35,6 +35,8 @@ import { NutritionDiary } from "./NutritionDiary";
 import { getNutrition } from "@/actions/nutrition";
 import { Habits } from "./Habits";
 import { habitsState } from "@/lib/habits";
+import { upcomingEvents } from "@/lib/google";
+import { getProfile, computeTargets } from "@/lib/nutrition";
 import { bytes, percent, duration, ago } from "@/lib/format";
 import type { Dictionary } from "@/i18n";
 
@@ -162,6 +164,14 @@ export async function Widget({ widget, config, title, d, userId, canControl = fa
     case "habits":
       return userId ? (
         <HabitsWidget title={title} d={d} config={config} userId={userId} canControl={canControl} />
+      ) : (
+        <Card className="p-4">
+          <p className="text-sm text-muted">{d.widgets.noData}</p>
+        </Card>
+      );
+    case "agenda":
+      return userId ? (
+        <AgendaWidget title={title} d={d} userId={userId} />
       ) : (
         <Card className="p-4">
           <p className="text-sm text-muted">{d.widgets.noData}</p>
@@ -1288,6 +1298,63 @@ async function PresenceWidget({ title, d }: { title: string; d: Dictionary }) {
 async function NutritionWidget({ title, d, canControl }: { title: string; d: Dictionary; canControl: boolean }) {
   const state = await getNutrition();
   return <NutritionDiary d={d} title={title} state={state} canControl={canControl} />;
+}
+
+// ──────────────────────────────── Agenda ─────────────────────────────────
+
+/** Today at a glance: calendar events and reminders on one timeline, plus how
+ *  the day's calories stand against the target. */
+async function AgendaWidget({ title, d, userId }: { title: string; d: Dictionary; userId: string }) {
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  const end = new Date();
+  end.setHours(23, 59, 59, 999);
+
+  const [reminders, eventsRaw, foodRows, profile] = await Promise.all([
+    prisma.reminder.findMany({ where: { userId, done: false, at: { gte: start, lte: end } }, orderBy: { at: "asc" }, take: 12 }),
+    upcomingEvents(userId, 2, 15),
+    prisma.foodLog.findMany({ where: { userId, at: { gte: start } }, select: { kcal: true } }),
+    getProfile(userId),
+  ]);
+
+  const time = (dt: Date) => dt.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+  type Row = { at: number; time: string; icon: string; text: string };
+  const rows: Row[] = [];
+  for (const e of eventsRaw ?? []) {
+    const dt = new Date(e.start);
+    if (dt > end) continue; // only today
+    rows.push({ at: e.allDay ? 0 : dt.getTime(), time: e.allDay ? d.widgets.agendaAllDay : time(dt), icon: "📅", text: e.summary || "—" });
+  }
+  for (const r of reminders) rows.push({ at: r.at.getTime(), time: time(r.at), icon: "⏰", text: r.title });
+  rows.sort((a, b) => a.at - b.at);
+
+  const kcal = Math.round(foodRows.reduce((s, f) => s + f.kcal, 0));
+  const targetKcal = profile ? computeTargets(profile)?.kcal ?? null : null;
+
+  return (
+    <Card className="flex h-full flex-col">
+      <CardHeader title={title} icon="🗓️" />
+      <div className="min-h-0 flex-1 divide-y divide-line overflow-y-auto">
+        {rows.length === 0 && <p className="p-4 text-sm text-muted">{d.widgets.agendaEmpty}</p>}
+        {rows.map((row, i) => (
+          <div key={i} className="flex items-center gap-3 px-4 py-2 text-sm">
+            <span className="w-11 shrink-0 font-mono text-[11px] tabular-nums text-muted">{row.time}</span>
+            <span aria-hidden>{row.icon}</span>
+            <span className="min-w-0 flex-1 truncate">{row.text}</span>
+          </div>
+        ))}
+      </div>
+      {(kcal > 0 || targetKcal) && (
+        <div className="flex items-center justify-between border-t border-line px-4 py-2 text-xs">
+          <span className="text-muted">🍎 {d.widgets.nutritionKcal}</span>
+          <span className="tabular-nums text-faint">
+            {kcal}
+            {targetKcal ? ` / ${targetKcal}` : ""}
+          </span>
+        </div>
+      )}
+    </Card>
+  );
 }
 
 // ──────────────────────────────── Cameras ────────────────────────────────
