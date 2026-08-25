@@ -3,8 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { requireRole } from "@/lib/auth";
-import { controlContainer, listContainers, type ContainerAction } from "@/lib/docker";
-import { imageUpdate, type UpdateStatus } from "@/lib/imageUpdates";
+import { controlContainer, type ContainerAction } from "@/lib/docker";
+import { scanContainerUpdates, type UpdateStatus } from "@/lib/imageUpdates";
 
 /**
  * Start, stop and restart, from the panel.
@@ -50,19 +50,7 @@ export async function runContainerAction(
  */
 export async function checkImageUpdates(): Promise<{ name: string; status: UpdateStatus }[]> {
   await requireRole("admin");
-  const running = (await listContainers()).filter((c) => c.state === "running");
-
-  // One lookup per distinct image+digest; the result is mapped back to names.
-  const byImage = new Map<string, { image: string; imageId?: string }>();
-  for (const c of running) byImage.set(`${c.image}|${c.imageId ?? ""}`, { image: c.image, imageId: c.imageId });
-
-  const uniques = [...byImage.entries()].slice(0, 60);
-  const statuses = new Map<string, UpdateStatus>();
-  await Promise.all(
-    uniques.map(async ([key, { image, imageId }]) => {
-      statuses.set(key, await imageUpdate(image, imageId));
-    })
-  );
-
-  return running.map((c) => ({ name: c.name, status: statuses.get(`${c.image}|${c.imageId ?? ""}`) ?? "unknown" }));
+  // The scan lives in the lib now, so the daily background check and this button
+  // share it — and a manual check is remembered too, showing on the next load.
+  return (await scanContainerUpdates()).results;
 }

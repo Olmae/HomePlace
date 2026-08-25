@@ -12,6 +12,7 @@ import { sampleContainersToDb, pruneMetrics } from "./metricStore";
 import { prometheusConfig } from "./integrations";
 import { checkSmartDrift } from "./smart";
 import { probeInternet } from "./netmon";
+import { checkContainerUpdatesDue } from "./imageUpdates";
 
 /**
  * The availability prober.
@@ -68,6 +69,9 @@ async function tick(): Promise<void> {
     // Internet latency/speed watch — self-throttled, and only runs at all when
     // an internet-monitor widget is on a board.
     await probeInternet().catch((e) => console.error("internet probe failed:", e));
+    // Once a day, ask each container's registry whether a newer image exists, so
+    // the update badges are there on arrival rather than only after a click.
+    await checkContainerUpdatesDue().catch((e) => console.error("update check failed:", e));
     // The Telegram bot runs its own long-polling loop (startTelegramPolling) so
     // replies are instant rather than up to a tick late — it is not driven from
     // here any more.

@@ -1,4 +1,8 @@
 import "server-only";
+import { listContainers } from "./docker";
+import { getSetting, setSetting } from "./db";
+import { notify } from "./notify";
+import { resolvedDockerHosts } from "./integrations";
 
 /**
  * Is a newer image available for a running container?
@@ -136,4 +140,56 @@ function parseImage(image: string): { registry: string; repo: string; tag: strin
   if (registry === "registry-1.docker.io" && !repo.includes("/")) repo = `library/${repo}`;
 
   return { registry, repo, tag };
+}
+
+// ─────────────────────── Persisted, automatic scan ───────────────────────
+
+const SCAN_KEY = "images.updates";
+export type UpdateScan = { at: number; results: { name: string; status: UpdateStatus }[] };
+
+export async function storedUpdates(): Promise<UpdateScan | null> {
+  return getSetting<UpdateScan | null>(SCAN_KEY, null);
+}
+
+/**
+ * Check every running container against its registry, remember the result, and
+ * announce anything newly updatable. One lookup per distinct image+digest, so
+ * twenty containers off one image cost one call; capped so a busy host does not
+ * fan out into a hundred registry requests.
+ */
+export async function scanContainerUpdates(): Promise<UpdateScan> {
+  const running = (await listContainers()).filter((c) => c.state === "running");
+
+  const byImage = new Map<string, { image: string; imageId?: string }>();
+  for (const c of running) byImage.set(`${c.image}|${c.imageId ?? ""}`, { image: c.image, imageId: c.imageId });
+
+  const statuses = new Map<string, UpdateStatus>();
+  await Promise.all(
+    [...byImage.entries()].slice(0, 60).map(async ([key, { image, imageId }]) => {
+      statuses.set(key, await imageUpdate(image, imageId));
+    })
+  );
+  const results = running.map((c) => ({ name: c.name, status: statuses.get(`${c.image}|${c.imageId ?? ""}`) ?? ("unknown" as UpdateStatus) }));
+
+  // Tell the household once about each image that has newly become updatable.
+  const prev = await storedUpdates();
+  const wasUpdating = new Set((prev?.results ?? []).filter((r) => r.status === "update").map((r) => r.name));
+  const fresh = results.filter((r) => r.status === "update" && !wasUpdating.has(r.name)).map((r) => r.name);
+
+  const scan: UpdateScan = { at: Date.now(), results };
+  await setSetting(SCAN_KEY, scan);
+  if (fresh.length > 0) {
+    await notify({ type: "system", severity: "info", title: "⬆️ Доступны обновления образов", body: fresh.slice(0, 12).join(", ") });
+  }
+  return scan;
+}
+
+let lastScan = 0;
+
+/** Run a scan at most once a day, from the monitor tick. */
+export async function checkContainerUpdatesDue(): Promise<void> {
+  if (Date.now() - lastScan < 24 * 3_600_000) return;
+  if ((await resolvedDockerHosts()).length === 0) return;
+  lastScan = Date.now();
+  await scanContainerUpdates();
 }

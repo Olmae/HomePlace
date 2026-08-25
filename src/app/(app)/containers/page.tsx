@@ -11,6 +11,7 @@ import { dict } from "@/i18n";
 import { EmptyState, Card, Badge } from "@/components/ui";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import { ContainerTable, type Row } from "@/components/containers/ContainerTable";
+import { storedUpdates } from "@/lib/imageUpdates";
 import { EMPTY_GROUPS, normalizeGroups } from "@/lib/containerGroups";
 import { bytes, percent } from "@/lib/format";
 
@@ -37,14 +38,18 @@ export default async function ContainersPage() {
     return <EmptyState title={d.containers.noDocker} hint={d.containers.noDockerHint} />;
   }
 
-  const [containers, placed, groupsRaw, dashboard, iconPack] = await Promise.all([
+  const [containers, placed, groupsRaw, dashboard, iconPack, updateScan] = await Promise.all([
     listContainers(),
     prisma.item.findMany({ where: { containerName: { not: null } }, select: { containerName: true } }),
     getSetting<unknown>("containers.groups", EMPTY_GROUPS),
     prisma.dashboard.findFirst({ orderBy: { order: "asc" }, select: { id: true } }),
     getSetting<boolean>("icons.pack", false),
+    storedUpdates(),
   ]);
   const groups = normalizeGroups(groupsRaw);
+  // Seed the update badges from the last background scan, so they show on load
+  // without pressing "check updates".
+  const initialUpdates = Object.fromEntries((updateScan?.results ?? []).map((r) => [r.name, r.status]));
 
   // Statistics cost one request per container, so only running ones are asked:
   // a stopped container has nothing to report and would only add waiting.
@@ -140,6 +145,7 @@ export default async function ContainersPage() {
         dashboardId={dashboard?.id ?? null}
         iconPack={iconPack}
         groups={groups}
+        initialUpdates={initialUpdates}
       />
     </>
   );

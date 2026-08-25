@@ -78,6 +78,7 @@ export function ContainerTable({
   dashboardId,
   iconPack,
   groups,
+  initialUpdates = {},
 }: {
   d: Dictionary;
   rows: Row[];
@@ -86,6 +87,7 @@ export function ContainerTable({
   dashboardId: string | null;
   iconPack: boolean;
   groups: ContainerGroupConfig;
+  initialUpdates?: Record<string, "update" | "current" | "unknown">;
 }) {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<"all" | "running" | "stopped" | "problems">("all");
@@ -122,7 +124,7 @@ export function ContainerTable({
   }, [showCharts, showCpu, showMemory]);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [updates, setUpdates] = useState<Record<string, "update" | "current" | "unknown">>({});
+  const [updates, setUpdates] = useState<Record<string, "update" | "current" | "unknown">>(initialUpdates);
   const [checking, setChecking] = useState(false);
 
   function checkUpdates() {
