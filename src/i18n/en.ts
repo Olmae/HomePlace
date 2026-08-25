@@ -400,6 +400,7 @@ export const en = {
     nutritionFat: "Fat",
     nutritionCarbs: "Carbs",
     nutritionLeft: "left",
+    nutritionWeek: "Last 7 days",
     nutritionEmpty: "Nothing logged today.",
     nutritionSearch: "Search a food…",
     nutritionManual: "Enter by hand",

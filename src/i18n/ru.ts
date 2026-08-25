@@ -397,6 +397,7 @@ export const ru: Dictionary = {
     nutritionFat: "Жиры",
     nutritionCarbs: "Углеводы",
     nutritionLeft: "осталось",
+    nutritionWeek: "7 дней",
     nutritionEmpty: "Сегодня ничего не записано.",
     nutritionSearch: "Найти продукт…",
     nutritionManual: "Ввести вручную",

@@ -81,6 +81,32 @@ function Totals({ d, state }: { d: Dictionary; state: NutritionState }) {
       <Bar label={t.nutritionProtein} value={totals.protein} target={targets.protein} accent="bg-ok" unit="g" />
       <Bar label={t.nutritionFat} value={totals.fat} target={targets.fat} accent="bg-warn" unit="g" />
       <Bar label={t.nutritionCarbs} value={totals.carbs} target={targets.carbs} accent="bg-info" unit="g" />
+      <WeekStrip d={d} week={state.week} target={targets.kcal} />
+    </div>
+  );
+}
+
+/** The last seven days at a glance — a bar per day, green on/under target, red over. */
+function WeekStrip({ d, week, target }: { d: Dictionary; week: NutritionState["week"]; target: number }) {
+  if (!week.some((day) => day.kcal > 0)) return null;
+  const peak = Math.max(target, ...week.map((day) => day.kcal), 1);
+  return (
+    <div className="mt-3 border-t border-line pt-2">
+      <div className="mb-1 text-[11px] text-muted">{d.widgets.nutritionWeek}</div>
+      <div className="flex items-end gap-1" style={{ height: 40 }}>
+        {week.map((day, i) => {
+          const h = day.kcal > 0 ? Math.max(3, (day.kcal / peak) * 100) : 0;
+          const over = target > 0 && day.kcal > target;
+          return (
+            <div key={i} className="flex min-w-0 flex-1 flex-col items-center justify-end gap-0.5" title={`${day.label}: ${day.kcal} ${d.widgets.nutritionKcal}`}>
+              <div className="flex w-full items-end" style={{ height: 30 }}>
+                <div className={`w-full rounded-sm ${day.kcal === 0 ? "bg-raised" : over ? "bg-danger" : "bg-ok"}`} style={{ height: `${h}%` }} />
+              </div>
+              <span className="truncate text-[9px] text-faint">{day.label}</span>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

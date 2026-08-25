@@ -17,11 +17,15 @@ import type { SearchResult } from "@/lib/fatsecret";
 
 export type FoodEntry = { id: string; name: string; kcal: number; protein: number; fat: number; carbs: number; grams: number | null };
 export type DayTotals = { kcal: number; protein: number; fat: number; carbs: number };
+/** One past day, for the little week strip: its date and calories eaten. */
+export type DayKcal = { label: string; kcal: number };
 export type NutritionState = {
   profile: NutritionProfile | null;
   targets: Targets | null;
   entries: FoodEntry[];
   totals: DayTotals;
+  /** The last seven days (oldest → today), calories per day. */
+  week: DayKcal[];
   // Whether online food lookup is available. Always true now — Open Food Facts
   // is keyless, so search and barcode work even without FatSecret configured.
   lookup: boolean;
@@ -35,20 +39,37 @@ function startOfToday(): Date {
 
 export async function getNutrition(): Promise<NutritionState> {
   const user = await requireUser();
-  const [profile, rows] = await Promise.all([
+  const weekStart = new Date(startOfToday());
+  weekStart.setDate(weekStart.getDate() - 6); // seven days including today
+
+  const [profile, rows, weekRows] = await Promise.all([
     getProfile(user.id),
     prisma.foodLog.findMany({ where: { userId: user.id, at: { gte: startOfToday() } }, orderBy: { at: "asc" } }),
+    prisma.foodLog.findMany({ where: { userId: user.id, at: { gte: weekStart } }, select: { at: true, kcal: true } }),
   ]);
   const entries: FoodEntry[] = rows.map((r) => ({ id: r.id, name: r.name, kcal: r.kcal, protein: r.protein, fat: r.fat, carbs: r.carbs, grams: r.grams }));
   const totals = entries.reduce(
     (t, e) => ({ kcal: t.kcal + e.kcal, protein: t.protein + e.protein, fat: t.fat + e.fat, carbs: t.carbs + e.carbs }),
     { kcal: 0, protein: 0, fat: 0, carbs: 0 }
   );
+
+  // Bucket the week's rows into seven day totals, oldest first.
+  const week: DayKcal[] = [];
+  for (let i = 6; i >= 0; i--) {
+    const day = new Date(startOfToday());
+    day.setDate(day.getDate() - i);
+    const next = new Date(day);
+    next.setDate(next.getDate() + 1);
+    const kcal = weekRows.filter((r) => r.at >= day && r.at < next).reduce((s, r) => s + r.kcal, 0);
+    week.push({ label: day.toLocaleDateString(undefined, { weekday: "short" }), kcal: Math.round(kcal) });
+  }
+
   return {
     profile,
     targets: profile ? computeTargets(profile) : null,
     entries,
     totals: { kcal: Math.round(totals.kcal), protein: Math.round(totals.protein), fat: Math.round(totals.fat), carbs: Math.round(totals.carbs) },
+    week,
     lookup: true,
   };
 }
