@@ -615,6 +615,11 @@ export const ru: Dictionary = {
     rulesSeverity: "Важность",
     rulesLast: "последнее",
     rulesQueryHint: "PromQL, возвращающий одно число. Проверьте перед сохранением.",
+    rulesSource: "Источник",
+    rulesSourcePrometheus: "Prometheus (PromQL)",
+    rulesSourceHa: "Датчик Home Assistant",
+    rulesEntity: "Сущность датчика",
+    rulesEntityHint: "Сущность Home Assistant с числовым значением — скопируйте её id со страницы «Умный дом».",
 
     about: "О программе",
     role: "Роль",

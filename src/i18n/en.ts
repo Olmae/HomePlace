@@ -618,6 +618,11 @@ export const en = {
     rulesSeverity: "Severity",
     rulesLast: "last",
     rulesQueryHint: "PromQL returning one number. Test it before saving.",
+    rulesSource: "Source",
+    rulesSourcePrometheus: "Prometheus (PromQL)",
+    rulesSourceHa: "Home Assistant sensor",
+    rulesEntity: "Sensor entity",
+    rulesEntityHint: "A Home Assistant entity with a numeric state — copy its id from the Smart home page.",
 
     about: "About",
     role: "Role",

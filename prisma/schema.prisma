@@ -300,8 +300,14 @@ model AlertRule {
   name    String
   enabled Boolean @default(true)
 
+  // Where the number comes from: "prometheus" (PromQL in `query`) or "ha" (the
+  // numeric state of the Home Assistant entity in `entityId`). Same threshold,
+  // hold and notify machinery either way.
+  source     String  @default("prometheus")
+  entityId   String?
   // PromQL returning a number. The first sample of the result is compared.
-  query      String
+  // Ignored for an "ha" rule.
+  query      String  @default("")
   // gt | lt
   comparison String  @default("gt")
   threshold  Float

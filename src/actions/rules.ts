@@ -10,6 +10,8 @@ import { RULE_TEMPLATES } from "@/lib/rules";
 
 export type RuleInput = {
   name: string;
+  source: string;
+  entityId: string;
   query: string;
   comparison: string;
   threshold: number;
@@ -26,9 +28,12 @@ export async function listRules() {
 
 export async function saveRule(id: string | null, input: RuleInput): Promise<void> {
   await requireRole("admin");
+  const source = input.source === "ha" ? "ha" : "prometheus";
   const data = {
     name: input.name.trim() || "Rule",
-    query: input.query.trim(),
+    source,
+    entityId: source === "ha" ? input.entityId.trim() || null : null,
+    query: source === "ha" ? "" : input.query.trim(),
     comparison: input.comparison === "lt" ? "lt" : "gt",
     threshold: Number(input.threshold) || 0,
     forSeconds: Math.max(0, Math.round(Number(input.forSeconds) || 0)),

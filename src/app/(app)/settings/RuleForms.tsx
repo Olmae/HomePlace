@@ -88,6 +88,8 @@ export function RuleForms({ d, rules }: { d: Dictionary; rules: AlertRule[] }) {
 function RuleDialog({ d, rule, onClose }: { d: Dictionary; rule: AlertRule | null; onClose: () => void }) {
   const [form, setForm] = useState({
     name: rule?.name ?? "",
+    source: rule?.source ?? "prometheus",
+    entityId: rule?.entityId ?? "",
     query: rule?.query ?? "",
     comparison: rule?.comparison ?? "gt",
     threshold: rule?.threshold ?? 90,
@@ -96,39 +98,58 @@ function RuleDialog({ d, rule, onClose }: { d: Dictionary; rule: AlertRule | nul
     unit: rule?.unit ?? "percent",
     enabled: rule?.enabled ?? true,
   });
+  const isHa = form.source === "ha";
   const [probe, setProbe] = useState<{ ok: boolean; value?: number; error?: string } | null>(null);
   const [pending, startTransition] = useTransition();
 
   return (
     <Dialog open onClose={onClose} title={rule ? d.common.edit : d.settings.rules} wide>
       <div className="flex flex-col gap-4">
-        <Field label={d.dashboard.tileTitle}>
-          <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} autoFocus />
-        </Field>
-
-        <Field label={d.widgets.query} hint={d.settings.rulesQueryHint}>
-          <Input
-            value={form.query}
-            onChange={(e) => setForm({ ...form, query: e.target.value })}
-            className="font-mono text-xs"
-            placeholder='100 - (avg(rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)'
-          />
-        </Field>
-
-        <div className="flex items-center gap-3">
-          <Button
-            disabled={pending}
-            onClick={() => startTransition(async () => setProbe(await testRuleQuery(form.query)))}
-          >
-            {d.common.test}
-          </Button>
-          {probe &&
-            (probe.ok ? (
-              <span className="font-mono text-xs text-ok">{probe.value?.toFixed(2)}</span>
-            ) : (
-              <span className="truncate text-xs text-danger">{probe.error}</span>
-            ))}
+        <div className="grid grid-cols-2 gap-3">
+          <Field label={d.dashboard.tileTitle}>
+            <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} autoFocus />
+          </Field>
+          <Field label={d.settings.rulesSource}>
+            <Select value={form.source} onChange={(e) => setForm({ ...form, source: e.target.value })}>
+              <option value="prometheus">{d.settings.rulesSourcePrometheus}</option>
+              <option value="ha">{d.settings.rulesSourceHa}</option>
+            </Select>
+          </Field>
         </div>
+
+        {isHa ? (
+          <Field label={d.settings.rulesEntity} hint={d.settings.rulesEntityHint}>
+            <Input
+              value={form.entityId}
+              onChange={(e) => setForm({ ...form, entityId: e.target.value })}
+              className="font-mono text-xs"
+              placeholder="sensor.washing_machine_temperature"
+            />
+          </Field>
+        ) : (
+          <>
+            <Field label={d.widgets.query} hint={d.settings.rulesQueryHint}>
+              <Input
+                value={form.query}
+                onChange={(e) => setForm({ ...form, query: e.target.value })}
+                className="font-mono text-xs"
+                placeholder='100 - (avg(rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)'
+              />
+            </Field>
+
+            <div className="flex items-center gap-3">
+              <Button disabled={pending} onClick={() => startTransition(async () => setProbe(await testRuleQuery(form.query)))}>
+                {d.common.test}
+              </Button>
+              {probe &&
+                (probe.ok ? (
+                  <span className="font-mono text-xs text-ok">{probe.value?.toFixed(2)}</span>
+                ) : (
+                  <span className="truncate text-xs text-danger">{probe.error}</span>
+                ))}
+            </div>
+          </>
+        )}
 
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <Field label={d.settings.rulesComparison}>
@@ -203,7 +224,7 @@ function RuleDialog({ d, rule, onClose }: { d: Dictionary; rule: AlertRule | nul
             </Button>
             <Button
               variant="primary"
-              disabled={pending || !form.name.trim() || !form.query.trim()}
+              disabled={pending || !form.name.trim() || (isHa ? !form.entityId.trim() : !form.query.trim())}
               onClick={() =>
                 startTransition(async () => {
                   await saveRule(rule?.id ?? null, form);

@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma } from "./db";
 import { queryOne } from "./prometheus";
+import { haStates } from "./services";
 import { prometheusConfig } from "./integrations";
 import { telegramConfig } from "./integrations";
 import { bytes, percent } from "./format";
@@ -22,12 +23,15 @@ import { notify } from "./notify";
 export type RuleEvaluation = { id: string; name: string; value: number | null; firing: boolean; error?: string };
 
 export async function evaluateRules(): Promise<RuleEvaluation[]> {
-  // No Prometheus means no numbers to compare — leave the rules alone rather
-  // than flapping every one of them into "unknown" and back.
-  if (!(await prometheusConfig())) return [];
-
   const rules = await prisma.alertRule.findMany({ where: { enabled: true } });
   if (rules.length === 0) return [];
+
+  // Numbers come from Prometheus (PromQL) or Home Assistant (an entity's state);
+  // fetch each source only if a rule actually needs it.
+  const promOk = rules.some((r) => r.source !== "ha") ? (await prometheusConfig()) !== null : false;
+  const haMap = rules.some((r) => r.source === "ha")
+    ? new Map(((await haStates()) ?? []).map((e) => [e.id, e.state]))
+    : null;
 
   const cfg = await telegramConfig();
   const now = new Date();
@@ -38,8 +42,23 @@ export async function evaluateRules(): Promise<RuleEvaluation[]> {
     let error: string | undefined;
 
     try {
-      value = await queryOne(rule.query);
-      if (value === null) error = "the query returned nothing";
+      if (rule.source === "ha") {
+        // No Home Assistant reachable means no number — leave the rule alone.
+        if (!haMap) error = "home assistant unreachable";
+        else if (!rule.entityId || !haMap.has(rule.entityId)) error = "entity not found";
+        else {
+          const n = Number(haMap.get(rule.entityId));
+          if (!Number.isFinite(n)) error = "sensor is not a number";
+          else value = n;
+        }
+      } else if (!promOk) {
+        // No Prometheus means no numbers to compare — leave the rule alone
+        // rather than flapping it into "unknown" and back.
+        error = "prometheus not configured";
+      } else {
+        value = await queryOne(rule.query);
+        if (value === null) error = "the query returned nothing";
+      }
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
     }
