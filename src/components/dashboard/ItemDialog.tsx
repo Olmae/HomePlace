@@ -113,6 +113,8 @@ export function ItemDialog({
     containersFilter: Array.isArray(config.containers) ? (config.containers as string[]).join("\n") : str(config.containers),
     sortBy: str(config.sortBy) || "cpu",
     limit: Number(config.limit ?? 6),
+    price: config.price === undefined ? "" : String(config.price),
+    currency: str(config.currency) || "₽",
     query2: str(config.query2),
     place: str(config.place),
     latitude: config.latitude === undefined ? "" : String(config.latitude),
@@ -307,6 +309,8 @@ export function ItemDialog({
         return { entities: form.entities.split("\n").map((e) => e.trim()).filter(Boolean) };
       case "homegroups":
         return { groups: form.homeGroups };
+      case "energy":
+        return { price: Number(form.price) || 0, currency: form.currency.trim() || "₽", limit: Number(form.limit) };
       case "feed":
         return { url: form.feedUrl.trim(), limit: Number(form.limit) };
       case "embed":
@@ -651,6 +655,24 @@ export function ItemDialog({
               <Field label={d.widgets.homegroups} hint={d.widgets.homeGroupsHint}>
                 <HomeGroupSelect d={d} value={form.homeGroups} onChange={(ids) => set("homeGroups", ids)} />
               </Field>
+            )}
+
+            {form.widget === "energy" && (
+              <div className="grid grid-cols-2 gap-3">
+                <Field label={d.widgets.energyPrice} hint={d.widgets.energyPriceHint}>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min={0}
+                    value={form.price}
+                    onChange={(e) => set("price", e.target.value)}
+                    placeholder="0"
+                  />
+                </Field>
+                <Field label={d.widgets.energyCurrency}>
+                  <Input value={form.currency} onChange={(e) => set("currency", e.target.value)} className="w-20" />
+                </Field>
+              </div>
             )}
 
             {(form.widget === "feed" || form.widget === "embed" || form.widget === "ical") && (

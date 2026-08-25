@@ -817,9 +817,19 @@ async function EnergyWidget({ config, title, d }: { config: Record<string, unkno
     .sort((a, b) => b.w - a.w)
     .slice(0, num(config.limit, 8));
 
+  // Optional price per kWh turns the raw watts into a running cost — "what is
+  // this costing me right now", and what each meter has cost so far.
+  const price = num(config.price, 0);
+  const currency = str(config.currency) ?? "₽";
+  const money = (v: number) => `${v.toFixed(v < 10 ? 2 : 0)} ${currency}`;
+
   const energy = entities
     .filter((e) => e.deviceClass === "energy" && chosen(e))
-    .map((e) => ({ id: e.id, name: e.name, label: `${val(e.state)} ${e.unit ?? "kWh"}` }))
+    .map((e) => {
+      const kwh = val(e.state);
+      const cost = price > 0 ? ` · ${money(kwh * price)}` : "";
+      return { id: e.id, name: e.name, label: `${kwh} ${e.unit ?? "kWh"}${cost}` };
+    })
     .slice(0, 4);
 
   if (power.length === 0 && energy.length === 0) {
@@ -828,10 +838,19 @@ async function EnergyWidget({ config, title, d }: { config: Record<string, unkno
 
   const total = power.reduce((sum, p) => sum + p.w, 0);
   const peak = Math.max(...power.map((p) => p.w), 1);
+  const perHour = price > 0 ? (total / 1000) * price : null;
 
   return (
     <Card className="flex h-full flex-col">
-      <CardHeader title={title} icon="⚡" action={<span className="font-mono text-xs text-faint">{Math.round(total)} W</span>} />
+      <CardHeader
+        title={title}
+        icon="⚡"
+        action={
+          <span className="font-mono text-xs text-faint">
+            {Math.round(total)} W{perHour !== null && ` · ${money(perHour)}/${d.widgets.perHour}`}
+          </span>
+        }
+      />
       <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3">
         {power.map((p) => (
           <div key={p.id}>

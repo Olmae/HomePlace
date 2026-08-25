@@ -438,6 +438,10 @@ export const ru: Dictionary = {
     noHomeGroups: "Групп и комнат пока нет — создайте группы на странице «Умный дом».",
     noScenes: "В Home Assistant нет сцен или скриптов.",
     noPower: "В Home Assistant нет датчиков мощности.",
+    perHour: "ч",
+    energyPrice: "Цена за кВт·ч",
+    energyPriceHint: "0 — показывать только ватты. Укажите цену, чтобы видеть расход в деньгах.",
+    energyCurrency: "Валюта",
     mediaplayer: "Медиаплеер",
 
     calendar: "Календарь",

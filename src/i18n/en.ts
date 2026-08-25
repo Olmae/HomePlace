@@ -441,6 +441,10 @@ export const en = {
     noHomeGroups: "No groups or rooms yet — make groups on the Smart home page.",
     noScenes: "No scenes or scripts in Home Assistant.",
     noPower: "No power sensors found in Home Assistant.",
+    perHour: "h",
+    energyPrice: "Price per kWh",
+    energyPriceHint: "Leave 0 to just show watts. Set it to see the running cost.",
+    energyCurrency: "Currency",
     mediaplayer: "Media player",
 
     calendar: "Calendar",
