@@ -3,6 +3,7 @@
 import { useState, useTransition, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardHeader } from "@/components/ui";
+import { Sparkline } from "@/components/Sparkline";
 import { Input, Button, Select } from "@/components/form";
 import { saveNutritionProfile, searchFood, searchBarcode, scanFoodPhoto, logFood, deleteFood, addWater, logWeight, type NutritionState } from "@/actions/nutrition";
 import type { NutritionProfile } from "@/lib/nutrition";
@@ -82,7 +83,45 @@ function Totals({ d, state }: { d: Dictionary; state: NutritionState }) {
       <Bar label={t.nutritionFat} value={totals.fat} target={targets.fat} accent="bg-warn" unit="g" />
       <Bar label={t.nutritionCarbs} value={totals.carbs} target={targets.carbs} accent="bg-info" unit="g" />
       <WeekStrip d={d} week={state.week} target={targets.kcal} />
+      <Trends d={d} week={state.week} target={targets.kcal} weightHistory={state.weightHistory} />
       <BodyRow d={d} water={state.water} weight={state.weight} />
+    </div>
+  );
+}
+
+/** The week's calorie balance against the target, and the weight trend line. */
+function Trends({ d, week, target, weightHistory }: { d: Dictionary; week: NutritionState["week"]; target: number; weightHistory: NutritionState["weightHistory"] }) {
+  const t = d.widgets;
+  const days = week.filter((x) => x.kcal > 0);
+  const avg = days.length ? Math.round(days.reduce((s, x) => s + x.kcal, 0) / days.length) : null;
+  const balance = avg !== null && target > 0 ? avg - target : null; // ≤0 is a deficit
+  const points = weightHistory.map((p, i) => [i, p.kg] as [number, number]);
+
+  if (balance === null && points.length < 2) return null;
+  return (
+    <div className="mt-3 space-y-2 border-t border-line pt-2">
+      {balance !== null && (
+        <div className="flex items-center justify-between text-[11px]">
+          <span className="text-muted">{t.nutritionBalance}</span>
+          <span className={`tabular-nums ${balance <= 0 ? "text-ok" : "text-warn"}`}>
+            {balance > 0 ? "+" : ""}
+            {balance} {t.nutritionKcal}/{t.perDay}
+          </span>
+        </div>
+      )}
+      {points.length >= 2 && (
+        <div>
+          <div className="mb-0.5 flex items-center justify-between text-[11px]">
+            <span className="text-muted">{t.nutritionWeightTrend}</span>
+            <span className="tabular-nums text-faint">
+              {weightHistory[weightHistory.length - 1].kg} {t.nutritionKg}
+            </span>
+          </div>
+          <span className="block h-8 [&_svg]:h-8">
+            <Sparkline points={points} height={32} />
+          </span>
+        </div>
+      )}
     </div>
   );
 }

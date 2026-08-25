@@ -29,6 +29,8 @@ export type NutritionState = {
   /** Glasses of water logged today, and the most recent body weight (kg). */
   water: number;
   weight: number | null;
+  /** Weight history (up to 60 days) for the trend line. */
+  weightHistory: { at: string; kg: number }[];
   // Whether online food lookup is available. Always true now — Open Food Facts
   // is keyless, so search and barcode work even without FatSecret configured.
   lookup: boolean;
@@ -92,6 +94,7 @@ export async function getNutrition(): Promise<NutritionState> {
     week,
     water,
     weight,
+    weightHistory: weights,
     lookup: true,
   };
 }
