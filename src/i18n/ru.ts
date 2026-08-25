@@ -93,11 +93,11 @@ export const ru: Dictionary = {
     addLink: "Ссылка",
     addLinkHint: "Любой адрес — сервис, сайт, закладка",
     addFolder: "Папка",
-    addFolderHint: "Сгруппировать плитки",
+    addFolderHint: "Контейнер — перетаскивайте плитки внутрь",
     addWidget: "Виджет",
     addWidgetHint: "Метрика, график, часы, заметка",
     addSection: "Секция",
-    addSectionHint: "Заголовок для плиток под ним",
+    addSectionHint: "Просто заголовок-разделитель — ничего не содержит; для этого папка",
 
     ownService: "Свой сервис",
     containerMissing: "Такого контейнера здесь больше нет",

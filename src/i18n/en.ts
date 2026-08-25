@@ -96,11 +96,11 @@ export const en = {
     addLink: "Link",
     addLinkHint: "Any address — a service, a site, a bookmark",
     addFolder: "Folder",
-    addFolderHint: "Group tiles together",
+    addFolderHint: "A container — drag tiles inside it",
     addWidget: "Widget",
     addWidgetHint: "A metric, a chart, a clock, a note",
     addSection: "Section",
-    addSectionHint: "A heading that labels the tiles under it",
+    addSectionHint: "Just a heading to divide the board — it holds nothing; use a folder for that",
 
     ownService: "Something of my own",
     containerMissing: "This container is not running here any more",
