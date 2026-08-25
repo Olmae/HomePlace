@@ -409,7 +409,17 @@ export function SmartHome({
                       }}
                       className="min-w-0 flex-1 text-left"
                     >
-                      <p className="truncate text-sm font-medium">{nameOf(e)}</p>
+                      {/* The device name is already the dialog title, so drop it
+                          from each row — "Water temperature", not "Washer Water
+                          temperature". */}
+                      <p className="truncate text-sm font-medium">
+                        {(() => {
+                          const full = nameOf(e);
+                          return full.length > deviceGroupOpen.length + 1 && full.startsWith(deviceGroupOpen + " ")
+                            ? full.slice(deviceGroupOpen.length + 1)
+                            : full;
+                        })()}
+                      </p>
                       <p className="truncate text-xs text-muted">{valueOf(e)}</p>
                     </button>
                     {e.toggleable && (
