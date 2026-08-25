@@ -101,6 +101,37 @@ export function Tile({
 
   if (item.kind === "folder") {
     const children = item.children ?? [];
+
+    // Panel mode: a folder shown open, right on the board. The tiles inside are
+    // laid out on the same 12-column grid they would use outside, so each one
+    // keeps its size and looks exactly as it does anywhere else — the box is
+    // just a titled boundary you can drag tiles into.
+    if (str(parseConfig(item.config).display) === "panel") {
+      return (
+        <Card className="relative flex h-full flex-col p-3">
+          {canEdit && !inFolder && <ItemActions item={item} d={d} />}
+          <div className="mb-2 flex items-center gap-2">
+            {item.icon && <TileIcon icon={item.icon} title={item.title} size="sm" />}
+            <span className="min-w-0 flex-1 truncate text-sm font-semibold">{item.title}</span>
+            {children.length > 0 && <span className="text-xs text-faint">{children.length}</span>}
+          </div>
+          {children.length === 0 ? (
+            <p className="px-1 text-xs text-faint">{canEdit ? d.dashboard.folderHint : d.dashboard.folderEmpty}</p>
+          ) : (
+            <div className="grid min-h-0 flex-1 auto-rows-min grid-cols-1 gap-3 overflow-y-auto md:grid-cols-12">
+              {children.map((child) => (
+                <div
+                  key={child.id}
+                  style={{ gridColumn: `span ${Math.min(12, Math.max(1, child.w))}`, minHeight: `${Math.max(1, child.h) * 84}px` }}
+                >
+                  <Tile item={child} statuses={statuses} d={d} canEdit={canEdit} iconPack={iconPack} userId={userId} />
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+      );
+    }
     /*
      * What each line says besides its name.
      *

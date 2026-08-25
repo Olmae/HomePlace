@@ -129,6 +129,7 @@ export function ItemDialog({
     entities: Array.isArray(config.entities) ? (config.entities as string[]).join("\n") : str(config.entities),
     background: str(config.background) || "drift",
     detail: str(config.detail) || "none",
+    folderDisplay: str(config.display) === "panel" ? "panel" : "folder",
     likePhrase: str(config.likePhrase),
     likeLabel: str(config.likeLabel),
     likeService: str(config.likeService) || "media_player.play_media",
@@ -246,7 +247,7 @@ export function ItemDialog({
           : kind === "service"
             ? extrasConfig()
             : kind === "folder"
-              ? { detail: form.detail }
+              ? { detail: form.detail, display: form.folderDisplay }
               : undefined,
       w: Number(form.w),
     };
@@ -484,16 +485,26 @@ export function ItemDialog({
         )}
 
         {isFolder && (
-          <Field label={d.dashboard.folderDetail} hint={d.dashboard.folderDetailHint}>
-            <Select value={form.detail} onChange={(e) => set("detail", e.target.value)}>
-              <option value="none">{d.common.none}</option>
-              <option value="status">{d.dashboard.detailStatus}</option>
-              <option value="latency">{d.dashboard.detailLatency}</option>
-              <option value="uptime">{d.dashboard.detailUptime}</option>
-              <option value="host">{d.dashboard.detailHost}</option>
-              <option value="container">{d.dashboard.detailContainer}</option>
-            </Select>
-          </Field>
+          <>
+            <Field label={d.dashboard.folderDisplay} hint={d.dashboard.folderDisplayHint}>
+              <Select value={form.folderDisplay} onChange={(e) => set("folderDisplay", e.target.value)}>
+                <option value="folder">{d.dashboard.displayFolder}</option>
+                <option value="panel">{d.dashboard.displayPanel}</option>
+              </Select>
+            </Field>
+            {form.folderDisplay !== "panel" && (
+              <Field label={d.dashboard.folderDetail} hint={d.dashboard.folderDetailHint}>
+                <Select value={form.detail} onChange={(e) => set("detail", e.target.value)}>
+                  <option value="none">{d.common.none}</option>
+                  <option value="status">{d.dashboard.detailStatus}</option>
+                  <option value="latency">{d.dashboard.detailLatency}</option>
+                  <option value="uptime">{d.dashboard.detailUptime}</option>
+                  <option value="host">{d.dashboard.detailHost}</option>
+                  <option value="container">{d.dashboard.detailContainer}</option>
+                </Select>
+              </Field>
+            )}
+          </>
         )}
 
         {kind === "widget" && (
