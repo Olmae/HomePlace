@@ -29,6 +29,7 @@ export type WidgetKind =
   | "arr"
   | "pbs"
   | "netmon"
+  | "diskhealth"
   | "homeassistant"
   | "homegroups"
   | "scenes"
@@ -62,7 +63,7 @@ export type WidgetKind =
 type Category = { key: "monitoring" | "services" | "smarthome" | "home" | "atmosphere"; widgets: WidgetKind[] };
 
 const CATEGORIES: Category[] = [
-  { key: "monitoring", widgets: ["system", "disks", "load", "chart", "gauge", "uptimestrip", "sla", "recentevents", "containers", "proxmox", "netmon", "wol"] },
+  { key: "monitoring", widgets: ["system", "disks", "diskhealth", "load", "chart", "gauge", "uptimestrip", "sla", "recentevents", "containers", "proxmox", "netmon", "wol"] },
   { key: "services", widgets: ["jellyfin", "qbittorrent", "arr", "pbs"] },
   { key: "smarthome", widgets: ["homegroups", "homeassistant", "scenes", "energy", "cameras", "presence", "mediaplayer"] },
   { key: "home", widgets: ["weather", "airquality", "calendar", "agenda", "ical", "reminders", "shopping", "nutrition", "habits", "clock", "worldclocks", "countdown", "rates", "notes", "links", "feed", "embed"] },
@@ -586,6 +587,18 @@ function Preview({ kind }: { kind: WidgetKind }) {
         <span className="flex h-14 w-full items-end justify-between gap-1 rounded bg-raised p-2">
           {[40, 70, 30, 55, 45, 80, 35].map((h, i) => (
             <span key={i} className="w-1.5 rounded-sm bg-accent/60" style={{ height: `${h}%` }} />
+          ))}
+        </span>
+      );
+
+    case "diskhealth":
+      return (
+        <span className={frame}>
+          {[true, true, false].map((ok, i) => (
+            <span key={i} className="flex items-center justify-between gap-1">
+              <span className="h-1.5 w-8 rounded bg-line" />
+              <span className={`h-2 w-6 rounded-full ${ok ? "bg-ok/50" : "bg-danger/50"}`} />
+            </span>
           ))}
         </span>
       );

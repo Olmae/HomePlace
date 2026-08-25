@@ -39,6 +39,7 @@ import { upcomingEvents } from "@/lib/google";
 import { getProfile, computeTargets } from "@/lib/nutrition";
 import { NetMonitor } from "./NetMonitor";
 import { LinksWidget } from "./Links";
+import { smartDisks } from "@/lib/smart";
 import { internetSamples } from "@/lib/netmon";
 import { bytes, percent, duration, ago } from "@/lib/format";
 import type { Dictionary } from "@/i18n";
@@ -186,6 +187,8 @@ export async function Widget({ widget, config, title, d, userId, canControl = fa
       return <NotesWidget title={title} text={str(config.text) ?? ""} />;
     case "links":
       return <LinksWidget title={title} links={linkList(config.links)} />;
+    case "diskhealth":
+      return <DiskHealthWidget title={title} d={d} />;
     default:
       return (
         <Card className="p-4">
@@ -472,6 +475,53 @@ async function ContainersWidget({ title, d }: { title: string; d: Dictionary }) 
 }
 
 // ────────────────────────────────── Proxmox ──────────────────────────────
+
+/**
+ * Disk health at a glance: the SMART verdict and the failing-sector counters
+ * that creep up before a drive dies — the same numbers the monitoring page
+ * shows, pinned where you actually look. Any pending or uncorrectable sector,
+ * or a health verdict that is not PASSED, turns the badge red.
+ */
+async function DiskHealthWidget({ title, d }: { title: string; d: Dictionary }) {
+  if (!(await proxmoxConfig())) {
+    return <NotConfigured title={title} message={d.monitoring.noProxmox} hint={d.monitoring.noProxmoxHint} />;
+  }
+  const disks = await smartDisks();
+  return (
+    <Card className="flex h-full flex-col">
+      <CardHeader icon="🩺" title={title} />
+      <div className="min-h-0 flex-1 divide-y divide-line overflow-y-auto">
+        {disks.length === 0 && <p className="p-4 text-sm text-muted">{d.widgets.noData}</p>}
+        {disks.map((disk) => {
+          const c = disk.counters;
+          return (
+            <div key={`${disk.node}-${disk.devpath}`} className="flex items-center justify-between gap-3 px-4 py-2.5">
+              <div className="min-w-0">
+                <p className="truncate font-mono text-xs">{disk.devpath}</p>
+                <p className="truncate text-[11px] text-faint">
+                  {disk.model} · {disk.sizeGB} GB
+                </p>
+                {c.reallocated || c.pending || c.uncorrectable ? (
+                  <p className="mt-0.5 truncate font-mono text-[11px]">
+                    {c.reallocated ? <span className="text-warn">realloc {c.reallocated}</span> : null}
+                    {c.pending ? <span className="ml-1.5 text-danger">pending {c.pending}</span> : null}
+                    {c.uncorrectable ? <span className="ml-1.5 text-danger">uncorr {c.uncorrectable}</span> : null}
+                  </p>
+                ) : null}
+              </div>
+              <div className="flex shrink-0 items-center gap-1.5">
+                {disk.wearout !== undefined && <span className="font-mono text-[11px] text-faint">{disk.wearout}%</span>}
+                <Badge tone={disk.health === "PASSED" ? "ok" : disk.health === "UNKNOWN" ? "neutral" : "danger"}>
+                  {disk.health === "PASSED" ? d.monitoring.smartPassed : disk.health}
+                </Badge>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </Card>
+  );
+}
 
 async function ProxmoxWidget({ title, d }: { title: string; d: Dictionary }) {
   if (!(await proxmoxConfig())) {

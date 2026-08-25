@@ -323,6 +323,7 @@ export const ru: Dictionary = {
   widgets: {
     system: "Система",
     disks: "Диски",
+    diskhealth: "Здоровье дисков",
     chart: "График",
     uptime: "Аптайм",
     clock: "Часы",

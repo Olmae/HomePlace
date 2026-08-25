@@ -326,6 +326,7 @@ export const en = {
   widgets: {
     system: "System",
     disks: "Disks",
+    diskhealth: "Disk health",
     chart: "Chart",
     uptime: "Uptime",
     clock: "Clock",
