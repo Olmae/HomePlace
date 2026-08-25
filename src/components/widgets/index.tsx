@@ -337,7 +337,7 @@ async function ChartWidget({ config, title, d }: { config: Record<string, unknow
     .slice(0, 5);
 
   return (
-    <Card className="h-full">
+    <Card className="flex h-full flex-col">
       <CardHeader
         icon="📈"
         title={title}
@@ -347,7 +347,7 @@ async function ChartWidget({ config, title, d }: { config: Record<string, unknow
           ) : null
         }
       />
-      <div className="p-4">
+      <div className="min-h-0 flex-1 p-4">
         {series.length > 0 ? (
           <Chart
             series={series}

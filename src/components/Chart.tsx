@@ -36,7 +36,7 @@ export function Chart({
 }) {
   const usable = series.filter((s) => s.points.filter(([, v]) => Number.isFinite(v)).length > 1).slice(0, COLOURS.length);
   if (usable.length === 0) {
-    return <div className="h-20 w-full rounded bg-raised" aria-hidden />;
+    return <div className="h-full min-h-[5rem] w-full rounded bg-raised" aria-hidden />;
   }
 
   const all = usable.flatMap((s) => s.points.map(([, v]) => v)).filter(Number.isFinite);
@@ -62,8 +62,10 @@ export function Chart({
       .join(" ");
 
   return (
-    <div>
-      <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="h-24 w-full" role="img" aria-hidden>
+    // Fill the height the tile gives us — the SVG stretches (preserveAspectRatio
+    // none), the legend keeps its size, so a taller tile is a taller graph.
+    <div className="flex h-full min-h-0 flex-col">
+      <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="min-h-[3rem] w-full flex-1" role="img" aria-hidden>
         {/* Two faint guides at a third and two thirds: enough to judge a slope,
             not enough to become graph paper. */}
         {[0.33, 0.66].map((f) => (
@@ -97,7 +99,7 @@ export function Chart({
       </svg>
 
       {legend && (
-        <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
+        <div className="mt-2 flex shrink-0 flex-wrap gap-x-3 gap-y-1">
           {usable.map((s, i) => {
             const last = s.points.filter(([, v]) => Number.isFinite(v)).at(-1)?.[1];
             return (
