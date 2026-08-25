@@ -37,7 +37,8 @@ ENV DATA_DIR=/data
 
 # su-exec is how the entrypoint drops privileges after fixing ownership of the
 # data directory — the container starts as root only long enough to do that.
-RUN apk add --no-cache libc6-compat openssl su-exec
+# tzdata gives named zones (TZ=Europe/Moscow); without it Alpine stays on UTC.
+RUN apk add --no-cache libc6-compat openssl su-exec tzdata
 
 # `output: "standalone"` bundles only the files the server actually needs.
 COPY --from=builder /app/public ./public
