@@ -106,6 +106,7 @@ export function ItemDialog({
     instance: str(config.instance),
     timeZone: str(config.timeZone),
     text: str(config.text),
+    linksText: Array.isArray(config.links) ? (config.links as string[]).join("\n") : str(config.links),
     images: Array.isArray(config.images) ? (config.images as string[]).join("\n") : str(config.images),
     intervalSeconds: Number(config.intervalSeconds ?? 20),
     caption: str(config.caption),
@@ -393,6 +394,8 @@ export function ItemDialog({
         };
       case "notes":
         return { text: form.text };
+      case "links":
+        return { links: form.linksText };
       default:
         return {};
     }
@@ -980,6 +983,18 @@ export function ItemDialog({
             {form.widget === "notes" && (
               <Field label={d.widgets.noteText}>
                 <Textarea rows={4} value={form.text} onChange={(e) => set("text", e.target.value)} />
+              </Field>
+            )}
+
+            {form.widget === "links" && (
+              <Field label={d.widgets.linksField} hint={d.widgets.linksHint}>
+                <Textarea
+                  rows={5}
+                  value={form.linksText}
+                  onChange={(e) => set("linksText", e.target.value)}
+                  className="font-mono text-xs"
+                  placeholder={"Router | 192.168.0.1\nNAS | http://192.168.0.10:5000\nWiki | https://wiki.local"}
+                />
               </Field>
             )}
           </>

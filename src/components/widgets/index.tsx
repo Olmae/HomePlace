@@ -38,6 +38,7 @@ import { habitsState } from "@/lib/habits";
 import { upcomingEvents } from "@/lib/google";
 import { getProfile, computeTargets } from "@/lib/nutrition";
 import { NetMonitor } from "./NetMonitor";
+import { LinksWidget } from "./Links";
 import { internetSamples } from "@/lib/netmon";
 import { bytes, percent, duration, ago } from "@/lib/format";
 import type { Dictionary } from "@/i18n";
@@ -183,6 +184,8 @@ export async function Widget({ widget, config, title, d, userId, canControl = fa
       );
     case "notes":
       return <NotesWidget title={title} text={str(config.text) ?? ""} />;
+    case "links":
+      return <LinksWidget title={title} links={linkList(config.links)} />;
     default:
       return (
         <Card className="p-4">
@@ -205,6 +208,35 @@ function lines(v: unknown): string[] {
 function num(v: unknown, fallback: number): number {
   const n = Number(v);
   return Number.isFinite(n) ? n : fallback;
+}
+
+/**
+ * "Label | https://addr" per line → shortcuts. The label is optional (the host
+ * stands in for it), and a scheme-less address is treated as a LAN box and
+ * opened over http rather than guessing https on a machine that has no cert.
+ */
+function linkList(v: unknown): { label: string; url: string }[] {
+  if (typeof v !== "string") return [];
+  return v
+    .split("\n")
+    .map((line) => {
+      const t = line.trim();
+      if (!t) return null;
+      const bar = t.indexOf("|");
+      let label = bar === -1 ? "" : t.slice(0, bar).trim();
+      let url = (bar === -1 ? t : t.slice(bar + 1)).trim();
+      if (!url) return null;
+      if (!/^https?:\/\//i.test(url) && !url.startsWith("/")) url = `http://${url}`;
+      if (!label) {
+        try {
+          label = new URL(url).host;
+        } catch {
+          label = url;
+        }
+      }
+      return { label, url };
+    })
+    .filter((x): x is { label: string; url: string } => x !== null);
 }
 
 /** Shown wherever a widget needs an integration the operator has not set up. */

@@ -272,7 +272,7 @@ export function ContainerTable({
                   }}
                   title={d.containers.updateAvailable}
                   aria-label={d.containers.updateAvailable}
-                  className="inline-flex h-[18px] w-[18px] items-center justify-center rounded-full bg-accent/15 text-accent transition-colors hover:bg-accent/25"
+                  className="inline-flex h-[18px] w-[18px] items-center justify-center rounded-full bg-warn/15 text-warn transition-colors hover:bg-warn/25"
                 >
                   <svg width="11" height="11" viewBox="0 0 12 12" fill="none" aria-hidden>
                     <path
@@ -836,7 +836,7 @@ function UpdateHint({ d, image, onClose }: { d: Dictionary; image: string; onClo
         onClick={onClose}
       />
       <div className="absolute left-0 top-6 z-20 w-72 max-w-[calc(100vw-2rem)] rounded-card border border-line bg-surface p-3 text-left shadow-pop">
-        <p className="text-sm font-semibold text-accent">{d.containers.updateAvailable}</p>
+        <p className="text-sm font-semibold text-warn">{d.containers.updateAvailable}</p>
         <p className="mt-1 text-xs text-muted">{d.containers.updateHowTo}</p>
         <div className="mt-2 flex items-center gap-2 rounded-control border border-line bg-raised px-2 py-1.5">
           <code className="min-w-0 flex-1 truncate font-mono text-[11px]">{cmd}</code>
