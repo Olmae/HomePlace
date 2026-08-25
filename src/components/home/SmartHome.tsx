@@ -76,6 +76,7 @@ export function SmartHome({
   const [config, setConfig] = useState<HomeConfig>(initialConfig);
   const [editingEntity, setEditingEntity] = useState<Entity | null>(null);
   const [deviceOpen, setDeviceOpen] = useState<Entity | null>(null);
+  const [deviceGroupOpen, setDeviceGroupOpen] = useState<string | null>(null);
   const [editingGroup, setEditingGroup] = useState<HomeBucket<Entity> | null>(null);
   const [creatingGroup, setCreatingGroup] = useState(false);
 
@@ -141,6 +142,87 @@ export function SmartHome({
       await setGroupState(ids, on, bucket.name);
       setBusy(null);
     });
+  }
+
+  /** Turn a device's switchable entities on or off together. */
+  function flipDevice(device: string, on: boolean) {
+    const ids = entities.filter((e) => e.device === device && e.toggleable).map((e) => e.id);
+    if (ids.length === 0) return;
+    setBusy("device:" + device);
+    startTransition(async () => {
+      await setGroupState(ids, on, device);
+      setBusy(null);
+    });
+  }
+
+  // In room view, an entity that belongs to a physical device folds into a
+  // single "device" unit (when the device has more than one entity in the room),
+  // so a washing machine is one tile you open, not a scatter of sensors. Loose
+  // entities and single-entity devices stay as their own tiles.
+  type Unit = { kind: "device"; device: string; items: Entity[] } | { kind: "entity"; entity: Entity };
+  function unitsFor(items: Entity[]): Unit[] {
+    if (group !== "area") return items.map((entity) => ({ kind: "entity", entity }));
+    const byDevice = new Map<string, Entity[]>();
+    for (const e of items) if (e.device) byDevice.set(e.device, [...(byDevice.get(e.device) ?? []), e]);
+    const seen = new Set<string>();
+    const units: Unit[] = [];
+    for (const e of items) {
+      if (e.device && (byDevice.get(e.device)?.length ?? 0) >= 2) {
+        if (seen.has(e.device)) continue;
+        seen.add(e.device);
+        units.push({ kind: "device", device: e.device, items: byDevice.get(e.device)! });
+      } else {
+        units.push({ kind: "entity", entity: e });
+      }
+    }
+    return units;
+  }
+
+  function renderEntityCard(entity: Entity) {
+    const on = isOn(entity);
+    const canToggle = canControl && entity.toggleable;
+    return (
+      <Card
+        key={entity.id}
+        className={`group relative flex cursor-pointer flex-col gap-1 p-3 transition-colors hover:border-accent ${
+          on && entity.toggleable ? "border-accent/40 bg-accent/5" : ""
+        } ${busy === entity.id && pending ? "opacity-60" : ""}`}
+      >
+        {canControl && (
+          <button
+            type="button"
+            onClick={() => setEditingEntity(entity)}
+            title={d.home.customize}
+            className="absolute right-1 top-1 z-10 rounded-control px-1 text-xs text-faint opacity-0 transition-opacity hover:bg-raised hover:text-text group-hover:opacity-100"
+          >
+            ⋯
+          </button>
+        )}
+        <div className="flex w-full items-start gap-2">
+          <button type="button" onClick={() => setDeviceOpen(entity)} className="flex min-w-0 flex-1 items-start gap-2 text-left">
+            <span className="text-lg leading-none" aria-hidden>
+              {domainIcon(entity.domain)}
+            </span>
+            <span className="block min-w-0 flex-1 truncate text-xs font-medium">{nameOf(entity)}</span>
+          </button>
+          {entity.toggleable && (
+            <button type="button" onClick={() => flip(entity)} disabled={!canToggle} aria-label={on ? d.home.allOff : d.home.allOn} className="shrink-0 disabled:cursor-default">
+              <span className={`block h-4 w-7 rounded-full transition-colors ${on ? "bg-accent" : "bg-line"}`} aria-hidden>
+                <span className={`mt-[2px] block h-3 w-3 rounded-full bg-surface transition-transform ${on ? "translate-x-[14px]" : "translate-x-[2px]"}`} />
+              </span>
+            </button>
+          )}
+        </div>
+        <button type="button" onClick={() => setDeviceOpen(entity)} className="flex flex-wrap items-center gap-1 text-left">
+          <Badge tone={on && entity.toggleable ? "accent" : "neutral"}>{valueOf(entity)}</Badge>
+          {Object.entries(entity.attributes ?? {}).map(([key, value]) => (
+            <span key={key} className="text-[10px] text-faint">
+              {shortAttribute(key)} {value}
+            </span>
+          ))}
+        </button>
+      </Card>
+    );
   }
 
   return (
@@ -246,80 +328,24 @@ export function SmartHome({
                 <p className="text-xs text-muted">{d.home.groupMembersHint}</p>
               ) : group === "device" && !isDeviceOpen(bucket.key) ? null : (
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
-                  {bucket.items.map((entity) => {
-                    const on = isOn(entity);
-                    const canToggle = canControl && entity.toggleable;
-
-                    return (
-                      <Card
-                        key={entity.id}
-                        className={`group relative flex cursor-pointer flex-col gap-1 p-3 transition-colors hover:border-accent ${
-                          on && entity.toggleable ? "border-accent/40 bg-accent/5" : ""
-                        } ${busy === entity.id && pending ? "opacity-60" : ""}`}
-                      >
-                        {canControl && (
-                          <button
-                            type="button"
-                            onClick={() => setEditingEntity(entity)}
-                            title={d.home.customize}
-                            className="absolute right-1 top-1 z-10 rounded-control px-1 text-xs text-faint opacity-0 transition-opacity hover:bg-raised hover:text-text group-hover:opacity-100"
-                          >
-                            ⋯
-                          </button>
-                        )}
-
-                        <div className="flex w-full items-start gap-2">
-                          {/* Clicking the device opens its panel — the controls
-                              and its recent history — while the pill stays a
-                              one-tap on/off. */}
-                          <button
-                            type="button"
-                            onClick={() => setDeviceOpen(entity)}
-                            className="flex min-w-0 flex-1 items-start gap-2 text-left"
-                          >
-                            <span className="text-lg leading-none" aria-hidden>
-                              {domainIcon(entity.domain)}
-                            </span>
-                            <span className="block min-w-0 flex-1 truncate text-xs font-medium">{nameOf(entity)}</span>
-                          </button>
-
-                          {entity.toggleable && (
-                            <button
-                              type="button"
-                              onClick={() => flip(entity)}
-                              disabled={!canToggle}
-                              aria-label={on ? d.home.allOff : d.home.allOn}
-                              className="shrink-0 disabled:cursor-default"
-                            >
-                              <span
-                                className={`block h-4 w-7 rounded-full transition-colors ${on ? "bg-accent" : "bg-line"}`}
-                                aria-hidden
-                              >
-                                <span
-                                  className={`mt-[2px] block h-3 w-3 rounded-full bg-surface transition-transform ${
-                                    on ? "translate-x-[14px]" : "translate-x-[2px]"
-                                  }`}
-                                />
-                              </span>
-                            </button>
-                          )}
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={() => setDeviceOpen(entity)}
-                          className="flex flex-wrap items-center gap-1 text-left"
-                        >
-                          <Badge tone={on && entity.toggleable ? "accent" : "neutral"}>{valueOf(entity)}</Badge>
-                          {Object.entries(entity.attributes ?? {}).map(([key, value]) => (
-                            <span key={key} className="text-[10px] text-faint">
-                              {shortAttribute(key)} {value}
-                            </span>
-                          ))}
-                        </button>
-                      </Card>
-                    );
-                  })}
+                  {unitsFor(bucket.items).map((unit) =>
+                    unit.kind === "entity" ? (
+                      renderEntityCard(unit.entity)
+                    ) : (
+                      <DeviceTile
+                        key={"dev:" + unit.device}
+                        device={unit.device}
+                        items={unit.items}
+                        isOn={isOn}
+                        busy={busy === "device:" + unit.device && pending}
+                        canControl={canControl}
+                        onOpen={() => setDeviceGroupOpen(unit.device)}
+                        onFlip={(on) => flipDevice(unit.device, on)}
+                        allOn={d.home.allOn}
+                        allOff={d.home.allOff}
+                      />
+                    )
+                  )}
                 </div>
               )}
             </section>
@@ -359,6 +385,51 @@ export function SmartHome({
           }}
           onClose={() => setDeviceOpen(null)}
         />
+      )}
+
+      {/* The whole device: every entity it has, switchable and readable here.
+          Tapping one opens its own panel for the history. */}
+      {deviceGroupOpen && (
+        <Dialog open onClose={() => setDeviceGroupOpen(null)} title={deviceGroupOpen} wide>
+          <div className="divide-y divide-line">
+            {entities
+              .filter((e) => e.device === deviceGroupOpen)
+              .map((e) => {
+                const on = isOn(e);
+                return (
+                  <div key={e.id} className="flex items-center gap-3 py-2.5">
+                    <span className="text-lg leading-none" aria-hidden>
+                      {domainIcon(e.domain)}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDeviceGroupOpen(null);
+                        setDeviceOpen(e);
+                      }}
+                      className="min-w-0 flex-1 text-left"
+                    >
+                      <p className="truncate text-sm font-medium">{nameOf(e)}</p>
+                      <p className="truncate text-xs text-muted">{valueOf(e)}</p>
+                    </button>
+                    {e.toggleable && (
+                      <button
+                        type="button"
+                        onClick={() => flip(e)}
+                        disabled={!canControl}
+                        aria-label={on ? d.home.allOff : d.home.allOn}
+                        className="shrink-0 disabled:cursor-default"
+                      >
+                        <span className={`block h-5 w-9 rounded-full transition-colors ${on ? "bg-accent" : "bg-line"}`} aria-hidden>
+                          <span className={`mt-[3px] block h-3.5 w-3.5 rounded-full bg-surface transition-transform ${on ? "translate-x-[18px]" : "translate-x-[3px]"}`} />
+                        </span>
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+          </div>
+        </Dialog>
       )}
 
       {/* Create / edit a hand-made group. */}
@@ -771,6 +842,59 @@ function historyTime(at: string): string {
 /** "on", "open", "home" and "playing" all mean the same thing on a card. */
 function isOn(entity: Entity): boolean {
   return ["on", "open", "home", "playing", "heat", "cool", "active"].includes(entity.state);
+}
+
+/** A whole device as one room tile: name, a switch for all its toggles, a count. */
+function DeviceTile({
+  device,
+  items,
+  isOn,
+  busy,
+  canControl,
+  onOpen,
+  onFlip,
+  allOn,
+  allOff,
+}: {
+  device: string;
+  items: Entity[];
+  isOn: (e: Entity) => boolean;
+  busy: boolean;
+  canControl: boolean;
+  onOpen: () => void;
+  onFlip: (on: boolean) => void;
+  allOn: string;
+  allOff: string;
+}) {
+  const toggles = items.filter((e) => e.toggleable);
+  const anyOn = toggles.some(isOn);
+  const onCount = items.filter(isOn).length;
+  return (
+    <Card
+      className={`flex cursor-pointer flex-col gap-1 p-3 transition-colors hover:border-accent ${anyOn ? "border-accent/40 bg-accent/5" : ""} ${
+        busy ? "opacity-60" : ""
+      }`}
+    >
+      <div className="flex w-full items-start gap-2">
+        <button type="button" onClick={onOpen} className="flex min-w-0 flex-1 items-start gap-2 text-left">
+          <span className="text-lg leading-none" aria-hidden>
+            🔌
+          </span>
+          <span className="block min-w-0 flex-1 truncate text-xs font-medium">{device}</span>
+        </button>
+        {toggles.length > 0 && (
+          <button type="button" onClick={() => onFlip(!anyOn)} disabled={!canControl} aria-label={anyOn ? allOff : allOn} className="shrink-0 disabled:cursor-default">
+            <span className={`block h-4 w-7 rounded-full transition-colors ${anyOn ? "bg-accent" : "bg-line"}`} aria-hidden>
+              <span className={`mt-[2px] block h-3 w-3 rounded-full bg-surface transition-transform ${anyOn ? "translate-x-[14px]" : "translate-x-[2px]"}`} />
+            </span>
+          </button>
+        )}
+      </div>
+      <button type="button" onClick={onOpen} className="text-left text-[10px] text-faint">
+        {items.length} · {onCount} ●
+      </button>
+    </Card>
+  );
 }
 
 function domainIcon(domain: string): string {
