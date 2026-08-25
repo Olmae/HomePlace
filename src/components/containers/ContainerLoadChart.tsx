@@ -105,31 +105,40 @@ export function ContainerLoadChart({
       {/* The Grafana-style readout: every container at this instant, heaviest
           first, the top one marked. Follows the crosshair and flips side near
           the right edge so it never runs off. */}
-      {hover !== null && readout.length > 0 && (
-        <div
-          className="pointer-events-none absolute top-0 z-10 max-h-full w-56 overflow-hidden rounded-control border border-line bg-surface/95 p-2 text-xs shadow-pop backdrop-blur"
-          style={hoverLeftPct > 55 ? { right: `${100 - hoverLeftPct}%`, marginRight: 8 } : { left: `${hoverLeftPct}%`, marginLeft: 8 }}
-        >
-          <p className="mb-1 font-mono text-[10px] text-faint">
-            {new Date(axis[at]).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-          </p>
-          <ul className="space-y-0.5">
-            {readout.slice(0, 12).map((r, i) => (
-              <li
-                key={r.name}
-                className={`flex items-center gap-1.5 ${i === 0 ? "font-semibold" : ""} ${
-                  active === r.name ? "text-accent" : ""
-                }`}
-              >
-                <span className="h-2 w-2 shrink-0 rounded-[2px]" style={{ background: r.colour }} aria-hidden />
-                <span className="truncate">{r.name}</span>
-                <span className="ml-auto shrink-0 font-mono tabular-nums">{format(r.value)}</span>
-              </li>
-            ))}
-            {readout.length > 12 && <li className="text-[10px] text-faint">+{readout.length - 12}</li>}
-          </ul>
-        </div>
-      )}
+      {hover !== null && readout.length > 0 && (() => {
+        // Show every container, not the first dozen. A long list would run past
+        // the chart, so past nine it splits into two columns and rides the full
+        // height — the readout stays complete however many containers there are.
+        const shown = readout.slice(0, 30);
+        const twoCol = shown.length > 9;
+        return (
+          <div
+            className={`pointer-events-none absolute top-0 z-20 rounded-control border border-line bg-surface/95 p-2 text-xs shadow-pop backdrop-blur ${
+              twoCol ? "w-[21rem]" : "w-56"
+            }`}
+            style={hoverLeftPct > 55 ? { right: `${100 - hoverLeftPct}%`, marginRight: 8 } : { left: `${hoverLeftPct}%`, marginLeft: 8 }}
+          >
+            <p className="mb-1 font-mono text-[10px] text-faint">
+              {new Date(axis[at]).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+            </p>
+            <ul className={`grid gap-x-3 gap-y-px ${twoCol ? "grid-cols-2" : "grid-cols-1"}`}>
+              {shown.map((r, i) => (
+                <li
+                  key={r.name}
+                  className={`flex items-center gap-1.5 leading-tight ${i === 0 ? "font-semibold" : ""} ${
+                    active === r.name ? "text-accent" : ""
+                  }`}
+                >
+                  <span className="h-2 w-2 shrink-0 rounded-[2px]" style={{ background: r.colour }} aria-hidden />
+                  <span className="min-w-0 truncate">{r.name}</span>
+                  <span className="ml-auto shrink-0 font-mono tabular-nums">{format(r.value)}</span>
+                </li>
+              ))}
+              {readout.length > shown.length && <li className="text-[10px] text-faint">+{readout.length - shown.length}</li>}
+            </ul>
+          </div>
+        );
+      })()}
     </div>
   );
 }
