@@ -101,6 +101,12 @@ services:
       INFO: 1
       PING: 1
       POST: "${ALLOW_CONTAINER_CONTROL:-1}"
+      # start/stop/restart are gated by their own flags on top of POST — without
+      # these the panel's control buttons come back 403 "forbidden by rules".
+      # Tied to the same switch, so ALLOW_CONTAINER_CONTROL=0 turns them all off.
+      ALLOW_START: "${ALLOW_CONTAINER_CONTROL:-1}"
+      ALLOW_STOP: "${ALLOW_CONTAINER_CONTROL:-1}"
+      ALLOW_RESTARTS: "${ALLOW_CONTAINER_CONTROL:-1}"
       # IMAGES lets the panel GET/POST /images — used for one-click "pull the
       # newer image". DELETE is not enabled anywhere, so this can fetch images
       # but never remove them, and it still cannot touch a running container.

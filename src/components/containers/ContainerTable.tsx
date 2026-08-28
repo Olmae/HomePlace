@@ -185,6 +185,15 @@ export function ContainerTable({
     return groupContainers(visible, config, d.containers.ungrouped);
   }, [grouped, searching, visible, config, d.containers.ungrouped]);
 
+  // Start/stop/restart go through a confirmation first — a mis-tap on a phone
+  // should not silently bounce a service. The pending action is held with a
+  // closure that actually runs it once confirmed.
+  const [confirm, setConfirm] = useState<{ action: "start" | "stop" | "restart"; label: string; run: () => void } | null>(null);
+
+  function ask(action: "start" | "stop" | "restart", label: string, run: () => void) {
+    setConfirm({ action, label, run });
+  }
+
   function act(row: Row, action: "start" | "stop" | "restart") {
     setBusy(row.id);
     setError(null);
@@ -367,14 +376,14 @@ export function ContainerTable({
               size="sm"
               variant="quiet"
               disabled={pending && busy === row.id}
-              onClick={() => act(row, running ? "restart" : "start")}
+              onClick={() => ask(running ? "restart" : "start", row.name, () => act(row, running ? "restart" : "start"))}
               title={running ? d.containers.restart : d.containers.start}
             >
               {running ? <RestartIcon /> : <PlayIcon />}
             </Button>
           )}
           {canEdit && controlEnabled && running && (
-            <Button size="sm" variant="quiet" disabled={pending && busy === row.id} onClick={() => act(row, "stop")} title={d.containers.stop}>
+            <Button size="sm" variant="quiet" disabled={pending && busy === row.id} onClick={() => ask("stop", row.name, () => act(row, "stop"))} title={d.containers.stop}>
               <StopIcon />
             </Button>
           )}
@@ -533,13 +542,13 @@ export function ContainerTable({
                         start the stopped ones — the group in one press. */}
                     {canEdit && controlEnabled && bucket.items.length > 0 && (
                       <>
-                        <Button size="sm" variant="quiet" title={d.containers.startGroup} onClick={() => actGroup(bucket.items, "start")}>
+                        <Button size="sm" variant="quiet" title={d.containers.startGroup} onClick={() => ask("start", `${bucket.name} · ${bucket.items.length}`, () => actGroup(bucket.items, "start"))}>
                           <PlayIcon />
                         </Button>
-                        <Button size="sm" variant="quiet" title={d.containers.restartGroup} onClick={() => actGroup(bucket.items, "restart")}>
+                        <Button size="sm" variant="quiet" title={d.containers.restartGroup} onClick={() => ask("restart", `${bucket.name} · ${bucket.items.length}`, () => actGroup(bucket.items, "restart"))}>
                           <RestartIcon />
                         </Button>
-                        <Button size="sm" variant="quiet" title={d.containers.stopGroup} onClick={() => actGroup(bucket.items, "stop")}>
+                        <Button size="sm" variant="quiet" title={d.containers.stopGroup} onClick={() => ask("stop", `${bucket.name} · ${bucket.items.length}`, () => actGroup(bucket.items, "stop"))}>
                           <StopIcon />
                         </Button>
                       </>
@@ -610,6 +619,30 @@ export function ContainerTable({
         />
       )}
 
+      {confirm && (
+        <Dialog open onClose={() => setConfirm(null)} title={d.containers[confirm.action]}>
+          <div className="p-4">
+            <p className="text-sm text-muted">
+              {d.containers.confirmAction}
+            </p>
+            <p className="mt-1 truncate font-medium">{confirm.label}</p>
+            <div className="mt-4 flex justify-end gap-2">
+              <Button variant="quiet" onClick={() => setConfirm(null)}>
+                {d.common.cancel}
+              </Button>
+              <Button
+                variant={confirm.action === "stop" ? "danger" : "primary"}
+                onClick={() => {
+                  confirm.run();
+                  setConfirm(null);
+                }}
+              >
+                {d.containers[confirm.action]}
+              </Button>
+            </div>
+          </div>
+        </Dialog>
+      )}
     </>
   );
 }

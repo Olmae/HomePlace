@@ -53,6 +53,12 @@ type RawContainer = {
   NetworkSettings?: { Networks?: Record<string, unknown> };
 };
 
+/** A one-line error from an HTTP failure — HTML error pages stripped to text. */
+function httpError(status: number, body: string): string {
+  const clean = body.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+  return `HTTP ${status}${clean ? `: ${clean.slice(0, 160)}` : ""}`;
+}
+
 async function dockerFetch(host: DockerHost, path: string, init?: RequestInit) {
   const res = await fetch(`${host.url}${path}`, {
     ...init,
@@ -161,7 +167,12 @@ export async function controlContainer(
     const res = await dockerFetch(host, `/containers/${encodeURIComponent(id)}/${action}`, { method: "POST" });
     // 204 = done, 304 = already in that state — both are success from the user's side.
     if (res.status === 204 || res.status === 304) return { ok: true };
-    return { ok: false, error: `HTTP ${res.status}: ${(await res.text()).slice(0, 200)}` };
+    // The socket proxy gates start/stop/restart behind their own ALLOW_* flags,
+    // separate from POST — a 403 here is almost always that, not Docker itself.
+    if (res.status === 403) {
+      return { ok: false, error: "blocked by the Docker socket proxy — enable ALLOW_START / ALLOW_STOP / ALLOW_RESTARTS" };
+    }
+    return { ok: false, error: httpError(res.status, await res.text()) };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
   }
@@ -206,7 +217,7 @@ export async function pullImage(hostKey: string, image: string): Promise<{ ok: b
     if (res.status === 403 || res.status === 404) {
       return { ok: false, error: "the socket proxy blocks image pulls — set IMAGES: 1 on docker-socket-proxy" };
     }
-    if (!res.ok) return { ok: false, error: `HTTP ${res.status}: ${(await res.text()).slice(0, 200)}` };
+    if (!res.ok) return { ok: false, error: httpError(res.status, await res.text()) };
 
     // The daemon streams newline-delimited JSON progress; a failure is a line
     // carrying an "error" field, usually the last one.
