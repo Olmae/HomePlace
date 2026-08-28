@@ -199,6 +199,8 @@ export const ru: Dictionary = {
     update: "обновление",
     updateHowTo: "Скачайте новый образ и пересоздайте контейнер:",
     updateComposeNote: "Через Compose: docker compose pull && docker compose up -d в папке стека.",
+    pullImage: "Скачать образ",
+    pullDone: "Образ скачан — применится при пересоздании (docker compose up -d).",
     onlyMatches: "Только совпадения",
     downloadLogs: "Скачать логи",
     pause: "Пауза",

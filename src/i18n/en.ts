@@ -202,6 +202,8 @@ export const en = {
     update: "update",
     updateHowTo: "Pull the new image, then recreate the container:",
     updateComposeNote: "With Compose: run docker compose pull && docker compose up -d in the stack's folder.",
+    pullImage: "Download image",
+    pullDone: "Image pulled — it applies on the next recreate (docker compose up -d).",
     onlyMatches: "Only matching lines",
     downloadLogs: "Download logs",
     pause: "Pause",

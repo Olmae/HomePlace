@@ -17,7 +17,7 @@ import {
   MonitorIcon,
 } from "@/components/containers/ControlIcons";
 import { GroupCategoryIcon, categoryFor } from "@/components/containers/GroupIcons";
-import { runContainerAction, checkImageUpdates } from "@/actions/containers";
+import { runContainerAction, checkImageUpdates, pullContainerImage } from "@/actions/containers";
 import { saveContainerGroups } from "@/actions/dashboard";
 import { autoIcon, guessIcon, GLYPH } from "@/lib/icons";
 import {
@@ -285,7 +285,13 @@ export function ContainerTable({
                   </svg>
                 </button>
                 {hintFor === row.name && (
-                  <UpdateHint d={d} image={row.image} onClose={() => setHintFor(null)} />
+                  <UpdateHint
+                    d={d}
+                    hostKey={row.hostKey}
+                    image={row.image}
+                    canPull={controlEnabled}
+                    onClose={() => setHintFor(null)}
+                  />
                 )}
               </span>
             )}
@@ -823,9 +829,36 @@ function GroupDialog({
  * exactly what to run, ready to copy, rather than pretend to do it and drift the
  * stack.
  */
-function UpdateHint({ d, image, onClose }: { d: Dictionary; image: string; onClose: () => void }) {
+function UpdateHint({
+  d,
+  hostKey,
+  image,
+  canPull,
+  onClose,
+}: {
+  d: Dictionary;
+  hostKey: string;
+  image: string;
+  canPull: boolean;
+  onClose: () => void;
+}) {
   const [copied, setCopied] = useState(false);
+  const [pulling, setPulling] = useState(false);
+  const [pulled, setPulled] = useState<{ ok: boolean; error?: string } | null>(null);
   const cmd = `docker pull ${image}`;
+
+  async function pull() {
+    setPulling(true);
+    setPulled(null);
+    try {
+      setPulled(await pullContainerImage(hostKey, image));
+    } catch (e) {
+      setPulled({ ok: false, error: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setPulling(false);
+    }
+  }
+
   return (
     <>
       <button
@@ -837,8 +870,30 @@ function UpdateHint({ d, image, onClose }: { d: Dictionary; image: string; onClo
       />
       <div className="absolute left-0 top-6 z-20 w-72 max-w-[calc(100vw-2rem)] rounded-card border border-line bg-surface p-3 text-left shadow-pop">
         <p className="text-sm font-semibold text-warn">{d.containers.updateAvailable}</p>
-        <p className="mt-1 text-xs text-muted">{d.containers.updateHowTo}</p>
-        <div className="mt-2 flex items-center gap-2 rounded-control border border-line bg-raised px-2 py-1.5">
+
+        {/* One safe click: pull the new image. The container keeps running the
+            old one until Compose recreates it — said plainly on success. */}
+        {canPull && (
+          <>
+            <button
+              type="button"
+              onClick={pull}
+              disabled={pulling}
+              className="mt-2 w-full rounded-control bg-warn/15 px-2.5 py-1.5 text-xs font-semibold text-warn transition-colors hover:bg-warn/25 disabled:opacity-60"
+            >
+              {pulling ? `${d.common.loading}…` : d.containers.pullImage}
+            </button>
+            {pulled &&
+              (pulled.ok ? (
+                <p className="mt-1.5 text-[11px] text-ok">{d.containers.pullDone}</p>
+              ) : (
+                <p className="mt-1.5 break-words text-[11px] text-danger">{pulled.error}</p>
+              ))}
+          </>
+        )}
+
+        <p className="mt-2 text-xs text-muted">{d.containers.updateHowTo}</p>
+        <div className="mt-1.5 flex items-center gap-2 rounded-control border border-line bg-raised px-2 py-1.5">
           <code className="min-w-0 flex-1 truncate font-mono text-[11px]">{cmd}</code>
           <button
             type="button"

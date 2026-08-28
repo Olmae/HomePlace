@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { requireRole } from "@/lib/auth";
-import { controlContainer, type ContainerAction } from "@/lib/docker";
+import { controlContainer, pullImage, type ContainerAction } from "@/lib/docker";
 import { scanContainerUpdates, type UpdateStatus } from "@/lib/imageUpdates";
 
 /**
@@ -53,4 +53,28 @@ export async function checkImageUpdates(): Promise<{ name: string; status: Updat
   // The scan lives in the lib now, so the daily background check and this button
   // share it — and a manual check is remembered too, showing on the next load.
   return (await scanContainerUpdates()).results;
+}
+
+/**
+ * Pull a container's image without touching the running container.
+ *
+ * The update badge deliberately stays lit afterwards: the new image is on the
+ * host, but the container keeps running the old one until it is recreated
+ * (`docker compose up -d`), which is the step the panel leaves to Compose.
+ */
+export async function pullContainerImage(hostKey: string, image: string): Promise<{ ok: boolean; error?: string }> {
+  const user = await requireRole("admin");
+  const result = await pullImage(hostKey, image);
+
+  await prisma.event.create({
+    data: {
+      type: "system",
+      severity: result.ok ? "info" : "error",
+      title: `pull ${image}`,
+      detail: result.error ?? null,
+      actor: user.name,
+    },
+  });
+
+  return result;
 }

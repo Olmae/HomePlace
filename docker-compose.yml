@@ -101,10 +101,13 @@ services:
       INFO: 1
       PING: 1
       POST: "${ALLOW_CONTAINER_CONTROL:-1}"
+      # IMAGES lets the panel GET/POST /images — used for one-click "pull the
+      # newer image". DELETE is not enabled anywhere, so this can fetch images
+      # but never remove them, and it still cannot touch a running container.
+      IMAGES: 1
       # Everything below stays off on purpose. EXEC and the socket-adjacent
       # endpoints are the ones that turn container access into host access.
       EXEC: 0
-      IMAGES: 0
       VOLUMES: 0
       NETWORKS: 0
       SERVICES: 0

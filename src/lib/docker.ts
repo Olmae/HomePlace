@@ -167,6 +167,64 @@ export async function controlContainer(
   }
 }
 
+/** "ghcr.io/u/app:v1" → { name: "ghcr.io/u/app", tag: "v1" }. Null name = digest-pinned. */
+function splitImage(image: string): { name: string; tag: string } {
+  const at = image.indexOf("@");
+  const ref = at === -1 ? image : image.slice(0, at);
+  const slash = ref.lastIndexOf("/");
+  const colon = ref.lastIndexOf(":");
+  if (colon > slash) return { name: ref.slice(0, colon), tag: ref.slice(colon + 1) };
+  // No tag in the reference: a bare "@sha256:…" pin has nothing to pull against.
+  return { name: at === -1 ? ref : "", tag: "latest" };
+}
+
+/**
+ * Pull the latest image for a tag.
+ *
+ * The safe half of "update": it fetches the new image but leaves the running
+ * container alone, so nothing restarts and Compose stays the owner of the
+ * container's shape — the pulled image takes effect on the next `up`. Needs
+ * IMAGES enabled on the socket proxy; POST alone is not enough.
+ */
+export async function pullImage(hostKey: string, image: string): Promise<{ ok: boolean; error?: string }> {
+  if (!settings.allowContainerControl()) {
+    return { ok: false, error: "container control is disabled (ALLOW_CONTAINER_CONTROL)" };
+  }
+  const host = (await resolvedDockerHosts()).find((h) => h.key === hostKey);
+  if (!host) return { ok: false, error: `unknown docker host: ${hostKey}` };
+
+  const { name, tag } = splitImage(image);
+  if (!name) return { ok: false, error: "cannot pull a digest-pinned image" };
+
+  try {
+    const res = await fetch(`${host.url}/images/create?fromImage=${encodeURIComponent(name)}&tag=${encodeURIComponent(tag)}`, {
+      method: "POST",
+      cache: "no-store",
+      // A pull is not a dashboard probe — give it real time over a slow link.
+      signal: AbortSignal.timeout(300_000),
+    });
+    if (res.status === 403 || res.status === 404) {
+      return { ok: false, error: "the socket proxy blocks image pulls — set IMAGES: 1 on docker-socket-proxy" };
+    }
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status}: ${(await res.text()).slice(0, 200)}` };
+
+    // The daemon streams newline-delimited JSON progress; a failure is a line
+    // carrying an "error" field, usually the last one.
+    const body = await res.text();
+    const errLine = body.split("\n").filter(Boolean).reverse().find((l) => l.includes("\"error\""));
+    if (errLine) {
+      try {
+        return { ok: false, error: String((JSON.parse(errLine) as { error?: string }).error ?? "pull failed").slice(0, 200) };
+      } catch {
+        return { ok: false, error: "pull failed" };
+      }
+    }
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
 export type ContainerDetail = Container & {
   command: string;
   restartCount: number;
