@@ -134,6 +134,8 @@ export type DiskSmartCounters = {
   pending: number | null;
   /** id 198 — sectors it could not read or remap. */
   uncorrectable: number | null;
+  /** id 194/190 — current temperature in °C, null when the drive does not report one. */
+  temperature: number | null;
 };
 
 /**
@@ -153,7 +155,21 @@ export async function diskSmart(node: string, devpath: string): Promise<DiskSmar
     const v = Number(a.raw ?? a.value);
     return Number.isFinite(v) ? v : null;
   };
-  return { reallocated: raw(5), pending: raw(197), uncorrectable: raw(198) };
+  // Temperature's raw is often "40 (Min/Max 21/45)", so pull the leading
+  // integer rather than Number()-ing the whole string, and reject values
+  // outside a sane range (some drives pack min/max into the raw as a huge
+  // number). id 194 is the usual attribute, 190 the airflow-temp fallback.
+  const temperature = ((): number | null => {
+    for (const id of [194, 190]) {
+      const a = attrs.find((x) => Number(x.id) === id);
+      if (!a) continue;
+      const m = /-?\d+/.exec(String(a.raw ?? a.value ?? ""));
+      const t = m ? Number(m[0]) : NaN;
+      if (Number.isFinite(t) && t > 0 && t <= 120) return t;
+    }
+    return null;
+  })();
+  return { reallocated: raw(5), pending: raw(197), uncorrectable: raw(198), temperature };
 }
 
 export async function storages(): Promise<PveStorage[]> {

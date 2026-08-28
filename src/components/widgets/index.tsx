@@ -510,6 +510,15 @@ async function DiskHealthWidget({ title, d }: { title: string; d: Dictionary }) 
                 ) : null}
               </div>
               <div className="flex shrink-0 items-center gap-1.5">
+                {c.temperature !== null && (
+                  <span
+                    className={`font-mono text-[11px] tabular-nums ${
+                      c.temperature >= 55 ? "text-danger" : c.temperature >= 50 ? "text-warn" : "text-faint"
+                    }`}
+                  >
+                    {c.temperature}°
+                  </span>
+                )}
                 {disk.wearout !== undefined && <span className="font-mono text-[11px] text-faint">{disk.wearout}%</span>}
                 <Badge tone={disk.health === "PASSED" ? "ok" : disk.health === "UNKNOWN" ? "neutral" : "danger"}>
                   {disk.health === "PASSED" ? d.monitoring.smartPassed : disk.health}
