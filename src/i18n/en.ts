@@ -195,6 +195,7 @@ export const en = {
     restartGroup: "Restart all",
     stopGroup: "Stop all",
     confirmAction: "This will affect:",
+    updateGroup: "Update all",
     logs: "Logs",
     viewLogs: "View logs",
     checkUpdates: "Check updates",

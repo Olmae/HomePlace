@@ -192,6 +192,7 @@ export const ru: Dictionary = {
     restartGroup: "Перезапустить все",
     stopGroup: "Остановить все",
     confirmAction: "Действие затронет:",
+    updateGroup: "Обновить все",
     logs: "Логи",
     viewLogs: "Смотреть логи",
     checkUpdates: "Проверить обновления",

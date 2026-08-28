@@ -118,12 +118,17 @@ export function Tile({
           {children.length === 0 ? (
             <p className="px-1 text-xs text-faint">{canEdit ? d.dashboard.folderHint : d.dashboard.folderEmpty}</p>
           ) : (
-            <div className="grid min-h-0 flex-1 auto-rows-min grid-cols-1 gap-3 overflow-y-auto md:grid-cols-12">
+            /* The panel is often only a couple of board-columns wide, so it
+               cannot slice itself into the board's 12: a child at span 1 then
+               became ~10px. Columns instead auto-fill to the panel's own width
+               — every tile is at least ~11rem and wraps — so a narrow zone
+               reads as a tidy stack, not a crushed row. */
+            <div
+              className="grid min-h-0 flex-1 auto-rows-min gap-3 overflow-y-auto"
+              style={{ gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 11rem), 1fr))" }}
+            >
               {children.map((child) => (
-                <div
-                  key={child.id}
-                  style={{ gridColumn: `span ${Math.min(12, Math.max(1, child.w))}`, minHeight: `${Math.max(1, child.h) * 84}px` }}
-                >
+                <div key={child.id} style={{ minHeight: `${Math.max(1, child.h) * 84}px` }}>
                   <Tile item={child} statuses={statuses} d={d} canEdit={canEdit} iconPack={iconPack} userId={userId} />
                 </div>
               ))}

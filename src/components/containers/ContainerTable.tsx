@@ -188,10 +188,27 @@ export function ContainerTable({
   // Start/stop/restart go through a confirmation first — a mis-tap on a phone
   // should not silently bounce a service. The pending action is held with a
   // closure that actually runs it once confirmed.
-  const [confirm, setConfirm] = useState<{ action: "start" | "stop" | "restart"; label: string; run: () => void } | null>(null);
+  const [confirm, setConfirm] = useState<{ title: string; label: string; run: () => void; danger?: boolean } | null>(null);
+  const [pulling, setPulling] = useState<string | null>(null);
 
-  function ask(action: "start" | "stop" | "restart", label: string, run: () => void) {
-    setConfirm({ action, label, run });
+  function ask(title: string, label: string, run: () => void, danger = false) {
+    setConfirm({ title, label, run, danger });
+  }
+
+  // Pull the newer image for every container in a group that has an update
+  // waiting. Like the row button, this only fetches — nothing is recreated.
+  function pullGroup(items: Row[]) {
+    const targets = items.filter((r) => updates[r.name] === "update");
+    if (targets.length === 0) return;
+    setError(null);
+    setPulling(items.map((r) => r.id).join(","));
+    startTransition(async () => {
+      for (const row of targets) {
+        const r = await pullContainerImage(row.hostKey, row.image);
+        if (!r.ok) setError(`${row.name}: ${r.error ?? d.containers.actionFailed}`);
+      }
+      setPulling(null);
+    });
   }
 
   function act(row: Row, action: "start" | "stop" | "restart") {
@@ -376,14 +393,18 @@ export function ContainerTable({
               size="sm"
               variant="quiet"
               disabled={pending && busy === row.id}
-              onClick={() => ask(running ? "restart" : "start", row.name, () => act(row, running ? "restart" : "start"))}
+              onClick={() =>
+                ask(running ? d.containers.restart : d.containers.start, row.name, () =>
+                  act(row, running ? "restart" : "start")
+                )
+              }
               title={running ? d.containers.restart : d.containers.start}
             >
               {running ? <RestartIcon /> : <PlayIcon />}
             </Button>
           )}
           {canEdit && controlEnabled && running && (
-            <Button size="sm" variant="quiet" disabled={pending && busy === row.id} onClick={() => ask("stop", row.name, () => act(row, "stop"))} title={d.containers.stop}>
+            <Button size="sm" variant="quiet" disabled={pending && busy === row.id} onClick={() => ask(d.containers.stop, row.name, () => act(row, "stop"), true)} title={d.containers.stop}>
               <StopIcon />
             </Button>
           )}
@@ -542,15 +563,39 @@ export function ContainerTable({
                         start the stopped ones — the group in one press. */}
                     {canEdit && controlEnabled && bucket.items.length > 0 && (
                       <>
-                        <Button size="sm" variant="quiet" title={d.containers.startGroup} onClick={() => ask("start", `${bucket.name} · ${bucket.items.length}`, () => actGroup(bucket.items, "start"))}>
+                        <Button size="sm" variant="quiet" title={d.containers.startGroup} onClick={() => ask(d.containers.startGroup, `${bucket.name} · ${bucket.items.length}`, () => actGroup(bucket.items, "start"))}>
                           <PlayIcon />
                         </Button>
-                        <Button size="sm" variant="quiet" title={d.containers.restartGroup} onClick={() => ask("restart", `${bucket.name} · ${bucket.items.length}`, () => actGroup(bucket.items, "restart"))}>
+                        <Button size="sm" variant="quiet" title={d.containers.restartGroup} onClick={() => ask(d.containers.restartGroup, `${bucket.name} · ${bucket.items.length}`, () => actGroup(bucket.items, "restart"))}>
                           <RestartIcon />
                         </Button>
-                        <Button size="sm" variant="quiet" title={d.containers.stopGroup} onClick={() => ask("stop", `${bucket.name} · ${bucket.items.length}`, () => actGroup(bucket.items, "stop"))}>
+                        <Button size="sm" variant="quiet" title={d.containers.stopGroup} onClick={() => ask(d.containers.stopGroup, `${bucket.name} · ${bucket.items.length}`, () => actGroup(bucket.items, "stop"), true)}>
                           <StopIcon />
                         </Button>
+                        {/* Only when the group actually has updates waiting: pull
+                            the new image for each, in one press. */}
+                        {bucket.items.some((r) => updates[r.name] === "update") && (
+                          <Button
+                            size="sm"
+                            variant="quiet"
+                            disabled={pulling !== null}
+                            title={d.containers.updateGroup}
+                            onClick={() =>
+                              ask(
+                                d.containers.updateGroup,
+                                `${bucket.name} · ${bucket.items.filter((r) => updates[r.name] === "update").length}`,
+                                () => pullGroup(bucket.items)
+                              )
+                            }
+                          >
+                            <span className="text-warn" aria-hidden>
+                              <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
+                                <path d="M8 10.5V4M8 4 5 7M8 4l3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                                <path d="M4 12h8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                              </svg>
+                            </span>
+                          </Button>
+                        )}
                       </>
                     )}
                     {canEdit && bucket.key !== "ungrouped" && (
@@ -620,24 +665,22 @@ export function ContainerTable({
       )}
 
       {confirm && (
-        <Dialog open onClose={() => setConfirm(null)} title={d.containers[confirm.action]}>
+        <Dialog open onClose={() => setConfirm(null)} title={confirm.title}>
           <div className="p-4">
-            <p className="text-sm text-muted">
-              {d.containers.confirmAction}
-            </p>
+            <p className="text-sm text-muted">{d.containers.confirmAction}</p>
             <p className="mt-1 truncate font-medium">{confirm.label}</p>
             <div className="mt-4 flex justify-end gap-2">
               <Button variant="quiet" onClick={() => setConfirm(null)}>
                 {d.common.cancel}
               </Button>
               <Button
-                variant={confirm.action === "stop" ? "danger" : "primary"}
+                variant={confirm.danger ? "danger" : "primary"}
                 onClick={() => {
                   confirm.run();
                   setConfirm(null);
                 }}
               >
-                {d.containers[confirm.action]}
+                {confirm.title}
               </Button>
             </div>
           </div>
