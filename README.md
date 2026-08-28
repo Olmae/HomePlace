@@ -86,7 +86,7 @@ to every bug in the application. The bundled `docker-socket-proxy` allowlists
 only what the panel uses — listing containers, reading logs, and start/stop/
 restart — and refuses everything else, including `exec`.
 
-If you want a strictly read-only panel, set `ALLOW_CONTAINER_CONTROL=false`.
+If you want a strictly read-only panel, set `ALLOW_CONTAINER_CONTROL=0`.
 The refusal happens in the server, not in the interface, so it holds regardless
 of who signs in.
 
@@ -138,7 +138,7 @@ Full reference with comments: [`.env.example`](.env.example). In short:
 | `AUTH_SECRET` | Session signing key — `make secret` generates one |
 | `HOST_DATA_DIR` | Where the SQLite database lives on the host |
 | `DOCKER_API_URL` / `DOCKER_HOSTS` | Docker endpoint, or several |
-| `ALLOW_CONTAINER_CONTROL` | `false` makes the panel read-only |
+| `ALLOW_CONTAINER_CONTROL` | `0` makes the panel read-only (use `1` to allow control; the bundled socket proxy needs a numeric flag, not true/false) |
 | `PROMETHEUS_URL` | Enables hardware metrics and charts |
 | `PROXMOX_URL` + token | Enables the hypervisor view |
 | `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` | Alerts; `TELEGRAM_PROXY_URL` for a SOCKS5/HTTP proxy |
