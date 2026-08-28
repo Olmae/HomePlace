@@ -87,7 +87,11 @@ export function NotificationBell({ d, initialUnread }: { d: Dictionary; initialU
             className="fixed inset-0 z-10 cursor-default"
             onClick={() => setOpen(false)}
           />
-          <div className="absolute right-0 z-20 mt-1 w-80 max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-card border border-line bg-surface shadow-pop">
+          {/* On a phone the bell is not the rightmost thing in the bar, so an
+              absolute right-0 dropdown of a fixed width runs off the left edge.
+              Pin it to the viewport just under the header there, and fall back
+              to the anchored dropdown from sm up. */}
+          <div className="fixed right-2 top-14 z-30 w-[calc(100vw-1rem)] overflow-hidden rounded-card border border-line bg-surface shadow-pop sm:absolute sm:right-0 sm:top-auto sm:mt-1 sm:w-80">
             <div className="flex items-center justify-between border-b border-line px-3 py-2">
               <span className="text-sm font-semibold">{d.bell.title}</span>
               <Link

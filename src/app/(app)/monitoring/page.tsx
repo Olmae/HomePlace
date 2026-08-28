@@ -493,7 +493,7 @@ async function GuestTable({ d }: { d: ReturnType<typeof dict> }) {
       {/* The table scrolls inside its own box; the page itself must never scroll
           sideways on a phone. */}
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="w-full whitespace-nowrap text-sm">
           <thead>
             <tr className="border-b border-line text-left text-xs text-muted">
               <th className="px-4 py-2 font-medium">Name</th>

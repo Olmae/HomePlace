@@ -417,7 +417,7 @@ export function ContainerTable({
           <option value="memory">{d.monitoring.memory}</option>
         </Select>
 
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
           {canEdit && (
             <Button size="sm" variant="quiet" disabled={checking} onClick={checkUpdates} title={d.containers.checkUpdatesHint}>
               {checking ? d.common.loading : d.containers.checkUpdates}
